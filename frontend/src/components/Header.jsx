@@ -1,5 +1,5 @@
 import React from "react";
-import { Shield, ShieldCheck, Download, MessageSquare, RefreshCw, FileText } from "lucide-react";
+import { Shield, ShieldCheck, Download, MessageSquare, RefreshCw, FileText, Settings } from "lucide-react";
 
 export default function Header({
   activeCase,
@@ -8,6 +8,7 @@ export default function Header({
   totalSiphoned,
   onExportPdf,
   onOpenAssistant,
+  onOpenSettings,
   activeTab,
   systemStatus,
   victimName = "Sunil Kumar Verma",
@@ -74,6 +75,15 @@ export default function Header({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2.5">
+        <button
+          onClick={onOpenSettings}
+          title="Configure LLM & JEV API Keys"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E8E2D5] text-[#2C2623] text-xs font-medium hover:bg-[#F8F4EC] transition-colors shadow-2xs cursor-pointer"
+        >
+          <Settings className="w-3.5 h-3.5 text-[#746D65]" />
+          <span>Settings</span>
+        </button>
+
         <button
           onClick={onOpenAssistant}
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-[#E8E2D5] text-[#2C2623] text-xs font-medium hover:bg-[#F8F4EC] transition-colors shadow-2xs cursor-pointer"

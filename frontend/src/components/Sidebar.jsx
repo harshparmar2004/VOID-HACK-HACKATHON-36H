@@ -10,10 +10,11 @@ import {
   Clock,
   FileCheck,
   FileText,
-  Award
+  Award,
+  Settings
 } from "lucide-react";
 
-export default function Sidebar({ activeTab, onSelectTab, counts }) {
+export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings }) {
   const navSections = [
     {
       title: "CASE OPERATIONS",
@@ -88,8 +89,24 @@ export default function Sidebar({ activeTab, onSelectTab, counts }) {
         ))}
       </div>
 
+      {/* Settings Action Button */}
+      <div className="pt-2">
+        <button
+          onClick={onOpenSettings}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white hover:bg-[#F5EDE1] border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold transition-all shadow-2xs cursor-pointer group"
+        >
+          <div className="flex items-center gap-2">
+            <Settings className="w-4 h-4 text-[#D96B27] group-hover:rotate-45 transition-transform" />
+            <span>LLM & JEV Settings</span>
+          </div>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F3EDE2] text-[#746D65] border border-[#E8E2D5] font-mono">
+            API Keys
+          </span>
+        </button>
+      </div>
+
       {/* Local System Info Footer */}
-      <div className="pt-4 border-t border-[#E8E2D5] text-[11px] text-[#9E968D] space-y-1 font-mono">
+      <div className="pt-3 border-t border-[#E8E2D5] text-[11px] text-[#9E968D] space-y-1 font-mono">
         <div className="flex items-center justify-between">
           <span>Local Engine:</span>
           <span className="text-[#059669] font-semibold">DuckDB v1.5</span>

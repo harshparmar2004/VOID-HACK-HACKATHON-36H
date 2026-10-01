@@ -15,6 +15,7 @@ import Section91NoticesView from "./components/Section91NoticesView";
 import CaseDiaryView from "./components/CaseDiaryView";
 import JuryBenchmarkView from "./components/JuryBenchmarkView";
 import RegisterFIRModal from "./components/RegisterFIRModal";
+import SettingsModal from "./components/SettingsModal";
 
 import { MessageSquare, X, Send, Bot, ShieldAlert } from "lucide-react";
 
@@ -41,6 +42,7 @@ export default function App() {
   const [mobileNumber, setMobileNumber] = useState("+91 9811000001");
   const [firNumber, setFirNumber] = useState("FIR-0142/2026/CYBER-INDORE");
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [cases, setCases] = useState(["100000000001", "100000000002", "100000000003", "100000000004", "100000000005"]);
   const [systemStatus, setSystemStatus] = useState({
     status: "ready",
@@ -120,7 +122,7 @@ export default function App() {
     setActiveTab("trail"); // Instantly navigate officer to the multi-hop trace!
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
     
@@ -128,6 +130,24 @@ export default function App() {
     setChatMessages((prev) => [...prev, { sender: "user", text: userText }]);
     setChatInput("");
     
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/assistant/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userText,
+          victim_account: activeCase
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages((prev) => [...prev, { sender: "ai", text: data.reply }]);
+        return;
+      }
+    } catch (err) {
+      console.warn("Backend chat endpoint fallback:", err.message);
+    }
+
     setTimeout(() => {
       let reply = "The transaction hop analysis shows high-velocity dispersion. Funds from the victim account were split across Layer 2 distributor mules within 7 minutes. Section 91 notices are prepared for immediate bank lien.";
       if (userText.toLowerCase().includes("freeze") || userText.toLowerCase().includes("notice")) {
@@ -136,7 +156,7 @@ export default function App() {
         reply = `The syndicate operates in 3 distinct layers: L1 Collector received the lump sum, sliced it into 14 distributor mules (Hop 2), which then attempted exit via crypto P2P USDT on foreign IPs 185.x.x.x.`;
       }
       setChatMessages((prev) => [...prev, { sender: "ai", text: reply }]);
-    }, 600);
+    }, 400);
   };
 
   return (
@@ -149,6 +169,7 @@ export default function App() {
         totalSiphoned={traceData?.total_siphoned_inr}
         onExportPdf={() => setActiveTab("notices")}
         onOpenAssistant={() => setAssistantOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         activeTab={activeTab}
         systemStatus={systemStatus}
         victimName={victimName}
@@ -162,6 +183,7 @@ export default function App() {
         <Sidebar
           activeTab={activeTab}
           onSelectTab={setActiveTab}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           counts={{
             totalAccounts: "24,368",
             flaggedMules: mules.length ? String(mules.length) : "333",
@@ -307,6 +329,12 @@ export default function App() {
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
         onRegisterCase={handleRegisterCase}
+      />
+
+      {/* LLM & JEV TypeSafe API Keys Configuration Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
 
       {/* Persistent Police Bottom Footer matching reference dashboard */}
