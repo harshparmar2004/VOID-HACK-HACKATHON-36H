@@ -15,6 +15,7 @@ import Section91NoticesView from "./components/Section91NoticesView";
 import CaseDiaryView from "./components/CaseDiaryView";
 import JuryBenchmarkView from "./components/JuryBenchmarkView";
 import RealtimeFraudScannerView from "./components/RealtimeFraudScannerView";
+import HamiHoppingView from "./components/HamiHoppingView";
 import RegisterFIRModal from "./components/RegisterFIRModal";
 import SettingsModal from "./components/SettingsModal";
 
@@ -233,6 +234,15 @@ export default function App() {
             <RealtimeFraudScannerView
               onNavigateTab={setActiveTab}
               onSelectCase={handleSelectCase}
+            />
+          )}
+
+          {/* HAMI AML Detector: Multi-Hop Hopping & GNN Graph Analysis */}
+          {activeTab === "hami" && (
+            <HamiHoppingView
+              victimAccount={activeCase}
+              onSelectVictim={handleSelectCase}
+              onNavigateTab={setActiveTab}
             />
           )}
 

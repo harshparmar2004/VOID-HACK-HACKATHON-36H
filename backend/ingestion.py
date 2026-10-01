@@ -65,8 +65,17 @@ class IngestionEngine:
         self.active_file = file_path
         print(f"[*] Ingesting and normalizing real-world dataset from: {file_path} ...")
         
-        self.con.execute("DROP TABLE IF EXISTS transactions;")
-        
+        is_excel = file_path.endswith(".xlsx") or file_path.endswith(".xls")
+        if is_excel:
+            try:
+                import pandas as pd
+                excel_df = pd.read_excel(file_path)
+                temp_parquet = file_path + ".temp.parquet"
+                excel_df.to_parquet(temp_parquet)
+                file_path = temp_parquet
+            except Exception as ex:
+                raise ValueError(f"Failed to parse Excel file: {ex}")
+
         is_parquet = file_path.endswith(".parquet")
         source_query = f"read_parquet('{file_path}')" if is_parquet else f"read_csv_auto('{file_path}', header=True, ignore_errors=true)"
         
@@ -112,8 +121,11 @@ class IngestionEngine:
             )
         """
 
+        staging_table = "transactions_staging"
+        self.con.execute(f"DROP TABLE IF EXISTS {staging_table};")
+
         self.con.execute(f"""
-        CREATE TABLE transactions AS
+        CREATE TABLE {staging_table} AS
         SELECT
             'TXN' || LPAD(CAST(ROW_NUMBER() OVER () AS VARCHAR), 8, '0') AS Transaction_ID,
             {clean_sender_expr} AS Sender_Account,
@@ -159,6 +171,10 @@ class IngestionEngine:
           AND {clean_receiver_expr} IS NOT NULL
           AND {clean_amount_expr} > 0;
         """)
+
+        # Atomically replace transactions table
+        self.con.execute("DROP TABLE IF EXISTS transactions;")
+        self.con.execute(f"ALTER TABLE {staging_table} RENAME TO transactions;")
         
         # Build multi-column indexes for sub-millisecond query performance
         print("[*] Creating multi-column B-Tree indexes on Sender, Receiver, and Timestamp...")

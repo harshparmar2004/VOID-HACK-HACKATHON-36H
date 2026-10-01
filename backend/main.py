@@ -18,6 +18,7 @@ from mule_scorer import MuleScorer
 from graph_engine import GraphEngine
 from legal_generator import LegalGenerator
 from fraud_scanner import FraudScanner
+from hami_hopping_engine import HAMIHoppingEngine
 
 app = FastAPI(
     title="Operation Abhedya-Chakra Core Forensics API",
@@ -43,11 +44,12 @@ engine = IngestionEngine()
 scorer = None
 graph = None
 scanner = None
+hami_engine = None
 legal = LegalGenerator()
 is_initialized = False
 
 def initialize_core():
-    global scorer, graph, scanner, is_initialized
+    global scorer, graph, scanner, hami_engine, is_initialized
     if not is_initialized:
         print("[*] Initializing Abhedya-Chakra Forensics Core...")
         engine.load_dataset()
@@ -55,6 +57,7 @@ def initialize_core():
         scorer.compute_all_scores()
         graph = GraphEngine(engine.con)
         scanner = FraudScanner(engine.con)
+        hami_engine = HAMIHoppingEngine(engine.con)
         is_initialized = True
         print("[+] Core Forensics Engine fully initialized and ready!")
 
@@ -100,10 +103,13 @@ async def upload_bank_statement(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
         
     global scorer, graph
-    res = engine.load_dataset(file_path)
-    scorer = MuleScorer(engine.con)
-    score_res = scorer.compute_all_scores()
-    graph = GraphEngine(engine.con)
+    try:
+        res = engine.load_dataset(file_path)
+        scorer = MuleScorer(engine.con)
+        score_res = scorer.compute_all_scores()
+        graph = GraphEngine(engine.con)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process bank statement: {str(e)}")
     
     return {
         "status": "success",
@@ -129,7 +135,48 @@ def trace_victim_flow(victim_account: str, max_hops: int = 4, time_window: int =
     res = graph.trace_victim_trail(victim_account, max_hops=max_hops, time_window_minutes=time_window)
     if not res.get("found", True):
         raise HTTPException(status_code=404, detail="Victim account has no outgoing transactions.")
+    
+    # Enrich with HAMI AML Hopping & Pattern Analysis
+    if hami_engine:
+        try:
+            hami_res = hami_engine.analyze_victim_hopping(victim_account, max_hops=max_hops, time_window_minutes=time_window)
+            res["hami_analysis"] = hami_res
+            res["topological_pattern"] = hami_res.get("topological_pattern", "Scatter-Gather")
+            res["has_cycle"] = hami_res.get("has_cycle", False)
+            res["cluster_fingerprint"] = hami_res.get("cluster_fingerprint", "")
+        except Exception as e:
+            print(f"[-] HAMI enrichment warning: {e}")
+            
     return res
+
+@app.get("/api/hami/hopping/{victim_account}")
+def get_hami_hopping_analysis(victim_account: str, max_hops: int = 4, time_window: int = 180):
+    """
+    HAMI AML Detector: Multi-Hop Topological Hopping & GAT Attention Analysis
+    Direct integration of Ymak7/HAMI-AML-DETECTOR from Hugging Face.
+    Classifies Fan-Out, Fan-In, Cycle, and Scatter-Gather bunny hopping.
+    """
+    if not is_initialized:
+        initialize_core()
+    global hami_engine
+    if hami_engine is None:
+        hami_engine = HAMIHoppingEngine(engine.con)
+    analysis = hami_engine.analyze_victim_hopping(victim_account, max_hops=max_hops, time_window_minutes=time_window)
+    if not analysis.get("found", True):
+        raise HTTPException(status_code=404, detail="No outgoing transactions found for this account.")
+    return analysis
+
+@app.get("/api/hami/clusters")
+def get_top_hami_hopping_clusters(limit: int = 30):
+    """
+    Returns top detected HAMI multi-hop laundering clusters and rings across 2M transactions.
+    """
+    if not is_initialized:
+        initialize_core()
+    global hami_engine
+    if hami_engine is None:
+        hami_engine = HAMIHoppingEngine(engine.con)
+    return hami_engine.scan_top_hopping_clusters(limit=limit)
 
 @app.get("/api/mules")
 def get_flagged_mules(limit: int = 100, role_filter: Optional[str] = None):

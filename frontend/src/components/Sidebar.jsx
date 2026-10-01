@@ -12,7 +12,8 @@ import {
   FileText,
   Award,
   Settings,
-  Zap
+  Zap,
+  Network
 } from "lucide-react";
 
 export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings }) {
@@ -28,6 +29,7 @@ export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings
       title: "FORENSIC ANALYSIS",
       items: [
         { id: "scanner", label: "Real-Time 60s Scanner", icon: Zap, badge: "60s / 2M" },
+        { id: "hami", label: "HAMI AML Hopping", icon: Network, badge: "GAT / HF" },
         { id: "entities", label: "Entity Directory", icon: Users, badge: counts?.totalAccounts || "24,368" },
         { id: "dossier", label: "Mule Dossier", icon: UserX, badge: counts?.flaggedMules || "333" },
         { id: "graph", label: "Mule Network Graph", icon: Share2, badge: "WebGL" },
