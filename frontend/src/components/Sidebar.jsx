@@ -7,7 +7,6 @@ import {
   Share2,
   GitCommit,
   Layers,
-  Clock,
   FileCheck,
   FileText,
   Award,
@@ -32,8 +31,7 @@ export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings
         { id: "dossier", label: "Mule Dossier", icon: UserX, badge: counts?.flaggedMules || "333" },
         { id: "graph", label: "Mule Network Graph", icon: Share2, badge: "WebGL" },
         { id: "trail", label: "Endpoint Trail", icon: GitCommit, badge: "4 Hops" },
-        { id: "patterns", label: "Patterns & Story", icon: Layers, badge: null },
-        { id: "timeline", label: "Activity Timeline", icon: Clock, badge: "15-Day" }
+        { id: "patterns", label: "Patterns & Story", icon: Layers, badge: null }
       ]
     },
     {

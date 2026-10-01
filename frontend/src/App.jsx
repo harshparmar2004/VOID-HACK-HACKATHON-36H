@@ -10,7 +10,6 @@ import MuleDossierView from "./components/MuleDossierView";
 import NetworkGraphView from "./components/NetworkGraphView";
 import EndpointTrailView from "./components/EndpointTrailView";
 import PatternsStoryView from "./components/PatternsStoryView";
-import ActivityTimelineView from "./components/ActivityTimelineView";
 import Section91NoticesView from "./components/Section91NoticesView";
 import CaseDiaryView from "./components/CaseDiaryView";
 import JuryBenchmarkView from "./components/JuryBenchmarkView";
@@ -40,7 +39,8 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem("abhedya_active_tab") || "intake";
+    const saved = localStorage.getItem("abhedya_active_tab");
+    return saved === "timeline" ? "trail" : (saved || "intake");
   });
   const [activeCase, setActiveCase] = useState(() => {
     return localStorage.getItem("abhedya_active_case") || DEFAULT_VICTIM;
@@ -367,14 +367,7 @@ export default function App() {
             </ErrorBoundary>
           </div>
 
-          {/* TAB 8: Activity Timeline (15-Day Chronological Velocity Reconstruction) */}
-          <div className={activeTab === "timeline" ? "block" : "hidden"}>
-            <ErrorBoundary name="Activity Timeline">
-              <ActivityTimelineView traceData={traceData} />
-            </ErrorBoundary>
-          </div>
-
-          {/* TAB 9: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
+          {/* TAB 8: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
           <div className={activeTab === "notices" ? "block" : "hidden"}>
             <ErrorBoundary name="Section 91 Notices">
               <Section91NoticesView
