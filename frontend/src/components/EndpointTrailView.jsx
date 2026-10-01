@@ -214,9 +214,9 @@ export default function EndpointTrailView({
     return () => window.removeEventListener("resize", updateConnections);
   }, []);
 
-  // Pan interaction handlers
+  // Pan interaction handlers with physical button check (fixes mouse sticking bug)
   const handleMouseDown = (e) => {
-    // Only drag when clicking canvas background or non-interactive container
+    if (e.button !== 0) return;
     if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".interactive-node-card")) {
       return;
     }
@@ -225,6 +225,11 @@ export default function EndpointTrailView({
   };
 
   const handleMouseMove = (e) => {
+    // If left mouse button is NOT physically held down (e.buttons !== 1), release immediately!
+    if (e.buttons !== 1) {
+      if (isDragging) setIsDragging(false);
+      return;
+    }
     if (!isDragging) return;
     setPan({
       x: e.clientX - dragStart.x,
@@ -232,9 +237,13 @@ export default function EndpointTrailView({
     });
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = () => setIsDragging(false);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => setIsDragging(false);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []);
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -484,8 +493,10 @@ export default function EndpointTrailView({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onMouseLeave={() => setIsDragging(false)}
+        onDragStart={(e) => e.preventDefault()}
         onWheel={handleWheel}
-        className={`relative w-full h-[620px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner ${
+        className={`relative w-full h-[620px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner select-none ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{

@@ -316,8 +316,9 @@ export default function NetworkGraphView({ traceData }) {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  // Pan Interactions
+  // Pan Interactions with strict physical button check (fixes mouse sticking bug)
   const handleMouseDown = (e) => {
+    if (e.button !== 0) return;
     if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".tree-node-card")) {
       return;
     }
@@ -326,6 +327,11 @@ export default function NetworkGraphView({ traceData }) {
   };
 
   const handleMouseMove = (e) => {
+    // If left mouse button is NOT physically held down (e.buttons !== 1), release immediately!
+    if (e.buttons !== 1) {
+      if (isDragging) setIsDragging(false);
+      return;
+    }
     if (!isDragging) return;
     setPan({
       x: e.clientX - dragStart.x,
@@ -334,6 +340,12 @@ export default function NetworkGraphView({ traceData }) {
   };
 
   const handleMouseUp = () => setIsDragging(false);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => setIsDragging(false);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []);
 
   // Zoom Interactions
   const handleZoomIn = () => setZoom((z) => Math.min(2.0, Number((z + 0.15).toFixed(2))));
@@ -506,8 +518,10 @@ export default function NetworkGraphView({ traceData }) {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onMouseLeave={() => setIsDragging(false)}
+        onDragStart={(e) => e.preventDefault()}
         onWheel={handleWheel}
-        className={`relative w-full h-[640px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner ${
+        className={`relative w-full h-[640px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner select-none ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{
