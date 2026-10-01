@@ -23,7 +23,8 @@ import {
   DEFAULT_VICTIM,
   DEFAULT_TRACE,
   DEFAULT_NOTICES,
-  DEFAULT_DIARY
+  DEFAULT_DIARY,
+  DEFAULT_MULES
 } from "./mockData";
 
 import {
@@ -52,7 +53,7 @@ export default function App() {
     vault_verified: true
   });
   const [traceData, setTraceData] = useState(DEFAULT_TRACE);
-  const [mules, setMules] = useState([]);
+  const [mules, setMules] = useState(DEFAULT_MULES);
   const [muleFilter, setMuleFilter] = useState(null);
   const [noticesData, setNoticesData] = useState(DEFAULT_NOTICES);
   const [diaryData, setDiaryData] = useState(DEFAULT_DIARY);
@@ -81,7 +82,9 @@ export default function App() {
         }
         
         const muleList = await fetchMules(100);
-        if (muleList?.length) setMules(muleList);
+        if (muleList && Array.isArray(muleList) && muleList.length > 0) {
+          setMules(muleList);
+        }
       } catch (err) {
         console.warn("Backend warming up, using seed state:", err.message);
         setTimeout(loadInitial, 1500);
@@ -89,6 +92,18 @@ export default function App() {
     }
     loadInitial();
   }, []);
+
+  const handleFilterMuleRole = async (role) => {
+    setMuleFilter(role);
+    try {
+      const muleList = await fetchMules(100, role);
+      if (muleList && Array.isArray(muleList) && muleList.length > 0) {
+        setMules(muleList);
+      }
+    } catch (err) {
+      console.warn("Using active mules for filter:", role);
+    }
+  };
 
   const loadCaseData = async (victimId) => {
     setLoading(true);
@@ -220,9 +235,11 @@ export default function App() {
           {/* TAB 4: Mule Dossier (0-100 Risk Index Table & P1-P6 Heuristics) */}
           {activeTab === "dossier" && (
             <MuleDossierView
-              mules={mules.length ? mules : DEFAULT_TRACE.freeze_candidates}
-              onFilterRole={setMuleFilter}
+              mules={mules?.length ? mules : DEFAULT_MULES}
+              onFilterRole={handleFilterMuleRole}
               activeFilter={muleFilter}
+              onNavigateTab={setActiveTab}
+              onSelectCase={handleSelectCase}
             />
           )}
 
