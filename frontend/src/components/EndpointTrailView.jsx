@@ -41,6 +41,7 @@ export default function EndpointTrailView({
   const [showEdgeAmounts, setShowEdgeAmounts] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
   const [hop2Layout, setHop2Layout] = useState("grid"); // 'grid' (2-cols) or 'stack' (1-col)
+  const [lineStyle, setLineStyle] = useState("pipeline"); // 'pipeline' (orthogonal) or 'curved' (bezier)
 
   const viewportRef = useRef(null);
   const canvasRef = useRef(null);
@@ -131,9 +132,32 @@ export default function EndpointTrailView({
     return generated;
   }, [traceData, hopGroups]);
 
-  // Compute exact anchor-to-anchor SVG bezier paths between cards
+  // Orthogonal Horizontal Pipeline Path with rounded elbow fillets
+  const makePipelinePath = (x1, y1, x2, y2) => {
+    // If cards are horizontally aligned (like Hop 0 and Hop 1), straight horizontal pipeline!
+    if (Math.abs(y1 - y2) < 4) {
+      return `M ${x1} ${y1} L ${x2} ${y2}`;
+    }
+
+    const midX = x1 + (x2 - x1) * 0.48;
+    const radius = Math.min(16, Math.abs(y2 - y1) / 2, Math.abs(x2 - x1) / 4);
+    const signY = y2 > y1 ? 1 : -1;
+
+    return `M ${x1} ${y1} L ${midX - radius} ${y1} Q ${midX} ${y1} ${midX} ${y1 + radius * signY} L ${midX} ${y2 - radius * signY} Q ${midX} ${y2} ${midX + radius} ${y2} L ${x2} ${y2}`;
+  };
+
+  // Smooth Horizontal Cubic Bézier Path
+  const makeBezierPath = (x1, y1, x2, y2) => {
+    const dx = Math.abs(x2 - x1) * 0.52;
+    return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+  };
+
+  // Compute exact anchor-to-anchor SVG pipeline paths between cards
   const updateConnections = () => {
     if (!canvasRef.current) return;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    if (canvasRect.width === 0 || canvasRect.height === 0) return;
+
     const computed = [];
 
     effectiveLinks.forEach((l) => {
@@ -141,14 +165,18 @@ export default function EndpointTrailView({
       const tgtEl = nodeRefs.current[l.target];
 
       if (srcEl && tgtEl) {
-        // Compute unscaled coordinates relative to canvasRef
-        const x1 = srcEl.offsetLeft + srcEl.offsetWidth;
-        const y1 = srcEl.offsetTop + srcEl.offsetHeight / 2;
-        const x2 = tgtEl.offsetLeft;
-        const y2 = tgtEl.offsetTop + tgtEl.offsetHeight / 2;
+        const srcRect = srcEl.getBoundingClientRect();
+        const tgtRect = tgtEl.getBoundingClientRect();
 
-        const dx = Math.abs(x2 - x1) * 0.52;
-        const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+        // Convert client bounding rects into unscaled canvas-local coordinates
+        const x1 = (srcRect.right - canvasRect.left) / zoom;
+        const y1 = (srcRect.top + srcRect.height / 2 - canvasRect.top) / zoom;
+        const x2 = (tgtRect.left - canvasRect.left) / zoom;
+        const y2 = (tgtRect.top + tgtRect.height / 2 - canvasRect.top) / zoom;
+
+        const pathD = lineStyle === "pipeline"
+          ? makePipelinePath(x1, y1, x2, y2)
+          : makeBezierPath(x1, y1, x2, y2);
 
         computed.push({
           ...l,
@@ -167,15 +195,29 @@ export default function EndpointTrailView({
   };
 
   useLayoutEffect(() => {
-    // Delay slightly to ensure DOM card dimensions have settled
-    const timer = setTimeout(updateConnections, 60);
-    return () => clearTimeout(timer);
-  }, [traceData, hop2Layout, zoom]);
+    updateConnections();
+    const t1 = setTimeout(updateConnections, 50);
+    const t2 = setTimeout(updateConnections, 150);
+    const t3 = setTimeout(updateConnections, 400);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [traceData, hop2Layout, zoom, lineStyle, effectiveLinks]);
 
   useEffect(() => {
     window.addEventListener("resize", updateConnections);
-    return () => window.removeEventListener("resize", updateConnections);
-  }, []);
+    let ro = null;
+    if (canvasRef.current && window.ResizeObserver) {
+      ro = new ResizeObserver(() => updateConnections());
+      ro.observe(canvasRef.current);
+    }
+    return () => {
+      window.removeEventListener("resize", updateConnections);
+      if (ro) ro.disconnect();
+    };
+  }, [lineStyle]);
 
   // Pan interaction handlers
   const handleMouseDown = (e) => {
@@ -417,6 +459,16 @@ export default function EndpointTrailView({
             </button>
           </div>
 
+          {/* Line Style Toggle: Pipeline vs Curved */}
+          <button
+            onClick={() => setLineStyle(lineStyle === "pipeline" ? "curved" : "pipeline")}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all shadow-2xs cursor-pointer bg-white border-[#E8E2D5] text-[#2C2623] hover:bg-[#F3EDE2]"
+            title="Toggle between Horizontal Pipeline and Curved Bézier Flow"
+          >
+            <span className={`w-2 h-2 rounded-full ${lineStyle === "pipeline" ? "bg-[#EA580C]" : "bg-[#7C3AED]"}`} />
+            <span>{lineStyle === "pipeline" ? "Pipeline (Horizontal)" : "Curved Flow"}</span>
+          </button>
+
           {/* Toggle Amounts on Wires */}
           <button
             onClick={() => setShowEdgeAmounts(!showEdgeAmounts)}
@@ -456,15 +508,15 @@ export default function EndpointTrailView({
           className="absolute origin-top-left transition-transform duration-75 ease-out select-none"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            minWidth: "1500px",
-            minHeight: "850px",
+            minWidth: "1600px",
+            minHeight: "950px",
             padding: "40px"
           }}
         >
           {/* SVG CONNECTOR LINES LAYER (Behind Nodes) */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{ minWidth: "1600px", minHeight: "1200px" }}
+            style={{ minWidth: "1700px", minHeight: "1200px", overflow: "visible" }}
           >
             <defs>
               {/* Hop 0 -> Hop 1 Gradient */}
@@ -486,70 +538,72 @@ export default function EndpointTrailView({
               </linearGradient>
 
               {/* Markers / Arrowheads */}
-              <marker id="marker-hop1" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="marker-hop1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EA580C" />
               </marker>
 
-              <marker id="marker-hop2" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="marker-hop2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#D97706" />
               </marker>
 
-              <marker id="marker-hop3" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="marker-hop3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7C3AED" />
               </marker>
             </defs>
 
-            {/* Dynamic Rendered SVG Bezier Curves */}
+            {/* Dynamic Rendered SVG Pipeline Connectors */}
             {renderedLinks.map((l, i) => {
               const active = isLinkActive(l);
               const hopGrad = l.hop === 1 ? "url(#grad-hop1)" : l.hop === 2 ? "url(#grad-hop2)" : "url(#grad-hop3)";
               const marker = l.hop === 1 ? "url(#marker-hop1)" : l.hop === 2 ? "url(#marker-hop2)" : "url(#marker-hop3)";
-              const strokeColor = l.hop === 1 ? "#EA580C" : l.hop === 2 ? "#D97706" : "#7C3AED";
+              const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : "#7C3AED";
 
               return (
-                <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.15}>
-                  {/* Glowing halo when active */}
-                  {active && (hoveredNodeId || selectedNode) && (
-                    <path
-                      d={l.pathD}
-                      fill="none"
-                      stroke={strokeColor}
-                      strokeWidth={7}
-                      strokeOpacity={0.25}
-                      strokeLinecap="round"
-                    />
-                  )}
-
-                  {/* Base Wire Path */}
+                <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.18}>
+                  {/* Outer Pipe Glow Casing */}
                   <path
                     d={l.pathD}
                     fill="none"
-                    stroke={hopGrad}
-                    strokeWidth={active ? 2.5 : 1.5}
-                    markerEnd={marker}
-                    strokeDasharray={active ? "none" : "6,5"}
-                    strokeOpacity={0.85}
+                    stroke={strokeColor}
+                    strokeWidth={active ? 8 : 5}
+                    strokeOpacity={active ? 0.22 : 0.12}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
 
-                  {/* Animated directional money flow dash */}
+                  {/* Core Solid Pipe Conduit */}
+                  <path
+                    d={l.pathD}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth={active ? 3 : 2}
+                    markerEnd={marker}
+                    strokeOpacity={active ? 1.0 : 0.85}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+
+                  {/* Animated Directional Fluid Pulse Dash */}
                   <path
                     d={l.pathD}
                     fill="none"
                     stroke="#FFFFFF"
                     strokeWidth={2}
-                    strokeDasharray="6,12"
+                    strokeDasharray="8,14"
                     strokeOpacity={0.9}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
                     <animate
                       attributeName="stroke-dashoffset"
-                      from="36"
+                      from="44"
                       to="0"
                       dur="1.2s"
                       repeatCount="indefinite"
                     />
                   </path>
 
-                  {/* Amount Pill over the wire midpoint */}
+                  {/* Amount Pill over the pipe midpoint */}
                   {showEdgeAmounts && (
                     <g transform={`translate(${l.midX}, ${l.midY})`}>
                       <rect
