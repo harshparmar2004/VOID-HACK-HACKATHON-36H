@@ -457,43 +457,26 @@ export default function CaseIntakeView({
               </div>
             </div>
 
-            {/* Detected Victims in Ingested Data */}
-            {ingestResult.victims && ingestResult.victims.length > 0 && (
-              <div className="space-y-2 pt-1">
-                <span className="text-xs font-bold text-[#166534] uppercase font-mono tracking-wider block">
-                  Identified Complainant Victims in Ingested Data:
+            {/* Streamlined Case Action Strip (Prevents thousands of cards on large 2M datasets) */}
+            <div className="pt-3 border-t border-[#DCFCE7] flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-[#166534]">
+                <span className="font-semibold text-xs">Primary Investigation Target:</span>
+                <span className="font-mono font-bold bg-white px-2.5 py-1 rounded-lg border border-[#BBF7D0] text-[#2C2623]">
+                  Account: {ingestResult.detected_victim || victimAccount}
                 </span>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {ingestResult.victims.map((v, vIdx) => (
-                    <div
-                      key={vIdx}
-                      className="bg-white p-3 rounded-xl border border-[#BBF7D0] flex items-center justify-between gap-3 shadow-2xs"
-                    >
-                      <div>
-                        <div className="font-bold font-mono text-xs text-[#2C2623] flex items-center gap-1.5">
-                          <span>{v.account_id}</span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#FAF6EE] border border-[#E8E2D5] text-[#746D65] font-sans">
-                            {v.bank}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-[#DC2626] font-mono mt-0.5">
-                          Loss: ₹{Number(v.total_lost_inr).toLocaleString("en-IN")}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleSelectVictim(v.account_id)}
-                        className="px-3 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1"
-                      >
-                        <span>Investigate</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <span className="text-[11px] text-[#746D65] hidden sm:inline">
+                  (Choose any specific complainant from Header dropdown or Register FIR)
+                </span>
               </div>
-            )}
+
+              <button
+                onClick={() => handleSelectVictim(ingestResult.detected_victim || victimAccount)}
+                className="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Investigate Money Trail</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
