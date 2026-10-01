@@ -47,7 +47,7 @@ export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings
   ];
 
   return (
-    <aside className="w-64 bg-[#FBF7EE] border-r border-[#E8E2D5] min-h-[calc(100vh-65px)] flex flex-col justify-between p-4 shrink-0 select-none">
+    <aside className="w-64 bg-[#FBF7EE] border-r border-[#E8E2D5] h-full overflow-y-auto flex flex-col justify-between p-4 shrink-0 select-none">
       <div className="space-y-6">
         {navSections.map((section) => (
           <div key={section.title}>
