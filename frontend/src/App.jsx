@@ -17,6 +17,7 @@ import JuryBenchmarkView from "./components/JuryBenchmarkView";
 import RealtimeFraudScannerView from "./components/RealtimeFraudScannerView";
 import RegisterFIRModal from "./components/RegisterFIRModal";
 import SettingsModal from "./components/SettingsModal";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import { MessageSquare, X, Send, Bot, ShieldAlert } from "lucide-react";
 
@@ -282,98 +283,122 @@ export default function App() {
         <main className="flex-1 p-6 overflow-y-auto min-h-0 max-w-7xl mx-auto w-full">
           {/* TAB 1: Case Intake */}
           <div className={activeTab === "intake" ? "block" : "hidden"}>
-            <CaseIntakeView
-              victimAccount={activeCase}
-              victimName={victimName}
-              mobileNumber={mobileNumber}
-              firNumber={firNumber}
-              totalSiphoned={traceData?.total_siphoned_inr}
-              systemStatus={systemStatus}
-              onTraceNow={() => handleTabChange("trail")}
-              onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
-              onSelectCase={handleSelectCase}
-              onNavigateTab={handleTabChange}
-              onRefreshData={handleRefreshAll}
-              activeIngestResult={activeIngestResult}
-              onUpdateIngestResult={handleUpdateIngestResult}
-            />
+            <ErrorBoundary name="Case Intake">
+              <CaseIntakeView
+                victimAccount={activeCase}
+                victimName={victimName}
+                mobileNumber={mobileNumber}
+                firNumber={firNumber}
+                totalSiphoned={traceData?.total_siphoned_inr}
+                systemStatus={systemStatus}
+                onTraceNow={() => handleTabChange("trail")}
+                onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
+                onSelectCase={handleSelectCase}
+                onNavigateTab={handleTabChange}
+                onRefreshData={handleRefreshAll}
+                activeIngestResult={activeIngestResult}
+                onUpdateIngestResult={handleUpdateIngestResult}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 2: Evidence Vault (Dedicated Chained Custody Ledger) */}
           <div className={activeTab === "vault" ? "block" : "hidden"}>
-            <EvidenceVaultView />
+            <ErrorBoundary name="Evidence Vault">
+              <EvidenceVaultView />
+            </ErrorBoundary>
           </div>
 
           {/* Real-Time 60s 2M Fraud Scanner & Early Intercept Monitor */}
           <div className={activeTab === "scanner" ? "block" : "hidden"}>
-            <RealtimeFraudScannerView
-              onNavigateTab={handleTabChange}
-              onSelectCase={handleSelectCase}
-            />
+            <ErrorBoundary name="Real-Time 2M Fraud Scanner">
+              <RealtimeFraudScannerView
+                onNavigateTab={handleTabChange}
+                onSelectCase={handleSelectCase}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 3: Entity Directory (Master Database Index of 24,368 Accounts) */}
           <div className={activeTab === "entities" ? "block" : "hidden"}>
-            <EntityDirectoryView totalAccounts="24,368" />
+            <ErrorBoundary name="Entity Directory">
+              <EntityDirectoryView totalAccounts="24,368" />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 4: Mule Dossier (0-100 Risk Index Table & P1-P6 Heuristics) */}
           <div className={activeTab === "dossier" ? "block" : "hidden"}>
-            <MuleDossierView
-              mules={mules?.length ? mules : DEFAULT_MULES}
-              onFilterRole={handleFilterMuleRole}
-              activeFilter={muleFilter}
-              onNavigateTab={handleTabChange}
-              onSelectCase={handleSelectCase}
-            />
+            <ErrorBoundary name="Mule Dossier">
+              <MuleDossierView
+                mules={mules?.length ? mules : DEFAULT_MULES}
+                onFilterRole={handleFilterMuleRole}
+                activeFilter={muleFilter}
+                onNavigateTab={handleTabChange}
+                onSelectCase={handleSelectCase}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 5: Mule Network Graph (Interactive WebGL Force Graph) */}
           <div className={activeTab === "graph" ? "block" : "hidden"}>
-            <NetworkGraphView traceData={traceData} />
+            <ErrorBoundary name="Mule Network Graph">
+              <NetworkGraphView traceData={traceData} />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 6: Endpoint Trail (4-Hop Money Trail & 50-Account Fan-out Smurfing) */}
           <div className={activeTab === "trail" ? "block" : "hidden"}>
-            <EndpointTrailView
-              victimAccount={activeCase}
-              onSearchVictim={handleSelectCase}
-              traceData={traceData}
-              loading={loading}
-              onNavigateToNotices={() => handleTabChange("notices")}
-              isActive={activeTab === "trail"}
-            />
+            <ErrorBoundary name="Endpoint Trail">
+              <EndpointTrailView
+                victimAccount={activeCase}
+                onSearchVictim={handleSelectCase}
+                traceData={traceData}
+                loading={loading}
+                onNavigateToNotices={() => handleTabChange("notices")}
+                isActive={activeTab === "trail"}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 7: Patterns & Story (42 Syndicate Rings & Modus Operandi) */}
           <div className={activeTab === "patterns" ? "block" : "hidden"}>
-            <PatternsStoryView />
+            <ErrorBoundary name="Patterns & Story">
+              <PatternsStoryView />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 8: Activity Timeline (15-Day Chronological Velocity Reconstruction) */}
           <div className={activeTab === "timeline" ? "block" : "hidden"}>
-            <ActivityTimelineView traceData={traceData} />
+            <ErrorBoundary name="Activity Timeline">
+              <ActivityTimelineView traceData={traceData} />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 9: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
           <div className={activeTab === "notices" ? "block" : "hidden"}>
-            <Section91NoticesView
-              noticesData={noticesData}
-              victimAccount={activeCase}
-            />
+            <ErrorBoundary name="Section 91 Notices">
+              <Section91NoticesView
+                noticesData={noticesData}
+                victimAccount={activeCase}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 10: Investigative Brief (Police Case Diary under Sec 172 CrPC) */}
           <div className={activeTab === "brief" ? "block" : "hidden"}>
-            <CaseDiaryView
-              diaryData={diaryData}
-              victimAccount={activeCase}
-            />
+            <ErrorBoundary name="Investigative Brief">
+              <CaseDiaryView
+                diaryData={diaryData}
+                victimAccount={activeCase}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* TAB 11: Audit & Evaluation (1-Click Live Jury Blind Benchmark) */}
           <div className={activeTab === "jury" ? "block" : "hidden"}>
-            <JuryBenchmarkView />
+            <ErrorBoundary name="Audit & Evaluation">
+              <JuryBenchmarkView />
+            </ErrorBoundary>
           </div>
         </main>
       </div>
