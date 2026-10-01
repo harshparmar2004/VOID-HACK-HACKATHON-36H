@@ -30,7 +30,7 @@ class MuleScorer:
         
         # 1. Compute Base Account Aggregates (Inflow, Outflow, In-degree, Out-degree, Anomaly counts)
         self.con.execute("""
-        CREATE TEMP TABLE account_inflow AS
+        CREATE OR REPLACE TEMP TABLE account_inflow AS
         SELECT
             Receiver_Account AS account_id,
             COUNT(DISTINCT Sender_Account) AS distinct_senders,
@@ -47,7 +47,7 @@ class MuleScorer:
         """)
         
         self.con.execute("""
-        CREATE TEMP TABLE account_outflow AS
+        CREATE OR REPLACE TEMP TABLE account_outflow AS
         SELECT
             Sender_Account AS account_id,
             COUNT(DISTINCT Receiver_Account) AS distinct_receivers,
@@ -63,10 +63,9 @@ class MuleScorer:
         GROUP BY Sender_Account;
         """)
         
-        # 2. Velocity Calculation: Fast Pass-Through within 3 to 15 minutes
-        # We join incoming and outgoing transactions for the same account where outgoing is within 3-15 min of incoming
+        # 2. Velocity Calculation: Fast Pass-Through within 0 to 60 minutes
         self.con.execute("""
-        CREATE TEMP TABLE pass_through_analysis AS
+        CREATE OR REPLACE TEMP TABLE pass_through_analysis AS
         SELECT
             t_in.Receiver_Account AS account_id,
             COUNT(DISTINCT t_out.Transaction_ID) AS fast_outgoing_txns,
@@ -74,8 +73,8 @@ class MuleScorer:
         FROM transactions t_in
         JOIN transactions t_out
           ON t_in.Receiver_Account = t_out.Sender_Account
-         AND t_out.Timestamp >= t_in.Timestamp + INTERVAL 3 MINUTE
-         AND t_out.Timestamp <= t_in.Timestamp + INTERVAL 20 MINUTE
+         AND t_out.Timestamp >= t_in.Timestamp
+         AND t_out.Timestamp <= t_in.Timestamp + INTERVAL 60 MINUTE
         GROUP BY t_in.Receiver_Account;
         """)
 
@@ -105,7 +104,7 @@ class MuleScorer:
             SELECT
                 *,
                 -- P1: Pass-Through Velocity (Max 30)
-                -- >= 90% forwarded quickly gets full 30 points
+                -- >= 85% forwarded quickly gets full 30 points
                 CASE
                     WHEN total_incoming_amt > 1000 AND (fast_outgoing_amt / total_incoming_amt) >= 0.85 THEN 30.0
                     WHEN total_incoming_amt > 1000 AND (fast_outgoing_amt / total_incoming_amt) >= 0.50 THEN 18.0
@@ -122,10 +121,11 @@ class MuleScorer:
                 END AS p2_fan_in,
                 
                 -- P3: Fan-Out Split (Max 15) - L2 Distributor Signal
-                -- Slicing funds into 3-50 receivers
+                -- Slicing funds into multiple receivers
                 CASE
-                    WHEN distinct_receivers BETWEEN 3 AND 50 AND total_outgoing_amt >= (0.80 * total_incoming_amt) THEN 15.0
-                    WHEN distinct_receivers >= 3 THEN 8.0
+                    WHEN distinct_receivers BETWEEN 3 AND 50 AND total_outgoing_amt >= (0.70 * total_incoming_amt) THEN 15.0
+                    WHEN distinct_receivers >= 2 AND total_outgoing_amt >= (0.50 * total_incoming_amt) THEN 10.0
+                    WHEN distinct_receivers >= 2 THEN 5.0
                     ELSE 0.0
                 END AS p3_fan_out,
                 
@@ -165,50 +165,60 @@ class MuleScorer:
             ROUND(p4_cash_out, 1) AS p4_score,
             ROUND(p5_cluster, 1) AS p5_score,
             ROUND(p6_context, 1) AS p6_score,
-            ROUND(LEAST(100.0, p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context), 1) AS risk_index,
-            
-            -- Role Classification: L1, L2, L3 or CLEAN
             CASE
-                -- False Positive Guard: Merchants with high fan-in but NO fast pass-through are CLEAN
-                WHEN p1_velocity = 0 AND p4_cash_out = 0 THEN 'CLEAN'
+                WHEN total_incoming_amt = 0 AND total_outgoing_amt > 0 THEN 0.0
+                ELSE ROUND(LEAST(100.0, p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context), 1)
+            END AS risk_index,
+            
+            -- Role Classification: L1, L2, L3, VICTIM or CLEAN
+            CASE
+                -- Complainant Victim Account: zero incoming tainted funds, only initial outgoing loss
+                WHEN total_incoming_amt = 0 AND total_outgoing_amt > 0 THEN 'VICTIM'
                 
-                -- L3: Terminal Cash Out (dominated by foreign IP / headless / crypto narrations, forwards little)
-                WHEN p4_cash_out >= 15.0 AND (total_outgoing_amt < 0.3 * total_incoming_amt OR distinct_receivers <= 1) THEN 'L3_CASHOUT'
+                -- False Positive Guard: Merchants with high fan-in but NO fast pass-through and zero cashout markers are CLEAN
+                WHEN p1_velocity = 0 AND p4_cash_out = 0 AND distinct_receivers = 0 AND total_incoming_amt > 500000 THEN 'CLEAN'
                 
-                -- L1: Collector (High in-degree + fast pass-through)
-                WHEN p2_fan_in >= 10.0 AND p1_velocity >= 18.0 THEN 'L1_COLLECTOR'
+                -- L3: Terminal Cash Out (Terminal leaf account: receives money but forwards nothing or minimal < 15%)
+                WHEN total_incoming_amt > 0 AND (total_outgoing_amt = 0 OR total_outgoing_amt < 0.15 * total_incoming_amt) THEN 'L3_CASHOUT'
                 
-                -- L2: Distributor (Fan-out split into multiple accounts + fast pass-through)
-                WHEN p3_fan_out >= 10.0 AND p1_velocity >= 15.0 THEN 'L2_DISTRIBUTOR'
+                -- L1: Collector (Receives from victim or fan-in with fast split into multiple receivers)
+                WHEN distinct_receivers >= 2 AND p1_velocity >= 15.0 THEN 'L1_COLLECTOR'
+                WHEN p2_fan_in >= 5.0 AND p1_velocity >= 15.0 THEN 'L1_COLLECTOR'
+                
+                -- L2: Intermediate Distributor (Passes funds through to terminal mules)
+                WHEN total_incoming_amt > 0 AND total_outgoing_amt >= 0.5 * total_incoming_amt THEN 'L2_DISTRIBUTOR'
                 
                 -- Secondary Role Tagging based on dominant score
-                WHEN (p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context) >= 65.0 THEN
+                WHEN (p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context) >= 35.0 THEN
                     CASE
-                        WHEN p4_cash_out >= 12.0 THEN 'L3_CASHOUT'
-                        WHEN p3_fan_out >= p2_fan_in THEN 'L2_DISTRIBUTOR'
-                        ELSE 'L1_COLLECTOR'
+                        WHEN total_outgoing_amt = 0 OR p4_cash_out >= 10.0 THEN 'L3_CASHOUT'
+                        WHEN distinct_receivers >= 2 THEN 'L1_COLLECTOR'
+                        ELSE 'L2_DISTRIBUTOR'
                     END
                 ELSE 'CLEAN'
             END AS role,
             
             -- Risk Band
             CASE
-                WHEN (p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context) >= 80.0 THEN 'HIGH_CONFIDENCE_MULE'
-                WHEN (p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context) >= 60.0 THEN 'SUSPECTED_MULE'
+                WHEN total_incoming_amt = 0 AND total_outgoing_amt > 0 THEN 'VICTIM'
+                WHEN (p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context) >= 65.0 THEN 'HIGH_CONFIDENCE_MULE'
+                WHEN (p1_velocity + p2_fan_in + p3_fan_out + p4_cash_out + p5_cluster + p6_context) >= 35.0 THEN 'SUSPECTED_MULE'
+                WHEN p4_cash_out >= 12.0 OR p1_velocity >= 20.0 THEN 'SUSPECTED_MULE'
                 ELSE 'CLEAN'
             END AS risk_band,
             
             -- Forensic reason string for Court & Case Diary
             CONCAT_WS('; ',
-                CASE WHEN p1_velocity >= 18.0 THEN 'High-velocity pass-through: >85% drained within 3-15m' ELSE NULL END,
-                CASE WHEN p2_fan_in >= 10.0 THEN 'High fan-in centrality from distinct senders' ELSE NULL END,
-                CASE WHEN p3_fan_out >= 10.0 THEN 'Fan-out smurfing: sliced funds into downstream mules' ELSE NULL END,
-                CASE WHEN p4_cash_out >= 10.0 THEN 'Foreign IP/headless script/crypto narration detected' ELSE NULL END
+                CASE WHEN p1_velocity >= 15.0 THEN 'High-velocity pass-through: funds drained rapidly' ELSE NULL END,
+                CASE WHEN p2_fan_in >= 5.0 THEN 'High fan-in centrality from distinct senders' ELSE NULL END,
+                CASE WHEN p3_fan_out >= 5.0 THEN 'Fan-out smurfing: sliced funds into downstream mules' ELSE NULL END,
+                CASE WHEN p4_cash_out >= 8.0 THEN 'Foreign IP/headless script/crypto narration detected' ELSE NULL END
             ) AS forensic_reason
         FROM scored_params;
         """)
         
         # Build index on account_id
+        self.con.execute("DROP INDEX IF EXISTS idx_scored_account;")
         self.con.execute(f"CREATE INDEX idx_scored_account ON {self.scored_accounts_table}(account_id);")
 
         # Reconcile with ground truth if available to preserve exact ground-truth role labels (L1, L2, L3)

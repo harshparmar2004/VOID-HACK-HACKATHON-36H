@@ -8,6 +8,8 @@ import os
 import json
 import time
 import shutil
+import re
+import urllib.request
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -85,6 +87,9 @@ def get_system_status():
         "vault_verified": True
     }
 
+class IngestUrlPayload(BaseModel):
+    url: str
+
 @app.post("/api/upload")
 async def upload_bank_statement(file: UploadFile = File(...)):
     """
@@ -99,11 +104,13 @@ async def upload_bank_statement(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    global scorer, graph
+    global scorer, graph, scanner
     res = engine.load_dataset(file_path)
     scorer = MuleScorer(engine.con)
     score_res = scorer.compute_all_scores()
     graph = GraphEngine(engine.con)
+    scanner = FraudScanner(engine.con)
+    victims = engine.detect_victims(limit=5)
     
     return {
         "status": "success",
@@ -112,8 +119,67 @@ async def upload_bank_statement(file: UploadFile = File(...)):
         "ingestion_seconds": res["load_duration_seconds"],
         "detected_mappings": res["detected_mappings"],
         "high_risk_mules": score_res["high_risk_mules"],
+        "victims": victims,
+        "detected_victim": victims[0]["account_id"] if victims else None,
         "message": f"Successfully ingested {res['total_records']:,} transactions from {file.filename}!"
     }
+
+@app.post("/api/ingest-url")
+def ingest_from_url(payload: IngestUrlPayload):
+    """
+    Direct Online Ingestion from Google Sheets or web CSV/Parquet exports.
+    Auto-converts Google Sheets edit URLs to CSV export URLs and loads data into DuckDB.
+    """
+    url = payload.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing data URL.")
+        
+    # If Google Sheet URL, convert to export CSV
+    if "docs.google.com/spreadsheets" in url:
+        if "/export" not in url:
+            url = re.sub(r"/edit.*$", "/export?format=csv", url)
+            if "/export?format=csv" not in url:
+                url = url.rstrip("/") + "/export?format=csv"
+                
+    upload_dir = os.path.join(DATA_DIR, "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, f"online_cyber_dataset_{int(time.time())}.csv")
+    
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = resp.read()
+        with open(file_path, "wb") as f:
+            f.write(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch data from URL: {str(e)}")
+        
+    global scorer, graph, scanner
+    res = engine.load_dataset(file_path)
+    scorer = MuleScorer(engine.con)
+    score_res = scorer.compute_all_scores()
+    graph = GraphEngine(engine.con)
+    scanner = FraudScanner(engine.con)
+    victims = engine.detect_victims(limit=5)
+    
+    return {
+        "status": "success",
+        "file_name": "Online Cyber Crime Dataset",
+        "source_url": payload.url,
+        "records_loaded": res["total_records"],
+        "ingestion_seconds": res["load_duration_seconds"],
+        "detected_mappings": res["detected_mappings"],
+        "high_risk_mules": score_res["high_risk_mules"],
+        "victims": victims,
+        "detected_victim": victims[0]["account_id"] if victims else None,
+        "message": f"Successfully ingested {res['total_records']:,} transactions from online dataset!"
+    }
+
+@app.get("/api/detected-victims")
+def get_detected_victims():
+    if not is_initialized:
+        initialize_core()
+    return {"victims": engine.detect_victims(limit=10)}
 
 @app.get("/api/victims")
 def get_benchmark_victims():

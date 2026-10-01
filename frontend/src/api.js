@@ -79,3 +79,23 @@ export async function executeEmergencyFreeze(accountIds) {
   return res.json();
 }
 
+export async function ingestFromUrl(url) {
+  const res = await fetch(`${API_BASE}/ingest-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to ingest dataset from URL");
+  }
+  return res.json();
+}
+
+export async function fetchDetectedVictims() {
+  const res = await fetch(`${API_BASE}/detected-victims`);
+  if (!res.ok) throw new Error("Failed to fetch detected victims");
+  return res.json();
+}
+
+

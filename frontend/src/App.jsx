@@ -129,6 +129,29 @@ export default function App() {
     loadCaseData(victimId);
   };
 
+  const handleRefreshAll = async (newVictimId = null) => {
+    try {
+      const status = await fetchSystemStatus();
+      if (status) setSystemStatus(status);
+      
+      const victimsList = await fetchVictims();
+      if (victimsList?.victims?.length) {
+        setCases(victimsList.victims);
+      }
+      
+      const targetVictim = newVictimId || activeCase || victimsList?.victims?.[0];
+      if (targetVictim) {
+        setActiveCase(targetVictim);
+        loadCaseData(targetVictim);
+      }
+      
+      const muleList = await fetchMules(100);
+      if (muleList?.length) setMules(muleList);
+    } catch (err) {
+      console.warn("Refresh error:", err.message);
+    }
+  };
+
   const handleRegisterCase = (formData) => {
     setVictimName(formData.victimName);
     setMobileNumber(formData.mobile);
@@ -220,6 +243,9 @@ export default function App() {
               systemStatus={systemStatus}
               onTraceNow={() => setActiveTab("trail")}
               onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
+              onSelectCase={handleSelectCase}
+              onNavigateTab={setActiveTab}
+              onRefreshData={handleRefreshAll}
             />
           )}
 
