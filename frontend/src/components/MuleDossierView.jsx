@@ -69,8 +69,8 @@ export default function MuleDossierView({ mules, onFilterRole, activeFilter }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE1] font-mono">
-              {filteredMules.slice(0, 50).map((m) => (
-                <tr key={m.account_id} className="hover:bg-[#FAF6EE] transition-colors">
+              {filteredMules.slice(0, 50).map((m, idx) => (
+                <tr key={m.account_id ? `${m.account_id}-${idx}` : idx} className="hover:bg-[#FAF6EE] transition-colors">
                   <td className="py-3 px-4">
                     <div className="font-bold text-[#2C2623]">{m.account_id}</div>
                     <div className="text-[11px] text-[#746D65]">{m.ifsc}</div>
