@@ -38,9 +38,15 @@ import {
 } from "./api";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("intake");
-  const [activeCase, setActiveCase] = useState(DEFAULT_VICTIM);
-  const [victimName, setVictimName] = useState("Sunil Kumar Verma");
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem("abhedya_active_tab") || "intake";
+  });
+  const [activeCase, setActiveCase] = useState(() => {
+    return localStorage.getItem("abhedya_active_case") || DEFAULT_VICTIM;
+  });
+  const [victimName, setVictimName] = useState(() => {
+    return localStorage.getItem("abhedya_victim_name") || "Sunil Kumar Verma";
+  });
   const [mobileNumber, setMobileNumber] = useState("+91 9811000001");
   const [firNumber, setFirNumber] = useState("FIR-0142/2026/CYBER-INDORE");
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -60,6 +66,14 @@ export default function App() {
   const [diaryData, setDiaryData] = useState(DEFAULT_DIARY);
   const [loading, setLoading] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [activeIngestResult, setActiveIngestResult] = useState(() => {
+    try {
+      const saved = localStorage.getItem("abhedya_ingest_result");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [chatMessages, setChatMessages] = useState([
     {
       sender: "ai",
@@ -67,6 +81,24 @@ export default function App() {
     }
   ]);
   const [chatInput, setChatInput] = useState("");
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    try {
+      localStorage.setItem("abhedya_active_tab", tab);
+    } catch (e) {}
+  };
+
+  const handleUpdateIngestResult = (res) => {
+    setActiveIngestResult(res);
+    try {
+      if (res) {
+        localStorage.setItem("abhedya_ingest_result", JSON.stringify(res));
+      } else {
+        localStorage.removeItem("abhedya_ingest_result");
+      }
+    } catch (e) {}
+  };
 
   // Load live data on mount and auto-retry if backend is warming up
   useEffect(() => {
@@ -78,8 +110,14 @@ export default function App() {
         const victimsList = await fetchVictims();
         if (victimsList?.victims?.length) {
           setCases(victimsList.victims);
-          setActiveCase(victimsList.victims[0]);
-          loadCaseData(victimsList.victims[0]);
+          const savedCase = localStorage.getItem("abhedya_active_case");
+          const initialCase = savedCase && (victimsList.victims.includes(savedCase) || savedCase.length > 3)
+            ? savedCase
+            : victimsList.victims[0];
+          setActiveCase(initialCase);
+          loadCaseData(initialCase);
+        } else {
+          loadCaseData(activeCase);
         }
         
         const muleList = await fetchMules(100);
@@ -126,6 +164,9 @@ export default function App() {
 
   const handleSelectCase = (victimId) => {
     setActiveCase(victimId);
+    try {
+      localStorage.setItem("abhedya_active_case", victimId);
+    } catch (e) {}
     loadCaseData(victimId);
   };
 
@@ -142,6 +183,9 @@ export default function App() {
       const targetVictim = newVictimId || activeCase || victimsList?.victims?.[0];
       if (targetVictim) {
         setActiveCase(targetVictim);
+        try {
+          localStorage.setItem("abhedya_active_case", targetVictim);
+        } catch (e) {}
         loadCaseData(targetVictim);
       }
       
@@ -157,8 +201,12 @@ export default function App() {
     setMobileNumber(formData.mobile);
     setFirNumber(formData.firNumber);
     setActiveCase(formData.accountNumber);
+    try {
+      localStorage.setItem("abhedya_active_case", formData.accountNumber);
+      localStorage.setItem("abhedya_victim_name", formData.victimName);
+    } catch (e) {}
     loadCaseData(formData.accountNumber);
-    setActiveTab("trail"); // Instantly navigate officer to the multi-hop trace!
+    handleTabChange("trail"); // Instantly navigate officer to the multi-hop trace!
   };
 
   const handleSendMessage = async (e) => {
@@ -206,7 +254,7 @@ export default function App() {
         cases={cases}
         onSelectCase={handleSelectCase}
         totalSiphoned={traceData?.total_siphoned_inr}
-        onExportPdf={() => setActiveTab("notices")}
+        onExportPdf={() => handleTabChange("notices")}
         onOpenAssistant={() => setAssistantOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         activeTab={activeTab}
@@ -221,7 +269,7 @@ export default function App() {
         {/* Left Navigation Sidebar */}
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={handleTabChange}
           onOpenSettings={() => setIsSettingsOpen(true)}
           counts={{
             totalAccounts: "24,368",
@@ -230,10 +278,10 @@ export default function App() {
           }}
         />
 
-        {/* Right Feature Execution Canvas */}
+        {/* Right Feature Execution Canvas (Persistent Mount to Prevent State Wipeout) */}
         <main className="flex-1 p-6 overflow-y-auto min-h-0 max-w-7xl mx-auto w-full">
           {/* TAB 1: Case Intake */}
-          {activeTab === "intake" && (
+          <div className={activeTab === "intake" ? "block" : "hidden"}>
             <CaseIntakeView
               victimAccount={activeCase}
               victimName={victimName}
@@ -241,89 +289,92 @@ export default function App() {
               firNumber={firNumber}
               totalSiphoned={traceData?.total_siphoned_inr}
               systemStatus={systemStatus}
-              onTraceNow={() => setActiveTab("trail")}
+              onTraceNow={() => handleTabChange("trail")}
               onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
               onSelectCase={handleSelectCase}
-              onNavigateTab={setActiveTab}
+              onNavigateTab={handleTabChange}
               onRefreshData={handleRefreshAll}
+              activeIngestResult={activeIngestResult}
+              onUpdateIngestResult={handleUpdateIngestResult}
             />
-          )}
+          </div>
 
           {/* TAB 2: Evidence Vault (Dedicated Chained Custody Ledger) */}
-          {activeTab === "vault" && (
+          <div className={activeTab === "vault" ? "block" : "hidden"}>
             <EvidenceVaultView />
-          )}
+          </div>
 
           {/* Real-Time 60s 2M Fraud Scanner & Early Intercept Monitor */}
-          {activeTab === "scanner" && (
+          <div className={activeTab === "scanner" ? "block" : "hidden"}>
             <RealtimeFraudScannerView
-              onNavigateTab={setActiveTab}
+              onNavigateTab={handleTabChange}
               onSelectCase={handleSelectCase}
             />
-          )}
+          </div>
 
           {/* TAB 3: Entity Directory (Master Database Index of 24,368 Accounts) */}
-          {activeTab === "entities" && (
+          <div className={activeTab === "entities" ? "block" : "hidden"}>
             <EntityDirectoryView totalAccounts="24,368" />
-          )}
+          </div>
 
           {/* TAB 4: Mule Dossier (0-100 Risk Index Table & P1-P6 Heuristics) */}
-          {activeTab === "dossier" && (
+          <div className={activeTab === "dossier" ? "block" : "hidden"}>
             <MuleDossierView
               mules={mules?.length ? mules : DEFAULT_MULES}
               onFilterRole={handleFilterMuleRole}
               activeFilter={muleFilter}
-              onNavigateTab={setActiveTab}
+              onNavigateTab={handleTabChange}
               onSelectCase={handleSelectCase}
             />
-          )}
+          </div>
 
           {/* TAB 5: Mule Network Graph (Interactive WebGL Force Graph) */}
-          {activeTab === "graph" && (
+          <div className={activeTab === "graph" ? "block" : "hidden"}>
             <NetworkGraphView traceData={traceData} />
-          )}
+          </div>
 
           {/* TAB 6: Endpoint Trail (4-Hop Money Trail & 50-Account Fan-out Smurfing) */}
-          {activeTab === "trail" && (
+          <div className={activeTab === "trail" ? "block" : "hidden"}>
             <EndpointTrailView
               victimAccount={activeCase}
               onSearchVictim={handleSelectCase}
               traceData={traceData}
               loading={loading}
-              onNavigateToNotices={() => setActiveTab("notices")}
+              onNavigateToNotices={() => handleTabChange("notices")}
+              isActive={activeTab === "trail"}
             />
-          )}
+          </div>
 
           {/* TAB 7: Patterns & Story (42 Syndicate Rings & Modus Operandi) */}
-          {activeTab === "patterns" && (
+          <div className={activeTab === "patterns" ? "block" : "hidden"}>
             <PatternsStoryView />
-          )}
+          </div>
 
           {/* TAB 8: Activity Timeline (15-Day Chronological Velocity Reconstruction) */}
-          {activeTab === "timeline" && (
+          <div className={activeTab === "timeline" ? "block" : "hidden"}>
             <ActivityTimelineView traceData={traceData} />
-          )}
+          </div>
 
           {/* TAB 9: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
-          {activeTab === "notices" && (
+          <div className={activeTab === "notices" ? "block" : "hidden"}>
             <Section91NoticesView
               noticesData={noticesData}
               victimAccount={activeCase}
             />
-          )}
+          </div>
 
           {/* TAB 10: Investigative Brief (Police Case Diary under Sec 172 CrPC) */}
-          {activeTab === "brief" && (
+          <div className={activeTab === "brief" ? "block" : "hidden"}>
             <CaseDiaryView
               diaryData={diaryData}
               victimAccount={activeCase}
             />
-          )}
+          </div>
 
           {/* TAB 11: Audit & Evaluation (1-Click Live Jury Blind Benchmark) */}
-          {activeTab === "jury" && (
+          <div className={activeTab === "jury" ? "block" : "hidden"}>
             <JuryBenchmarkView />
-          )}
+          </div>
         </main>
       </div>
 

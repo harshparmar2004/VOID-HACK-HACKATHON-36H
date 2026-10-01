@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ShieldCheck,
   Eye,
@@ -13,7 +13,8 @@ import {
   ArrowRight,
   Loader2,
   Link2,
-  AlertCircle
+  AlertCircle,
+  X
 } from "lucide-react";
 import { uploadBankStatement, ingestFromUrl } from "../api";
 
@@ -28,15 +29,31 @@ export default function CaseIntakeView({
   onOpenRegisterModal,
   onSelectCase,
   onNavigateTab,
-  onRefreshData
+  onRefreshData,
+  activeIngestResult,
+  onUpdateIngestResult
 }) {
   const [ingestMode, setIngestMode] = useState("url"); // "url" | "file"
   const [urlInput, setUrlInput] = useState(
     "https://docs.google.com/spreadsheets/d/1gu9kFr5COmANUPTA5eSkApiXCtnpgyyE/edit?usp=sharing&ouid=104868621394170594289&rtpof=true&sd=true"
   );
   const [isIngesting, setIsIngesting] = useState(false);
-  const [ingestResult, setIngestResult] = useState(null);
+  const [ingestResult, setIngestResult] = useState(() => {
+    if (activeIngestResult) return activeIngestResult;
+    try {
+      const saved = localStorage.getItem("abhedya_ingest_result");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [errorMessage, setErrorMessage] = useState(null);
+
+  useEffect(() => {
+    if (activeIngestResult) {
+      setIngestResult(activeIngestResult);
+    }
+  }, [activeIngestResult]);
 
   const artifactSlots = [
     {
@@ -93,12 +110,22 @@ export default function CaseIntakeView({
     if (!targetUrl.trim()) return;
     setIsIngesting(true);
     setErrorMessage(null);
-    setIngestResult(null);
 
     try {
       const res = await ingestFromUrl(targetUrl);
       setIngestResult(res);
-      if (onRefreshData) onRefreshData();
+      if (onUpdateIngestResult) onUpdateIngestResult(res);
+      try {
+        localStorage.setItem("abhedya_ingest_result", JSON.stringify(res));
+      } catch (e) {}
+
+      const firstVictim = res.detected_victim || res.victims?.[0]?.account_id;
+      if (onRefreshData) {
+        await onRefreshData(firstVictim);
+      }
+      if (firstVictim && onSelectCase) {
+        onSelectCase(firstVictim);
+      }
     } catch (err) {
       setErrorMessage(err.message || "Failed to ingest data from URL.");
     } finally {
@@ -112,12 +139,22 @@ export default function CaseIntakeView({
 
     setIsIngesting(true);
     setErrorMessage(null);
-    setIngestResult(null);
 
     try {
       const res = await uploadBankStatement(file);
       setIngestResult(res);
-      if (onRefreshData) onRefreshData();
+      if (onUpdateIngestResult) onUpdateIngestResult(res);
+      try {
+        localStorage.setItem("abhedya_ingest_result", JSON.stringify(res));
+      } catch (e) {}
+
+      const firstVictim = res.detected_victim || res.victims?.[0]?.account_id;
+      if (onRefreshData) {
+        await onRefreshData(firstVictim);
+      }
+      if (firstVictim && onSelectCase) {
+        onSelectCase(firstVictim);
+      }
     } catch (err) {
       setErrorMessage(err.message || "Failed to ingest uploaded statement.");
     } finally {
@@ -371,9 +408,25 @@ export default function CaseIntakeView({
                   Dataset Successfully Ingested & Vector-Indexed
                 </h4>
               </div>
-              <span className="text-xs font-mono font-bold text-[#15803D] bg-white px-2.5 py-0.5 rounded-lg border border-[#BBF7D0]">
-                Indexed in {ingestResult.ingestion_seconds}s
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-[#15803D] bg-white px-2.5 py-0.5 rounded-lg border border-[#BBF7D0]">
+                  Indexed in {ingestResult.ingestion_seconds}s
+                </span>
+                <button
+                  onClick={() => {
+                    setIngestResult(null);
+                    if (onUpdateIngestResult) onUpdateIngestResult(null);
+                    try {
+                      localStorage.removeItem("abhedya_ingest_result");
+                    } catch (e) {}
+                  }}
+                  className="text-xs font-semibold text-[#15803D] hover:text-[#DC2626] flex items-center gap-1 cursor-pointer transition-colors px-2 py-0.5 rounded-lg hover:bg-red-50"
+                  title="Clear uploaded dataset info"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">

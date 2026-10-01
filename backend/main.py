@@ -183,10 +183,24 @@ def get_detected_victims():
 
 @app.get("/api/victims")
 def get_benchmark_victims():
+    if not is_initialized:
+        initialize_core()
+    
+    # Prioritize detected victims from the currently loaded dataset
+    detected = engine.detect_victims(limit=20)
+    detected_ids = [d["account_id"] for d in detected]
+    
+    bench_ids = []
     if os.path.exists(VICTIMS_FILE):
-        with open(VICTIMS_FILE) as f:
-            return json.load(f)
-    return {"victims": []}
+        try:
+            with open(VICTIMS_FILE) as f:
+                data = json.load(f)
+                bench_ids = data.get("victims", []) if isinstance(data, dict) else data
+        except Exception:
+            bench_ids = []
+            
+    combined = list(dict.fromkeys(detected_ids + bench_ids))
+    return {"victims": combined, "detected_victims": detected}
 
 @app.get("/api/trace/{victim_account}")
 def trace_victim_flow(victim_account: str, max_hops: int = 4, time_window: int = 180):
