@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Play,
   Pause,
@@ -8,8 +8,9 @@ import {
   Maximize2,
   Shield,
   Info,
-  ArrowDown,
   ArrowRight,
+  ArrowDown,
+  GitBranch,
   Layers,
   Lock,
   Copy,
@@ -22,10 +23,10 @@ import {
 } from "lucide-react";
 
 export default function NetworkGraphView({ traceData }) {
-  const [viewOrientation, setViewOrientation] = useState("vertical"); // "vertical" (Top-to-Bottom) or "horizontal" (Left-to-Right)
-  const [lineStyle, setLineStyle] = useState("pipeline"); // "pipeline" (orthogonal) or "curved" (bezier)
+  const [treeOrientation, setTreeOrientation] = useState("horizontal"); // "horizontal" (L->R) or "vertical" (T->B)
+  const [branchStyle, setBranchStyle] = useState("curved"); // "curved" (organic tree limbs) or "orthogonal" (stepped pipeline)
   const [zoom, setZoom] = useState(0.85);
-  const [pan, setPan] = useState({ x: 30, y: 30 });
+  const [pan, setPan] = useState({ x: 40, y: 30 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
@@ -35,35 +36,27 @@ export default function NetworkGraphView({ traceData }) {
   const [copiedId, setCopiedId] = useState(null);
 
   const viewportRef = useRef(null);
-  const canvasRef = useRef(null);
-  const nodeRefs = useRef({});
-  const [renderedLinks, setRenderedLinks] = useState([]);
 
   const nodes = traceData?.nodes || [];
   const rawLinks = traceData?.links || [];
 
   // Temporal link slicing for 15-day slider
   const visibleLinksCount = Math.max(1, Math.floor((rawLinks.length * timeProgress) / 100));
-  const activeLinks = rawLinks.slice(0, visibleLinksCount);
+  const activeRawLinks = rawLinks.slice(0, visibleLinksCount);
 
-  // Group nodes by hop level (memoized)
-  const hopGroups = React.useMemo(() => {
+  // Group nodes by hop level
+  const hopGroups = useMemo(() => {
     const groups = { 0: [], 1: [], 2: [], 3: [] };
-    const nList = traceData?.nodes || [];
-    nList.forEach((n) => {
+    nodes.forEach((n) => {
       const h = Math.min(n.hop, 3);
       if (groups[h]) groups[h].push(n);
     });
     return groups;
-  }, [traceData]);
+  }, [nodes]);
 
-  // Guarantee complete multi-hop connectivity links
-  const effectiveLinks = React.useMemo(() => {
-    const rawLinks = traceData?.links || [];
-    const visibleLinksCount = Math.max(1, Math.floor((rawLinks.length * timeProgress) / 100));
-    const active = rawLinks.slice(0, visibleLinksCount);
-    if (active.length > 0) return active;
-
+  // Guaranteed synthetic tree links if raw links are empty
+  const effectiveLinks = useMemo(() => {
+    if (activeRawLinks.length > 0) return activeRawLinks;
     const generated = [];
     const h0 = hopGroups[0] || [];
     const h1 = hopGroups[1] || [];
@@ -72,7 +65,7 @@ export default function NetworkGraphView({ traceData }) {
 
     if (h0[0] && h1[0]) {
       generated.push({
-        txn_id: "TXN-V-01",
+        txn_id: "TXN-TREE-01",
         source: h0[0].id,
         target: h1[0].id,
         amount: h1[0].tainted_received || traceData?.total_siphoned_inr || 1478894.0,
@@ -86,13 +79,13 @@ export default function NetworkGraphView({ traceData }) {
     if (h1[0]) {
       h2.forEach((n2, idx) => {
         generated.push({
-          txn_id: `TXN-V-02-${idx + 1}`,
+          txn_id: `TXN-TREE-02-${idx + 1}`,
           source: h1[0].id,
           target: n2.id,
           amount: n2.tainted_received || 99642.85,
           payment_mode: "IMPS",
-          timestamp: `2026-10-13 00:11:${String(idx * 2).padStart(2, '0')}`,
-          narration: "Fast Smurf Transfer",
+          timestamp: `2026-10-13 00:11:${String(idx * 2).padStart(2, "0")}`,
+          narration: "Bunny-Hop Smurfing",
           hop: 2
         });
       });
@@ -102,101 +95,189 @@ export default function NetworkGraphView({ traceData }) {
       h3.forEach((n3, idx) => {
         const srcNode = h2[idx % h2.length];
         generated.push({
-          txn_id: `TXN-V-03-${idx + 1}`,
+          txn_id: `TXN-TREE-03-${idx + 1}`,
           source: srcNode.id,
           target: n3.id,
           amount: n3.tainted_received || 70000.0,
           payment_mode: "UPI/P2P",
-          timestamp: `2026-10-13 00:19:${String(idx * 5).padStart(2, '0')}`,
-          narration: "Binance P2P Cash-Out",
+          timestamp: `2026-10-13 00:19:${String(idx * 5).padStart(2, "0")}`,
+          narration: "Crypto USDT Exit",
           hop: 3
         });
       });
     }
 
     return generated;
-  }, [traceData, timeProgress, hopGroups]);
+  }, [activeRawLinks, traceData, hopGroups]);
 
-  // Orthogonal Vertical Pipeline Path Generator (Top to Bottom)
-  const makeVerticalPipelinePath = (x1, y1, x2, y2) => {
-    if (Math.abs(x1 - x2) < 4) {
-      return `M ${x1} ${y1} L ${x2} ${y2}`;
-    }
-    const midY = y1 + (y2 - y1) * 0.48;
-    const radius = Math.min(16, Math.abs(x2 - x1) / 2, Math.abs(x2 - x1) / 4);
-    const signX = x2 > x1 ? 1 : -1;
+  // PURE MATHEMATICAL HORIZONTAL & VERTICAL TREE LAYOUT ENGINE
+  const treeLayout = useMemo(() => {
+    const h0 = hopGroups[0] || [];
+    const h1 = hopGroups[1] || [];
+    const h2 = hopGroups[2] || [];
+    const h3 = hopGroups[3] || [];
 
-    return `M ${x1} ${y1} L ${x1} ${midY - radius} Q ${x1} ${midY} ${x1 + radius * signX} ${midY} L ${x2 - radius * signX} ${midY} Q ${x2} ${midY} ${x2} ${midY + radius} L ${x2} ${y2}`;
-  };
+    const isHorizontal = treeOrientation === "horizontal";
+    const nodeW = isHorizontal ? 260 : 220;
+    const nodeH = isHorizontal ? 66 : 74;
+    const hGap = isHorizontal ? 170 : 36;
+    const vGap = isHorizontal ? 20 : 130;
 
-  // Orthogonal Horizontal Pipeline Path Generator (Left to Right)
-  const makeHorizontalPipelinePath = (x1, y1, x2, y2) => {
-    if (Math.abs(y1 - y2) < 4) {
-      return `M ${x1} ${y1} L ${x2} ${y2}`;
-    }
-    const midX = x1 + (x2 - x1) * 0.48;
-    const radius = Math.min(16, Math.abs(y2 - y1) / 2, Math.abs(x2 - x1) / 4);
-    const signY = y2 > y1 ? 1 : -1;
+    const nodePositions = {};
+    const totalH2 = Math.max(1, h2.length);
 
-    return `M ${x1} ${y1} L ${midX - radius} ${y1} Q ${midX} ${y1} ${midX} ${y1 + radius * signY} L ${midX} ${y2 - radius * signY} Q ${midX} ${y2} ${midX + radius} ${y2} L ${x2} ${y2}`;
-  };
+    if (isHorizontal) {
+      // HORIZONTAL TREE (Left to Right Branches)
+      const h2TotalHeight = totalH2 * (nodeH + vGap) - vGap;
+      const startY = 80;
+      const centerY = startY + h2TotalHeight / 2;
 
-  // Smooth Bézier Curves
-  const makeBezierPath = (x1, y1, x2, y2, orientation) => {
-    if (orientation === "vertical") {
-      const dy = Math.abs(y2 - y1) * 0.5;
-      return `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
+      // Level 2 (Hop 2 Branches): distributed vertically with clean spacing
+      h2.forEach((n, idx) => {
+        const x = 60 + (nodeW + hGap) * 2;
+        const y = startY + idx * (nodeH + vGap);
+        nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
+      });
+
+      // Level 1 (Hop 1 Trunk): centered vertically relative to its Hop 2 branches
+      h1.forEach((n) => {
+        const x = 60 + (nodeW + hGap);
+        const y = centerY - nodeH / 2;
+        nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
+      });
+
+      // Level 0 (Hop 0 Root Victim): centered vertically with trunk
+      h0.forEach((n) => {
+        const x = 60;
+        const y = centerY - nodeH / 2;
+        nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
+      });
+
+      // Level 3 (Hop 3 Leaves): branch out to the right of their respective Hop 2 parent
+      h3.forEach((n, idx) => {
+        const x = 60 + (nodeW + hGap) * 3;
+        const parentLink = effectiveLinks.find(
+          (l) => (typeof l.target === "object" ? l.target.id : l.target) === n.id
+        );
+        let targetY;
+        if (
+          parentLink &&
+          nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source]
+        ) {
+          targetY =
+            nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].y;
+        } else {
+          targetY = startY + idx * (nodeH + vGap) * 2.5;
+        }
+        nodePositions[n.id] = { ...n, x, y: targetY, width: nodeW, height: nodeH };
+      });
     } else {
-      const dx = Math.abs(x2 - x1) * 0.52;
-      return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+      // VERTICAL TREE (Top to Bottom Branches)
+      const h2TotalWidth = totalH2 * (nodeW + hGap) - hGap;
+      const startX = 60;
+      const centerX = startX + h2TotalWidth / 2;
+
+      // Level 2: distributed horizontally
+      h2.forEach((n, idx) => {
+        const x = startX + idx * (nodeW + hGap);
+        const y = 80 + (nodeH + vGap) * 2;
+        nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
+      });
+
+      // Level 1: centered horizontally
+      h1.forEach((n) => {
+        const x = centerX - nodeW / 2;
+        const y = 80 + (nodeH + vGap);
+        nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
+      });
+
+      // Level 0: centered horizontally
+      h0.forEach((n) => {
+        const x = centerX - nodeW / 2;
+        const y = 80;
+        nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
+      });
+
+      // Level 3: below Hop 2
+      h3.forEach((n, idx) => {
+        const parentLink = effectiveLinks.find(
+          (l) => (typeof l.target === "object" ? l.target.id : l.target) === n.id
+        );
+        let targetX;
+        if (
+          parentLink &&
+          nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source]
+        ) {
+          targetX =
+            nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].x;
+        } else {
+          targetX = startX + idx * (nodeW + hGap) * 2;
+        }
+        const y = 80 + (nodeH + vGap) * 3;
+        nodePositions[n.id] = { ...n, x: targetX, y, width: nodeW, height: nodeH };
+      });
     }
-  };
 
-  // Precise Anchor-to-Anchor Pipeline Connector Calculation
-  const updateConnections = () => {
-    if (!canvasRef.current) return;
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    if (canvasRect.width === 0 || canvasRect.height === 0) return;
-
-    const computed = [];
+    // Build branch paths and badges
+    const positionedNodes = Object.values(nodePositions);
+    const positionedLinks = [];
 
     effectiveLinks.forEach((l) => {
-      const srcId = typeof l.source === "object" ? l.source.id : l.source;
-      const tgtId = typeof l.target === "object" ? l.target.id : l.target;
+      const sId = typeof l.source === "object" ? l.source.id : l.source;
+      const tId = typeof l.target === "object" ? l.target.id : l.target;
+      const srcNode = nodePositions[sId];
+      const tgtNode = nodePositions[tId];
 
-      const srcEl = nodeRefs.current[srcId];
-      const tgtEl = nodeRefs.current[tgtId];
-
-      if (srcEl && tgtEl) {
-        const srcRect = srcEl.getBoundingClientRect();
-        const tgtRect = tgtEl.getBoundingClientRect();
-
+      if (srcNode && tgtNode) {
         let x1, y1, x2, y2, pathD;
 
-        if (viewOrientation === "vertical") {
-          x1 = (srcRect.left + srcRect.width / 2 - canvasRect.left) / zoom;
-          y1 = (srcRect.bottom - canvasRect.top) / zoom;
-          x2 = (tgtRect.left + tgtRect.width / 2 - canvasRect.left) / zoom;
-          y2 = (tgtRect.top - canvasRect.top) / zoom;
+        if (isHorizontal) {
+          // Right center of parent -> Left center of child
+          x1 = srcNode.x + srcNode.width;
+          y1 = srcNode.y + srcNode.height / 2;
+          x2 = tgtNode.x;
+          y2 = tgtNode.y + tgtNode.height / 2;
 
-          pathD = lineStyle === "pipeline"
-            ? makeVerticalPipelinePath(x1, y1, x2, y2)
-            : makeBezierPath(x1, y1, x2, y2, "vertical");
+          if (branchStyle === "curved") {
+            const dx = (x2 - x1) * 0.55;
+            pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+          } else {
+            // Stepped orthogonal pipeline
+            const midX = (x1 + x2) / 2;
+            const r = Math.min(14, Math.abs(y2 - y1) / 2);
+            const signY = y2 > y1 ? 1 : -1;
+            if (Math.abs(y1 - y2) < 4) {
+              pathD = `M ${x1} ${y1} L ${x2} ${y2}`;
+            } else {
+              pathD = `M ${x1} ${y1} L ${midX - r} ${y1} Q ${midX} ${y1} ${midX} ${y1 + r * signY} L ${midX} ${y2 - r * signY} Q ${midX} ${y2} ${midX + r} ${y2} L ${x2} ${y2}`;
+            }
+          }
         } else {
-          x1 = (srcRect.right - canvasRect.left) / zoom;
-          y1 = (srcRect.top + srcRect.height / 2 - canvasRect.top) / zoom;
-          x2 = (tgtRect.left - canvasRect.left) / zoom;
-          y2 = (tgtRect.top + tgtRect.height / 2 - canvasRect.top) / zoom;
+          // Bottom center of parent -> Top center of child
+          x1 = srcNode.x + srcNode.width / 2;
+          y1 = srcNode.y + srcNode.height;
+          x2 = tgtNode.x + tgtNode.width / 2;
+          y2 = tgtNode.y;
 
-          pathD = lineStyle === "pipeline"
-            ? makeHorizontalPipelinePath(x1, y1, x2, y2)
-            : makeBezierPath(x1, y1, x2, y2, "horizontal");
+          if (branchStyle === "curved") {
+            const dy = (y2 - y1) * 0.55;
+            pathD = `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
+          } else {
+            const midY = (y1 + y2) / 2;
+            const r = Math.min(14, Math.abs(x2 - x1) / 2);
+            const signX = x2 > x1 ? 1 : -1;
+            if (Math.abs(x1 - x2) < 4) {
+              pathD = `M ${x1} ${y1} L ${x2} ${y2}`;
+            } else {
+              pathD = `M ${x1} ${y1} L ${x1} ${midY - r} Q ${x1} ${midY} ${x1 + r * signX} ${midY} L ${x2 - r * signX} ${midY} Q ${x2} ${midY} ${x2} ${midY + r} L ${x2} ${y2}`;
+            }
+          }
         }
 
-        computed.push({
+        positionedLinks.push({
           ...l,
-          sourceId: srcId,
-          targetId: tgtId,
+          sourceId: sId,
+          targetId: tId,
           x1,
           y1,
           x2,
@@ -208,25 +289,15 @@ export default function NetworkGraphView({ traceData }) {
       }
     });
 
-    setRenderedLinks((prev) => {
-      if (prev.length === computed.length && prev.length > 0) {
-        if (prev[0].pathD === computed[0]?.pathD && prev[prev.length - 1].pathD === computed[computed.length - 1]?.pathD) {
-          return prev;
-        }
-      }
-      return computed;
-    });
-  };
+    const maxX = Math.max(...positionedNodes.map((n) => n.x + n.width), 1500) + 120;
+    const maxY = Math.max(...positionedNodes.map((n) => n.y + n.height), 900) + 120;
 
-  useEffect(() => {
-    const timer = setTimeout(updateConnections, 60);
-    return () => clearTimeout(timer);
-  }, [traceData, viewOrientation, lineStyle, zoom, effectiveLinks.length]);
-
-  useEffect(() => {
-    window.addEventListener("resize", updateConnections);
-    return () => window.removeEventListener("resize", updateConnections);
-  }, []);
+    return {
+      positionedNodes,
+      positionedLinks,
+      canvasBounds: { width: maxX, height: maxY }
+    };
+  }, [hopGroups, effectiveLinks, treeOrientation, branchStyle]);
 
   // Temporal Playback Animation Loop
   useEffect(() => {
@@ -247,7 +318,7 @@ export default function NetworkGraphView({ traceData }) {
 
   // Pan Interactions
   const handleMouseDown = (e) => {
-    if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".interactive-node-card")) {
+    if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".tree-node-card")) {
       return;
     }
     setIsDragging(true);
@@ -262,25 +333,23 @@ export default function NetworkGraphView({ traceData }) {
     });
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = () => setIsDragging(false);
 
   // Zoom Interactions
   const handleZoomIn = () => setZoom((z) => Math.min(2.0, Number((z + 0.15).toFixed(2))));
   const handleZoomOut = () => setZoom((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))));
   const handleResetZoom = () => {
     setZoom(0.85);
-    setPan({ x: 30, y: 30 });
+    setPan({ x: 40, y: 30 });
   };
 
   const handleFitView = () => {
     if (viewportRef.current) {
       const vWidth = viewportRef.current.clientWidth - 40;
-      const cWidth = viewOrientation === "vertical" ? 1400 : 1600;
+      const cWidth = treeLayout.canvasBounds.width;
       const autoZoom = Math.min(1.0, Math.max(0.45, Number((vWidth / cWidth).toFixed(2))));
       setZoom(autoZoom);
-      setPan({ x: 15, y: 15 });
+      setPan({ x: 20, y: 20 });
     }
   };
 
@@ -297,7 +366,7 @@ export default function NetworkGraphView({ traceData }) {
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  // Active Highlight determination
+  // Active path highlight logic
   const isLinkActive = (l) => {
     if (!hoveredNodeId && !selectedNode) return true;
     const activeId = hoveredNodeId || selectedNode?.id;
@@ -308,11 +377,9 @@ export default function NetworkGraphView({ traceData }) {
     if (!hoveredNodeId && !selectedNode) return true;
     const activeId = hoveredNodeId || selectedNode?.id;
     if (nodeId === activeId) return true;
-    return effectiveLinks.some((l) => {
-      const sId = typeof l.source === "object" ? l.source.id : l.source;
-      const tId = typeof l.target === "object" ? l.target.id : l.target;
-      return (sId === activeId && tId === nodeId) || (tId === activeId && sId === nodeId);
-    });
+    return treeLayout.positionedLinks.some(
+      (l) => (l.sourceId === activeId && l.targetId === nodeId) || (l.targetId === activeId && l.sourceId === nodeId)
+    );
   };
 
   return (
@@ -322,14 +389,15 @@ export default function NetworkGraphView({ traceData }) {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-serif font-bold text-[#2C2623]">
-              Mule Network Pipeline Flow Graph
+              Mule Network Horizontal Tree Hierarchy
             </h2>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-mono">
-              VERTICAL PIPELINE SCHEMATIC
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-mono flex items-center gap-1">
+              <GitBranch className="w-3 h-3 text-[#D96B27]" />
+              BRANCHING TREE GRAPH
             </span>
           </div>
           <p className="text-xs text-[#746D65] mt-0.5">
-            Structured forensic pipeline layout showing fund propagation with exact transaction values labeled on connecting pipelines.
+            Dendrogram-style branching graph showing fund fan-out from Victim Root to Terminal Exit leaves with transaction details written on each branch.
           </p>
         </div>
 
@@ -337,19 +405,19 @@ export default function NetworkGraphView({ traceData }) {
         <div className="flex items-center gap-3 text-xs font-semibold">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E6F7F0] border border-[#A7F3D0] text-[#059669]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]"></span>
-            <span>Hop 0: Victim</span>
+            <span>Root: Victim</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FFF7ED] border border-[#FFEDD5] text-[#EA580C]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#EA580C]"></span>
-            <span>Hop 1: L1 Collector</span>
+            <span>Trunk: L1 Collector</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FEF3C7] border border-[#FDE68A] text-[#D97706]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#D97706]"></span>
-            <span>Hop 2: L2 Distributor</span>
+            <span>Branches: L2 Mules</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EDE9FE] border border-[#DDD6FE] text-[#7C3AED]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#7C3AED]"></span>
-            <span>Hop 3: L3 Cashout</span>
+            <span>Leaves: L3 Terminal</span>
           </div>
         </div>
       </div>
@@ -358,37 +426,38 @@ export default function NetworkGraphView({ traceData }) {
       <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-[#746D65] flex items-center gap-1.5">
-            <Share2 className="w-3.5 h-3.5 text-[#D96B27]" />
-            Pipeline Layout:
+            <GitBranch className="w-3.5 h-3.5 text-[#D96B27]" />
+            Tree Layout:
           </span>
-          {/* Orientation Toggle: Vertical vs Horizontal */}
+
+          {/* Orientation Toggle: Horizontal Tree vs Vertical Tree */}
           <div className="flex items-center bg-white border border-[#E8E2D5] rounded-lg overflow-hidden shadow-2xs text-[11px]">
             <button
-              onClick={() => setViewOrientation("vertical")}
-              className={`flex items-center gap-1 px-3 py-1 font-bold transition-colors cursor-pointer ${
-                viewOrientation === "vertical" ? "bg-[#D96B27] text-white" : "hover:bg-[#F3EDE2] text-[#746D65]"
-              }`}
-            >
-              <ArrowDown className="w-3 h-3" />
-              <span>Vertical Pipeline (Top-Down)</span>
-            </button>
-            <button
-              onClick={() => setViewOrientation("horizontal")}
-              className={`flex items-center gap-1 px-3 py-1 font-bold transition-colors cursor-pointer ${
-                viewOrientation === "horizontal" ? "bg-[#D96B27] text-white" : "hover:bg-[#F3EDE2] text-[#746D65]"
+              onClick={() => setTreeOrientation("horizontal")}
+              className={`flex items-center gap-1.5 px-3 py-1 font-bold transition-colors cursor-pointer ${
+                treeOrientation === "horizontal" ? "bg-[#D96B27] text-white" : "hover:bg-[#F3EDE2] text-[#746D65]"
               }`}
             >
               <ArrowRight className="w-3 h-3" />
-              <span>Horizontal Flow</span>
+              <span>Horizontal Tree (Branches)</span>
+            </button>
+            <button
+              onClick={() => setTreeOrientation("vertical")}
+              className={`flex items-center gap-1.5 px-3 py-1 font-bold transition-colors cursor-pointer ${
+                treeOrientation === "vertical" ? "bg-[#D96B27] text-white" : "hover:bg-[#F3EDE2] text-[#746D65]"
+              }`}
+            >
+              <ArrowDown className="w-3 h-3" />
+              <span>Vertical Tree</span>
             </button>
           </div>
 
-          {/* Line Style Toggle */}
+          {/* Branch Style Toggle: Organic Curved Limbs vs Stepped Pipeline */}
           <button
-            onClick={() => setLineStyle(lineStyle === "pipeline" ? "curved" : "pipeline")}
-            className="px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all shadow-2xs cursor-pointer bg-white border-[#E8E2D5] text-[#2C2623] hover:bg-[#F3EDE2]"
+            onClick={() => setBranchStyle(branchStyle === "curved" ? "orthogonal" : "curved")}
+            className="px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all shadow-2xs cursor-pointer bg-white border-[#E8E2D5] text-[#2C2623] hover:bg-[#F3EDE2] flex items-center gap-1"
           >
-            {lineStyle === "pipeline" ? "Orthogonal Pipelines" : "Smooth Curves"}
+            <span>{branchStyle === "curved" ? "Tree Limbs (Curved)" : "Circuit Pipes (Orthogonal)"}</span>
           </button>
         </div>
 
@@ -438,7 +507,7 @@ export default function NetworkGraphView({ traceData }) {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onWheel={handleWheel}
-        className={`relative w-full h-[620px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner ${
+        className={`relative w-full h-[640px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{
@@ -450,72 +519,55 @@ export default function NetworkGraphView({ traceData }) {
           backgroundSize: "28px 28px, 140px 140px, 140px 140px"
         }}
       >
-        {/* TRANSFORMED WORLD CANVAS */}
+        {/* TRANSFORMED TREE CANVAS */}
         <div
-          ref={canvasRef}
           className="absolute origin-top-left transition-transform duration-75 ease-out select-none"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            minWidth: viewOrientation === "vertical" ? "1500px" : "1800px",
-            minHeight: viewOrientation === "vertical" ? "1300px" : "900px",
-            padding: "40px"
+            width: `${treeLayout.canvasBounds.width}px`,
+            height: `${treeLayout.canvasBounds.height}px`
           }}
         >
-          {/* SVG PIPELINE CONNECTIONS (BEHIND NODES) */}
+          {/* SVG TREE BRANCHES & LABELS LAYER */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
             style={{
-              minWidth: viewOrientation === "vertical" ? "1600px" : "1900px",
-              minHeight: viewOrientation === "vertical" ? "1400px" : "1000px",
+              width: `${treeLayout.canvasBounds.width}px`,
+              height: `${treeLayout.canvasBounds.height}px`,
               overflow: "visible"
             }}
           >
             <defs>
-              <linearGradient id="vgrad-hop1" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#10B981" />
-                <stop offset="100%" stopColor="#EA580C" />
-              </linearGradient>
-              <linearGradient id="vgrad-hop2" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#EA580C" />
-                <stop offset="100%" stopColor="#D97706" />
-              </linearGradient>
-              <linearGradient id="vgrad-hop3" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#D97706" />
-                <stop offset="100%" stopColor="#7C3AED" />
-              </linearGradient>
-
-              {/* Arrowheads for Vertical and Horizontal pipelines */}
-              <marker id="varrow-hop1" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="tarrow-hop1" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EA580C" />
               </marker>
-              <marker id="varrow-hop2" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="tarrow-hop2" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#D97706" />
               </marker>
-              <marker id="varrow-hop3" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="tarrow-hop3" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7C3AED" />
               </marker>
             </defs>
 
-            {/* Pipeline Paths with Details Written Directly on Each Line */}
-            {renderedLinks.map((l, i) => {
+            {/* Tree Branch Connecting Lines */}
+            {treeLayout.positionedLinks.map((l, i) => {
               const active = isLinkActive(l);
               const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : "#7C3AED";
-              const marker = l.hop === 1 ? "url(#varrow-hop1)" : l.hop === 2 ? "url(#varrow-hop2)" : "url(#varrow-hop3)";
+              const marker = l.hop === 1 ? "url(#tarrow-hop1)" : l.hop === 2 ? "url(#tarrow-hop2)" : "url(#tarrow-hop3)";
 
               return (
                 <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.15}>
-                  {/* Outer Pipe Glow Casing */}
+                  {/* Outer Branch Halo */}
                   <path
                     d={l.pathD}
                     fill="none"
                     stroke={strokeColor}
-                    strokeWidth={active ? 8 : 5}
-                    strokeOpacity={active ? 0.25 : 0.12}
+                    strokeWidth={active ? 8 : 4}
+                    strokeOpacity={active ? 0.22 : 0.1}
                     strokeLinecap="round"
-                    strokeLinejoin="round"
                   />
 
-                  {/* Core Pipe Conduit */}
+                  {/* Core Tree Branch Conduit */}
                   <path
                     d={l.pathD}
                     fill="none"
@@ -524,47 +576,45 @@ export default function NetworkGraphView({ traceData }) {
                     markerEnd={marker}
                     strokeOpacity={active ? 1.0 : 0.85}
                     strokeLinecap="round"
-                    strokeLinejoin="round"
                   />
 
-                  {/* Animated Directional Dash Pulse */}
+                  {/* Directional Fluid Flow Pulse Dash */}
                   <path
                     d={l.pathD}
                     fill="none"
                     stroke="#FFFFFF"
                     strokeWidth={2}
                     strokeDasharray="8,14"
-                    strokeOpacity={0.95}
+                    strokeOpacity={0.9}
                     strokeLinecap="round"
-                    strokeLinejoin="round"
                   >
                     <animate
                       attributeName="stroke-dashoffset"
                       from="44"
                       to="0"
-                      dur="1.3s"
+                      dur="1.2s"
                       repeatCount="indefinite"
                     />
                   </path>
 
-                  {/* DETAILS WRITTEN DIRECTLY ON THE CONNECTING LINE */}
+                  {/* DETAILS WRITTEN DIRECTLY ON THE CONNECTING BRANCH */}
                   <g transform={`translate(${l.midX}, ${l.midY})`} className="pointer-events-auto cursor-pointer">
                     <rect
-                      x="-70"
-                      y="-12"
-                      width="140"
-                      height="24"
-                      rx="7"
+                      x="-65"
+                      y="-11"
+                      width="130"
+                      height="22"
+                      rx="6"
                       fill="#FFFFFF"
                       stroke={strokeColor}
-                      strokeWidth={active ? "1.8" : "1.2"}
-                      className="shadow-sm"
+                      strokeWidth={active ? "1.6" : "1.2"}
+                      className="shadow-xs"
                     />
                     <text
                       x="0"
                       y="-1"
                       textAnchor="middle"
-                      fontSize="9.5"
+                      fontSize="9"
                       fontWeight="bold"
                       fill="#2C2623"
                       fontFamily="monospace"
@@ -573,9 +623,9 @@ export default function NetworkGraphView({ traceData }) {
                     </text>
                     <text
                       x="0"
-                      y="8.5"
+                      y="7.5"
                       textAnchor="middle"
-                      fontSize="7.5"
+                      fontSize="7"
                       fontWeight="bold"
                       fill={strokeColor}
                       fontFamily="sans-serif"
@@ -588,297 +638,103 @@ export default function NetworkGraphView({ traceData }) {
             })}
           </svg>
 
-          {/* NODES LAYER: VERTICAL OR HORIZONTAL PIPELINE HIERARCHY */}
-          <div className={viewOrientation === "vertical" ? "space-y-16 max-w-5xl mx-auto" : "flex items-start gap-20"}>
-            {/* LEVEL 0: HOP 0 • VICTIM ACCOUNT */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#E6F7F0] border border-[#A7F3D0] max-w-sm mx-auto shadow-2xs">
-                <span className="text-[11px] font-bold text-[#059669] uppercase font-mono tracking-wider">
-                  HOP 0 • VICTIM ACCOUNT
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#059669] font-bold border border-[#A7F3D0]">
-                  Origin
-                </span>
-              </div>
+          {/* TREE NODES LAYER */}
+          {treeLayout.positionedNodes.map((node) => {
+            const active = isNodeActive(node.id);
+            const isSelected = selectedNode?.id === node.id;
+            const isRoot = node.hop === 0;
+            const isL1 = node.hop === 1;
+            const isL2 = node.hop === 2;
+            const isL3 = node.hop === 3;
 
-              <div className="flex justify-center">
-                {hopGroups[0]?.map((node) => {
-                  const active = isNodeActive(node.id);
-                  const isSelected = selectedNode?.id === node.id;
+            const themeColor = isRoot ? "#10B981" : isL1 ? "#EA580C" : isL2 ? "#D97706" : "#7C3AED";
+            const badgeBg = isRoot ? "#E6F7F0" : isL1 ? "#FFF7ED" : isL2 ? "#FEF3C7" : "#EDE9FE";
 
-                  return (
-                    <div
-                      key={node.id}
-                      ref={(el) => {
-                        if (el) nodeRefs.current[node.id] = el;
-                      }}
-                      onMouseEnter={() => setHoveredNodeId(node.id)}
-                      onMouseLeave={() => setHoveredNodeId(null)}
-                      onClick={() => setSelectedNode(node)}
-                      className={`interactive-node-card relative w-80 bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
-                        isSelected
-                          ? "border-[#10B981] ring-3 ring-[#10B981]/30 scale-102"
-                          : active
-                          ? "border-[#10B981] hover:shadow-md"
-                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                      }`}
+            return (
+              <div
+                key={node.id}
+                onMouseEnter={() => setHoveredNodeId(node.id)}
+                onMouseLeave={() => setHoveredNodeId(null)}
+                onClick={() => setSelectedNode(node)}
+                style={{
+                  position: "absolute",
+                  left: `${node.x}px`,
+                  top: `${node.y}px`,
+                  width: `${node.width}px`,
+                  height: `${node.height}px`
+                }}
+                className={`tree-node-card bg-white border-2 rounded-xl p-2.5 shadow-sm transition-all duration-150 cursor-pointer flex flex-col justify-between ${
+                  isSelected
+                    ? "ring-3 scale-102"
+                    : active
+                    ? "hover:shadow-md"
+                    : "opacity-40 hover:opacity-100"
+                }`}
+              >
+                {/* Port Anchors */}
+                {treeOrientation === "horizontal" ? (
+                  <>
+                    {!isRoot && (
+                      <div
+                        style={{ backgroundColor: themeColor }}
+                        className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
+                      />
+                    )}
+                    {!isL3 && (
+                      <div
+                        style={{ backgroundColor: themeColor }}
+                        className="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
+                      />
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {!isRoot && (
+                      <div
+                        style={{ backgroundColor: themeColor }}
+                        className="absolute top-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
+                      />
+                    )}
+                    {!isL3 && (
+                      <div
+                        style={{ backgroundColor: themeColor }}
+                        className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
+                      />
+                    )}
+                  </>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
+                    <button
+                      onClick={(e) => handleCopy(node.id, e)}
+                      className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
                     >
-                      {/* Port Terminals */}
-                      {viewOrientation === "vertical" ? (
-                        <div className="absolute bottom-[-7px] left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-[#10B981] border-2 border-white shadow-xs" />
-                      ) : (
-                        <div className="absolute right-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#10B981] border-2 border-white shadow-xs" />
-                      )}
+                      {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                  <span
+                    style={{ backgroundColor: badgeBg, color: themeColor }}
+                    className="text-[9px] px-1.5 py-0.2 rounded font-bold font-mono"
+                  >
+                    {isRoot ? "VICTIM" : isL1 ? "L1 MULE" : isL2 ? `SCORE ${node.risk_score}` : "CRYPTO EXIT"}
+                  </span>
+                </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                          <button
-                            onClick={(e) => handleCopy(node.id, e)}
-                            className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
-                          >
-                            {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        </div>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#E6F7F0] text-[#059669] font-bold">
-                          Complainant
-                        </span>
-                      </div>
-
-                      <div className="text-[11px] text-[#746D65] mt-1 font-medium">
-                        {node.bank} ({node.ifsc})
-                      </div>
-
-                      <div className="mt-2 p-2 rounded-xl bg-[#FEF2F2] border border-[#FEE2E2]">
-                        <span className="text-[9px] uppercase font-bold text-[#DC2626]">Siphoned Amount</span>
-                        <div className="text-sm font-mono font-bold text-[#DC2626]">
-                          ₹{traceData?.total_siphoned_inr ? traceData.total_siphoned_inr.toLocaleString("en-IN") : "0"}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[#F5EDE1] font-mono">
+                  <span className="text-[#746D65] truncate font-sans text-[10px]">
+                    {node.bank} ({node.ifsc})
+                  </span>
+                  <span className="text-[#059669] font-bold">
+                    {isRoot
+                      ? `Loss: ₹${traceData?.total_siphoned_inr ? Math.round(traceData.total_siphoned_inr).toLocaleString("en-IN") : "0"}`
+                      : `Lien: ₹${node.holding_amount ? Math.round(Number(node.holding_amount)).toLocaleString("en-IN") : "0"}`}
+                  </span>
+                </div>
               </div>
-            </div>
-
-            {/* LEVEL 1: HOP 1 • L1 COLLECTOR */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#FFF7ED] border border-[#FFEDD5] max-w-sm mx-auto shadow-2xs">
-                <span className="text-[11px] font-bold text-[#EA580C] uppercase font-mono tracking-wider">
-                  HOP 1 • L1 COLLECTOR MULE
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-[#EA580C] text-white font-bold animate-pulse">
-                  Target Mule
-                </span>
-              </div>
-
-              <div className="flex justify-center">
-                {hopGroups[1]?.map((node) => {
-                  const active = isNodeActive(node.id);
-                  const isSelected = selectedNode?.id === node.id;
-
-                  return (
-                    <div
-                      key={node.id}
-                      ref={(el) => {
-                        if (el) nodeRefs.current[node.id] = el;
-                      }}
-                      onMouseEnter={() => setHoveredNodeId(node.id)}
-                      onMouseLeave={() => setHoveredNodeId(null)}
-                      onClick={() => setSelectedNode(node)}
-                      className={`interactive-node-card relative w-84 bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
-                        isSelected
-                          ? "border-[#EA580C] ring-3 ring-[#EA580C]/30 scale-102"
-                          : active
-                          ? "border-[#EA580C] hover:shadow-md"
-                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                      }`}
-                    >
-                      {/* Incoming & Outgoing Ports */}
-                      {viewOrientation === "vertical" ? (
-                        <>
-                          <div className="absolute top-[-7px] left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-[#EA580C] border-2 border-white shadow-xs" />
-                          <div className="absolute bottom-[-7px] left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-[#EA580C] border-2 border-white shadow-xs" />
-                        </>
-                      ) : (
-                        <>
-                          <div className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#EA580C] border-2 border-white shadow-xs" />
-                          <div className="absolute right-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#EA580C] border-2 border-white shadow-xs" />
-                        </>
-                      )}
-
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#FEF3C7] text-[#D97706] font-bold font-mono">
-                          Score: {node.risk_score || 95}
-                        </span>
-                      </div>
-
-                      <div className="text-[11px] text-[#746D65] mt-1 font-medium">
-                        {node.bank} ({node.ifsc})
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <div className="p-2 rounded-xl bg-[#FFF7ED] border border-[#FFEDD5]">
-                          <span className="text-[9px] uppercase font-bold text-[#C2410C]">Inflow</span>
-                          <div className="text-xs font-mono font-bold text-[#EA580C]">
-                            ₹{node.tainted_received ? node.tainted_received.toLocaleString("en-IN") : "0"}
-                          </div>
-                        </div>
-                        <div className="p-2 rounded-xl bg-[#E6F7F0] border border-[#A7F3D0]">
-                          <span className="text-[9px] uppercase font-bold text-[#047857]">Trapped</span>
-                          <div className="text-xs font-mono font-bold text-[#059669]">
-                            ₹{node.holding_amount ? node.holding_amount.toLocaleString("en-IN") : "0"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 text-[10px] text-[#DC2626] font-bold flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-[#DC2626]" />
-                        <span>Fan-out split into {hopGroups[2]?.length || 14} distributor mules</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* LEVEL 2: HOP 2 • L2 DISTRIBUTOR MULES */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#FEF3C7] border border-[#FDE68A] max-w-sm mx-auto shadow-2xs">
-                <span className="text-[11px] font-bold text-[#D97706] uppercase font-mono tracking-wider">
-                  HOP 2 • L2 DISTRIBUTORS ({hopGroups[2]?.length || 0})
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#D97706] font-bold border border-[#FDE68A]">
-                  Smurfing Ring
-                </span>
-              </div>
-
-              {/* Grid of distributor mules */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                {hopGroups[2]?.map((node) => {
-                  const active = isNodeActive(node.id);
-                  const isSelected = selectedNode?.id === node.id;
-
-                  return (
-                    <div
-                      key={node.id}
-                      ref={(el) => {
-                        if (el) nodeRefs.current[node.id] = el;
-                      }}
-                      onMouseEnter={() => setHoveredNodeId(node.id)}
-                      onMouseLeave={() => setHoveredNodeId(null)}
-                      onClick={() => setSelectedNode(node)}
-                      className={`interactive-node-card relative bg-white border rounded-xl p-2.5 shadow-2xs transition-all duration-150 cursor-pointer ${
-                        isSelected
-                          ? "border-[#D97706] ring-2 ring-[#D97706]/30 scale-102"
-                          : active
-                          ? "border-[#D97706] hover:shadow-md"
-                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                      }`}
-                    >
-                      {/* Port Terminals */}
-                      {viewOrientation === "vertical" ? (
-                        <>
-                          <div className="absolute top-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-[#D97706] border-2 border-white shadow-xs" />
-                          <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-[#D97706] border-2 border-white shadow-xs" />
-                        </>
-                      ) : (
-                        <>
-                          <div className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#D97706] border-2 border-white shadow-xs" />
-                          <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#D97706] border-2 border-white shadow-xs" />
-                        </>
-                      )}
-
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-[11px] font-bold text-[#2C2623]">...{node.id.slice(-4)}</span>
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-[#FEF3C7] text-[#D97706] font-bold font-mono">
-                          {node.risk_score}
-                        </span>
-                      </div>
-
-                      <div className="text-[10px] text-[#746D65] mt-0.5 truncate font-medium">
-                        {node.bank}
-                      </div>
-
-                      <div className="mt-1 pt-1 border-t border-[#F5EDE1] text-[10px] font-mono">
-                        <div className="text-[#059669] font-bold">
-                          ₹{node.holding_amount ? Math.round(Number(node.holding_amount)).toLocaleString("en-IN") : "0"}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* LEVEL 3: HOP 3 • L3 CASHOUT / TERMINAL */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-[#EDE9FE] border border-[#DDD6FE] max-w-sm mx-auto shadow-2xs">
-                <span className="text-[11px] font-bold text-[#7C3AED] uppercase font-mono tracking-wider">
-                  HOP 3 • L3 CASHOUT / TERMINAL
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#7C3AED] font-bold border border-[#DDD6FE]">
-                  Terminal Exit
-                </span>
-              </div>
-
-              <div className="flex justify-center gap-6">
-                {hopGroups[3]?.map((node) => {
-                  const active = isNodeActive(node.id);
-                  const isSelected = selectedNode?.id === node.id;
-
-                  return (
-                    <div
-                      key={node.id}
-                      ref={(el) => {
-                        if (el) nodeRefs.current[node.id] = el;
-                      }}
-                      onMouseEnter={() => setHoveredNodeId(node.id)}
-                      onMouseLeave={() => setHoveredNodeId(null)}
-                      onClick={() => setSelectedNode(node)}
-                      className={`interactive-node-card relative w-80 bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
-                        isSelected
-                          ? "border-[#7C3AED] ring-3 ring-[#7C3AED]/30 scale-102"
-                          : active
-                          ? "border-[#7C3AED] hover:shadow-md"
-                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                      }`}
-                    >
-                      {/* Port Terminal */}
-                      {viewOrientation === "vertical" ? (
-                        <div className="absolute top-[-7px] left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-[#7C3AED] border-2 border-white shadow-xs" />
-                      ) : (
-                        <div className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#7C3AED] border-2 border-white shadow-xs" />
-                      )}
-
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#EDE9FE] text-[#7C3AED] font-bold">
-                          Crypto P2P Exit
-                        </span>
-                      </div>
-
-                      <div className="text-[11px] text-[#746D65] mt-1 font-medium">
-                        {node.bank} ({node.ifsc})
-                      </div>
-
-                      <div className="mt-2 p-2 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE]">
-                        <span className="text-[9px] uppercase font-bold text-[#6D28D9]">Exit Value</span>
-                        <div className="text-xs font-mono font-bold text-[#7C3AED]">
-                          ₹{node.tainted_received ? Number(node.tainted_received).toLocaleString("en-IN") : "0"}
-                        </div>
-                      </div>
-
-                      <div className="mt-2 text-[10px] text-[#9E968D] font-mono">
-                        Foreign IP: <span className="text-[#DC2626] font-semibold">{node.ip_address}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
 
@@ -902,11 +758,11 @@ export default function NetworkGraphView({ traceData }) {
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
-            <span className="font-medium text-[#2C2623]">15-Day Chronological Pipeline Replay</span>
+            <span className="font-medium text-[#2C2623]">15-Day Chronological Tree Expansion Replay</span>
           </div>
 
           <span className="font-mono text-xs text-[#746D65]">
-            Temporal Flow: {timeProgress}% ({renderedLinks.length} Active Money Pipelines Visible)
+            Temporal Tree: {timeProgress}% ({treeLayout.positionedLinks.length} Active Branches)
           </span>
         </div>
 
