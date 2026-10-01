@@ -14,6 +14,7 @@ import ActivityTimelineView from "./components/ActivityTimelineView";
 import Section91NoticesView from "./components/Section91NoticesView";
 import CaseDiaryView from "./components/CaseDiaryView";
 import JuryBenchmarkView from "./components/JuryBenchmarkView";
+import RealtimeFraudScannerView from "./components/RealtimeFraudScannerView";
 import RegisterFIRModal from "./components/RegisterFIRModal";
 import SettingsModal from "./components/SettingsModal";
 
@@ -225,6 +226,14 @@ export default function App() {
           {/* TAB 2: Evidence Vault (Dedicated Chained Custody Ledger) */}
           {activeTab === "vault" && (
             <EvidenceVaultView />
+          )}
+
+          {/* Real-Time 60s 2M Fraud Scanner & Early Intercept Monitor */}
+          {activeTab === "scanner" && (
+            <RealtimeFraudScannerView
+              onNavigateTab={setActiveTab}
+              onSelectCase={handleSelectCase}
+            />
           )}
 
           {/* TAB 3: Entity Directory (Master Database Index of 24,368 Accounts) */}

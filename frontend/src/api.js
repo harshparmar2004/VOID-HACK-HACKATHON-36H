@@ -54,3 +54,28 @@ export async function uploadBankStatement(file) {
   if (!res.ok) throw new Error("Failed to upload and parse bank statement");
   return res.json();
 }
+
+export async function run60sFraudBenchmark() {
+  const res = await fetch(`${API_BASE}/scanner/run-60s-benchmark`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to execute 60-second 2M fraud scan benchmark");
+  return res.json();
+}
+
+export async function fetchProblematicTransactions(limit = 100, filterType = null) {
+  let url = `${API_BASE}/scanner/problematic-transactions?limit=${limit}`;
+  if (filterType) url += `&filter_type=${encodeURIComponent(filterType)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch problematic transactions");
+  return res.json();
+}
+
+export async function executeEmergencyFreeze(accountIds) {
+  const res = await fetch(`${API_BASE}/scanner/emergency-freeze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_ids: accountIds })
+  });
+  if (!res.ok) throw new Error("Failed to execute emergency multi-bank freeze");
+  return res.json();
+}
+

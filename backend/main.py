@@ -17,6 +17,7 @@ from ingestion import IngestionEngine, DEFAULT_PARQUET
 from mule_scorer import MuleScorer
 from graph_engine import GraphEngine
 from legal_generator import LegalGenerator
+from fraud_scanner import FraudScanner
 
 app = FastAPI(
     title="Operation Abhedya-Chakra Core Forensics API",
@@ -41,17 +42,19 @@ GROUND_TRUTH_FILE = os.path.join(DATA_DIR, "ground_truth_mules.json")
 engine = IngestionEngine()
 scorer = None
 graph = None
+scanner = None
 legal = LegalGenerator()
 is_initialized = False
 
 def initialize_core():
-    global scorer, graph, is_initialized
+    global scorer, graph, scanner, is_initialized
     if not is_initialized:
         print("[*] Initializing Abhedya-Chakra Forensics Core...")
         engine.load_dataset()
         scorer = MuleScorer(engine.con)
         scorer.compute_all_scores()
         graph = GraphEngine(engine.con)
+        scanner = FraudScanner(engine.con)
         is_initialized = True
         print("[+] Core Forensics Engine fully initialized and ready!")
 
@@ -263,6 +266,40 @@ def run_jury_blind_evaluation():
         },
         "query_results": query_results
     }
+
+# ==============================================================================
+# REAL-TIME 60-SECOND 2M FRAUD SCANNER & EARLY INTERVENTION ENDPOINTS
+# ==============================================================================
+
+class EmergencyFreezePayload(BaseModel):
+    account_ids: List[str]
+
+@app.post("/api/scanner/run-60s-benchmark")
+def run_60s_fraud_benchmark():
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.run_60s_benchmark()
+
+@app.get("/api/scanner/problematic-transactions")
+def get_problematic_transactions(limit: int = 100, filter_type: Optional[str] = None):
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.get_problematic_transactions(limit=limit, filter_type=filter_type)
+
+@app.post("/api/scanner/emergency-freeze")
+def execute_emergency_freeze(payload: EmergencyFreezePayload):
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.execute_emergency_freeze(payload.account_ids)
 
 # ==============================================================================
 # SETTINGS & LLM/JEV API INTEGRATION ENDPOINTS
