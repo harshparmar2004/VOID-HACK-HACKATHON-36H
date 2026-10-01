@@ -43,11 +43,18 @@ Operation **"Abhedya-Chakra"** is a high-throughput, 100% locally deployable for
 - Node.js 18+
 
 ### Launching:
-Simply double-click:
+
+**Option 1: Single command with `concurrently` (Recommended)**
+```bash
+npm run dev
+```
+
+**Option 2: 1-Click Batch Runner**
 ```bash
 run_all.bat
 ```
-Or start manually:
+
+**Option 3: Separate Terminals**
 ```bash
 # Terminal 1: Backend
 cd backend

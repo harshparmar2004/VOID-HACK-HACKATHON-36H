@@ -1,0 +1,16 @@
+{
+  "name": "void-hack-hackathon",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Operation Abhedya-Chakra - Cyber Fraud Correlator",
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" -c \"cyan.bold,magenta.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "python backend/main.py",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "install:all": "npm install && npm install --prefix frontend",
+    "build": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
