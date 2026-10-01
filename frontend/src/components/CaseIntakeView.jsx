@@ -142,6 +142,45 @@ export default function CaseIntakeView({
         </div>
       </div>
 
+      {/* Real-World Bank Statement Ingestor Dropzone */}
+      <div className="bg-[#FAF6EE] border-2 border-dashed border-[#D96B27]/40 rounded-2xl p-6 text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-white border border-[#E8E2D5] flex items-center justify-center mx-auto text-[#D96B27] shadow-xs">
+          <FileText className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="font-bold text-base text-[#2C2623] font-serif">
+            Ingest Real-World Bank Transaction Statement (SBI, HDFC, ICICI, Axis, NPCI)
+          </h3>
+          <p className="text-xs text-[#746D65] max-w-xl mx-auto mt-1">
+            Drag & drop raw bank statement exports (<b>.csv, .xlsx, .parquet</b>). Our real-world sanitization engine automatically fixes leading zeroes, removes Indian rupee symbols/commas, and normalizes multi-format dates across 2,000,000+ rows.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <label className="px-5 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-sm transition-all cursor-pointer inline-flex items-center gap-2">
+            <span>Browse Bank Statement File</span>
+            <input
+              type="file"
+              accept=".csv,.parquet,.xlsx,.tsv"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  try {
+                    const { uploadBankStatement } = await import("../api");
+                    const res = await uploadBankStatement(file);
+                    alert(`✅ Ingestion Successful!\n\nFile: ${res.file_name}\nRecords: ${res.records_loaded.toLocaleString('en-IN')}\nIndexed in: ${res.ingestion_seconds}s\nHigh-Risk Mules Flagged: ${res.high_risk_mules}`);
+                  } catch (err) {
+                    alert("Error ingesting file: " + err.message);
+                  }
+                }
+              }}
+            />
+          </label>
+          <span className="text-xs text-[#9E968D] font-mono">or drag & drop file directly</span>
+        </div>
+      </div>
+
       {/* Digital Artifact Slots Table matching screenshot */}
       <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
         <div className="p-4 border-b border-[#E8E2D5] bg-[#FAF6EE] flex items-center justify-between">

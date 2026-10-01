@@ -43,3 +43,14 @@ export async function runJuryBenchmark() {
   if (!res.ok) throw new Error("Failed to run jury blind test");
   return res.json();
 }
+
+export async function uploadBankStatement(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/upload`, {
+    method: "POST",
+    body: formData
+  });
+  if (!res.ok) throw new Error("Failed to upload and parse bank statement");
+  return res.json();
+}

@@ -7,7 +7,8 @@ Powers the Cyber Fraud Correlator Police IO Edition Dashboard.
 import os
 import json
 import time
-from fastapi import FastAPI, HTTPException, Query
+import shutil
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -79,6 +80,36 @@ def get_system_status():
         "scam_narration_txns": stats["scam_narration_txns"],
         "load_duration_seconds": engine.load_duration,
         "vault_verified": True
+    }
+
+@app.post("/api/upload")
+async def upload_bank_statement(file: UploadFile = File(...)):
+    """
+    Real-world Bank File Ingestion Endpoint.
+    Accepts CSV, Parquet, or Excel exports from any Indian Bank.
+    Applies automatic column mapping, cleaning, and re-computes mule scores.
+    """
+    upload_dir = os.path.join(DATA_DIR, "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    global scorer, graph
+    res = engine.load_dataset(file_path)
+    scorer = MuleScorer(engine.con)
+    score_res = scorer.compute_all_scores()
+    graph = GraphEngine(engine.con)
+    
+    return {
+        "status": "success",
+        "file_name": file.filename,
+        "records_loaded": res["total_records"],
+        "ingestion_seconds": res["load_duration_seconds"],
+        "detected_mappings": res["detected_mappings"],
+        "high_risk_mules": score_res["high_risk_mules"],
+        "message": f"Successfully ingested {res['total_records']:,} transactions from {file.filename}!"
     }
 
 @app.get("/api/victims")
