@@ -1,0 +1,45 @@
+const API_BASE = "http://127.0.0.1:8000/api";
+
+export async function fetchSystemStatus() {
+  const res = await fetch(`${API_BASE}/status`);
+  if (!res.ok) throw new Error("Failed to fetch system status");
+  return res.json();
+}
+
+export async function fetchVictims() {
+  const res = await fetch(`${API_BASE}/victims`);
+  if (!res.ok) throw new Error("Failed to fetch victims");
+  return res.json();
+}
+
+export async function traceVictim(victimAccount, maxHops = 4, timeWindow = 180) {
+  const res = await fetch(`${API_BASE}/trace/${victimAccount}?max_hops=${maxHops}&time_window=${timeWindow}`);
+  if (!res.ok) throw new Error("Failed to trace victim money trail");
+  return res.json();
+}
+
+export async function fetchMules(limit = 100, role = null) {
+  let url = `${API_BASE}/mules?limit=${limit}`;
+  if (role) url += `&role_filter=${role}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch mules");
+  return res.json();
+}
+
+export async function fetchBankNotices(victimAccount, firNumber = "FIR-0142/2026/CYBER-INDORE") {
+  const res = await fetch(`${API_BASE}/legal/notices/${victimAccount}?fir_number=${encodeURIComponent(firNumber)}`);
+  if (!res.ok) throw new Error("Failed to fetch legal notices");
+  return res.json();
+}
+
+export async function fetchCaseDiary(victimAccount, firNumber = "FIR-0142/2026/CYBER-INDORE") {
+  const res = await fetch(`${API_BASE}/legal/case-diary/${victimAccount}?fir_number=${encodeURIComponent(firNumber)}`);
+  if (!res.ok) throw new Error("Failed to fetch case diary");
+  return res.json();
+}
+
+export async function runJuryBenchmark() {
+  const res = await fetch(`${API_BASE}/jury/blind-test`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to run jury blind test");
+  return res.json();
+}
