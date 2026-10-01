@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   UserX,
   Search,
@@ -9,6 +9,8 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Download,
   ExternalLink,
   Lock,
@@ -34,6 +36,8 @@ export default function MuleDossierView({
   const [sortBy, setSortBy] = useState("risk_desc");
   const [copiedAccount, setCopiedAccount] = useState(null);
   const [expandedAccount, setExpandedAccount] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   // Normalize list defensively
   const rawList = Array.isArray(mules) && mules.length > 0 ? mules : DEFAULT_MULES;
@@ -147,6 +151,17 @@ export default function MuleDossierView({
         return 0;
       });
   }, [normalizedMules, activeFilter, searchTerm, selectedBank, minRisk, sortBy]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeFilter, searchTerm, selectedBank, minRisk, sortBy]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMules.length / itemsPerPage));
+  const paginatedMules = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredMules.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredMules, currentPage, itemsPerPage]);
 
   const handleCopy = (accountId) => {
     navigator.clipboard.writeText(accountId);
@@ -423,10 +438,10 @@ export default function MuleDossierView({
 
       {/* Main Table */}
       <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[640px] overflow-y-auto">
           <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">
+            <thead className="sticky top-0 z-10 bg-[#FAF6EE] border-b border-[#E8E2D5] shadow-xs">
+              <tr className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">
                 <th className="py-3 px-4">Account ID & Bank IFSC</th>
                 <th className="py-3 px-3">Role Classification</th>
                 <th className="py-3 px-3">Mule Risk Index</th>
@@ -449,7 +464,7 @@ export default function MuleDossierView({
                   </td>
                 </tr>
               ) : (
-                filteredMules.slice(0, 100).map((m, idx) => {
+                paginatedMules.map((m, idx) => {
                   const isExpanded = expandedAccount === m.account_id;
                   const isCopied = copiedAccount === m.account_id;
 
@@ -697,6 +712,60 @@ export default function MuleDossierView({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar (Sets of 50) */}
+        {filteredMules.length > itemsPerPage && (
+          <div className="flex items-center justify-between px-4 py-3 bg-[#FAF6EE] border-t border-[#E8E2D5] text-xs">
+            <div className="text-[#746D65] font-mono text-[11px]">
+              Showing <span className="font-bold text-[#2C2623]">{(currentPage - 1) * itemsPerPage + 1}</span>–
+              <span className="font-bold text-[#2C2623]">{Math.min(currentPage * itemsPerPage, filteredMules.length)}</span> of{" "}
+              <span className="font-bold text-[#2C2623]">{filteredMules.length}</span> mule accounts (50 per page)
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                  currentPage === 1
+                    ? "border-[#E8E2D5] text-[#9E968D] bg-white/40 cursor-not-allowed"
+                    : "border-[#E8E2D5] text-[#2C2623] bg-white hover:bg-[#F2ECE1] shadow-2xs"
+                }`}
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Previous 50
+              </button>
+
+              <div className="flex items-center gap-1 font-mono text-xs">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-7 h-7 rounded-lg font-semibold flex items-center justify-center transition-all ${
+                      currentPage === pageNum
+                        ? "bg-[#D96B27] text-white shadow-2xs"
+                        : "text-[#746D65] hover:bg-[#F2ECE1]"
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                  currentPage === totalPages
+                    ? "border-[#E8E2D5] text-[#9E968D] bg-white/40 cursor-not-allowed"
+                    : "border-[#E8E2D5] text-[#2C2623] bg-white hover:bg-[#F2ECE1] shadow-2xs"
+                }`}
+              >
+                Next 50
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

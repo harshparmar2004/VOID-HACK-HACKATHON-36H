@@ -176,7 +176,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FBF7EE] text-[#2C2623] flex flex-col font-sans">
+    <div className="h-screen max-h-screen overflow-hidden bg-[#FBF7EE] text-[#2C2623] flex flex-col font-sans">
       {/* Top Header */}
       <Header
         activeCase={activeCase}
@@ -194,7 +194,7 @@ export default function App() {
       />
 
       {/* Main Split Layout: Left Navigation + Right Feature Execution Canvas */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left Navigation Sidebar */}
         <Sidebar
           activeTab={activeTab}
@@ -208,7 +208,7 @@ export default function App() {
         />
 
         {/* Right Feature Execution Canvas */}
-        <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-6 overflow-y-auto min-h-0 max-w-7xl mx-auto w-full">
           {/* TAB 1: Case Intake */}
           {activeTab === "intake" && (
             <CaseIntakeView

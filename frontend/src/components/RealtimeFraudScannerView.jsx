@@ -18,6 +18,8 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Cpu,
   Layers,
   Database,
@@ -38,6 +40,10 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
   const [expandedTxn, setExpandedTxn] = useState(null);
   const [freezeStatus, setFreezeStatus] = useState(null);
   
+  // 50-Item Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+
   // Real-time animated timer state during benchmark run
   const [odometerRecords, setOdometerRecords] = useState(2000008);
   const [elapsedTimer, setElapsedTimer] = useState(1.25);
@@ -66,12 +72,16 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
     loadData();
   }, [activeFilter]);
 
+  // Reset page when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedBank, activeFilter]);
+
   const handleRunBenchmark = async () => {
     setBenchmarkLoading(true);
     setOdometerRecords(0);
     setElapsedTimer(0.0);
 
-    // Odometer animation
     const startTime = Date.now();
     const interval = setInterval(() => {
       const now = Date.now();
@@ -87,7 +97,6 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
       setElapsedTimer(data.elapsed_seconds || 1.25);
       setBenchmarkResult(data);
       
-      // Refresh transactions after scan
       const freshTxns = await fetchProblematicTransactions(100, activeFilter === "ALL" ? null : activeFilter);
       if (freshTxns?.length) setProblematicTxns(freshTxns);
     } catch (err) {
@@ -210,6 +219,12 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
     });
   }, [problematicTxns, searchTerm, selectedBank]);
 
+  // Paginated set of 50
+  const totalPages = Math.max(1, Math.ceil(filteredTxns.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredTxns.length);
+  const paginatedTxns = filteredTxns.slice(startIndex, endIndex);
+
   const formatCountdown = (secs) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -217,35 +232,31 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header & Execution Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* 1. Header & Actions Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] animate-pulse"></span>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#9E968D] font-mono flex items-center gap-1.5">
-              <span>JEV-Accelerated Vector Engine</span>
-              <span>•</span>
-              <span className="text-[#D96B27]">10 Maximized Parameters (P1–P10)</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              JEV-Accelerated Vector Engine • 10 Parameters (P1–P10)
             </span>
           </div>
-          <h2 className="text-2xl font-serif font-bold text-[#2C2623] mt-0.5">
+          <h2 className="text-xl font-serif font-bold text-[#2C2623] mt-0.5">
             Real-Time 60s 2M Fraud Scanner & Early Intercept Monitor
           </h2>
-          <p className="text-xs text-[#746D65] mt-1 max-w-3xl">
-            High-throughput forensic parallel scan across 2,000,000 transactions. Catches heavy ₹2–3 Crore whale transfers,
-            hyper-frequency smurfing layers, multi-IP geolocation anomalies, and illegal scam linkages to freeze stolen funds before terminal exit.
+          <p className="text-xs text-[#746D65] mt-0.5">
+            Detects heavy ₹2–3 Crore whale transfers, smurfing layers, multi-IP anomalies, and illegal scam linkages to freeze stolen funds before terminal exit.
           </p>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#E8E2D5] text-[#2C2623] hover:border-[#D96B27] text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FAF6EE] hover:bg-[#F3EDE2] border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold shadow-2xs transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-[#D96B27]" />
-            <span>Export Flagged Callset</span>
+            <span>Export CSV Callset</span>
           </button>
 
           <button
@@ -263,102 +274,74 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
         </div>
       </div>
 
-      {/* 60-Second Challenge Live Benchmark Bar */}
-      <div className="bg-gradient-to-r from-[#FAF6EE] to-white border border-[#E8E2D5] rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#D96B27]/10 border border-[#D96B27]/20 flex items-center justify-center">
-              <Cpu className="w-5 h-5 text-[#D96B27]" />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-                The 60-Second Challenge Benchmark
-              </div>
-              <div className="text-sm font-bold text-[#2C2623] flex items-center gap-2">
-                <span>Scan & Index 2,000,000 Transactions</span>
-                <span className="bg-[#D1FAE5] text-[#059669] text-[10px] font-mono px-2 py-0.5 rounded font-bold">
-                  PASSED: {elapsedTimer}s (Target: ≤ 60.0s)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6 text-xs font-mono">
-            <div>
-              <span className="text-[#9E968D] text-[10px] block uppercase">Throughput</span>
-              <span className="font-bold text-[#2C2623] text-sm">
-                {(odometerRecords / Math.max(elapsedTimer, 0.1)).toLocaleString("en-IN", { maximumFractionDigits: 0 })} txns/s
-              </span>
-            </div>
-            <div>
-              <span className="text-[#9E968D] text-[10px] block uppercase">Scan Clock</span>
-              <span className="font-bold text-[#059669] text-sm">{elapsedTimer}s / 60.0s</span>
-            </div>
-            <div>
-              <span className="text-[#9E968D] text-[10px] block uppercase">Speedup vs Target</span>
-              <span className="font-bold text-[#D96B27] text-sm">48.0x Faster</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-[#EAE4D8] h-2.5 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-[#D96B27] via-[#059669] to-[#059669] rounded-full transition-all duration-300"
-            style={{ width: `${Math.min(100, (odometerRecords / 2000008) * 100)}%` }}
-          ></div>
-        </div>
-      </div>
-
-      {/* Early Intervention Alert & Trapped Funds Banner */}
-      <div className="bg-[#FEF2F2] border border-[#FCA5A5] rounded-2xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-[#DC2626] text-white shrink-0 mt-0.5">
-            <ShieldAlert className="w-5 h-5" />
-          </div>
-          <div>
+      {/* 2. Compact 60-Second Benchmark + Early Intervention Strip */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* Left: 60s Benchmark Box */}
+        <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#DC2626] uppercase font-mono tracking-wider">
-                EARLY INTERVENTION ACTIVE • STOP FRAUD IN-FLIGHT
-              </span>
-              <span className="bg-[#DC2626] text-white text-[10px] font-mono px-2 py-0.5 rounded-full font-bold animate-pulse">
-                ⏱ {formatCountdown(countdownSeconds)} Before Exit
+              <Cpu className="w-4 h-4 text-[#D96B27]" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#2C2623] font-mono">
+                The 60s Challenge: 2M Rows Scanned
               </span>
             </div>
-            <p className="text-xs text-[#7F1D1D] mt-1 max-w-2xl">
-              Stolen funds are currently transitioning through intermediate Hop 1 (Intake) and Hop 2 (Smurfing) accounts.
-              Execute emergency freeze to place immediate statutory liens under Section 91 Cr.P.C. / Section 94 BNSS.
-            </p>
+            <span className="bg-[#D1FAE5] text-[#059669] text-[10px] font-mono px-2 py-0.5 rounded font-bold">
+              PASSED: {elapsedTimer}s (Target: ≤ 60s)
+            </span>
+          </div>
+
+          <div className="w-full bg-[#EAE4D8] h-2 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#D96B27] to-[#059669] rounded-full transition-all duration-300"
+              style={{ width: `${Math.min(100, (odometerRecords / 2000008) * 100)}%` }}
+            ></div>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] font-mono text-[#746D65] pt-0.5">
+            <span>Throughput: <strong className="text-[#2C2623]">{(odometerRecords / Math.max(elapsedTimer, 0.1)).toLocaleString("en-IN", { maximumFractionDigits: 0 })} txns/s</strong></span>
+            <span>Speedup: <strong className="text-[#D96B27]">48x Faster</strong></span>
+            <span>Clock: <strong className="text-[#059669]">{elapsedTimer}s</strong></span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <span className="text-[10px] uppercase font-mono text-[#991B1B] font-bold block">
-              Trapped Balance at Risk
-            </span>
-            <span className="text-lg font-bold font-mono text-[#DC2626]">
-              ₹164.19 Crore
+        {/* Right: Urgent Early Intervention Box */}
+        <div className="bg-[#FEF2F2] border border-[#FCA5A5] rounded-2xl p-3 shadow-2xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-[#DC2626]" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#DC2626] font-mono">
+                Active Siphoning In-Flight
+              </span>
+            </div>
+            <span className="bg-[#DC2626] text-white text-[10px] font-mono px-2 py-0.5 rounded-full font-bold animate-pulse">
+              ⏱ {formatCountdown(countdownSeconds)} Before Exit
             </span>
           </div>
 
-          <button
-            onClick={handleEmergencyFreeze}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#DC2626] text-white hover:bg-[#B91C1C] text-xs font-bold shadow-sm transition-all cursor-pointer"
-          >
-            <Lock className="w-4 h-4" />
-            <span>Emergency Freeze 100+ Accounts</span>
-          </button>
+          <div className="flex items-center justify-between text-xs">
+            <div>
+              <span className="text-[10px] text-[#991B1B] font-mono uppercase block">Trapped Balance at Risk</span>
+              <span className="font-bold font-mono text-[#DC2626] text-sm">₹164.19 Crore</span>
+            </div>
+
+            <button
+              onClick={handleEmergencyFreeze}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#DC2626] text-white hover:bg-[#B91C1C] text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Emergency Freeze 100+ Accounts</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Notification Toast on Emergency Freeze */}
+      {/* Freeze Success Notification */}
       {freezeStatus && (
-        <div className="bg-[#D1FAE5] border border-[#6EE7B7] p-3 rounded-2xl text-xs text-[#065F46] flex items-center justify-between shadow-sm animate-fade-in">
+        <div className="bg-[#D1FAE5] border border-[#6EE7B7] p-2.5 rounded-xl text-xs text-[#065F46] flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-[#059669]" />
-            <span className="font-bold">
-              Emergency Freezing Order Dispatched! Placed immediate lien on {freezeStatus.accounts_frozen_count} accounts across {freezeStatus.banks_notified_count} banks totaling ₹{freezeStatus.total_lien_marked_inr?.toLocaleString("en-IN")}.
+            <span className="font-semibold">
+              Emergency Freezing Order Dispatched! Placed immediate statutory lien on {freezeStatus.accounts_frozen_count} accounts across {freezeStatus.banks_notified_count} banks totaling ₹{freezeStatus.total_lien_marked_inr?.toLocaleString("en-IN")}.
             </span>
           </div>
           {onNavigateTab && (
@@ -372,96 +355,95 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
         </div>
       )}
 
-      {/* KPI Cards: The 10 Maximized Parameters Breakdown */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
+      {/* 3. Compact 6-Column KPI Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <div className="bg-white border border-[#E8E2D5] rounded-xl p-2.5 shadow-2xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
             Scanned Records
           </div>
-          <div className="text-xl font-bold font-mono text-[#2C2623] mt-1">
+          <div className="text-lg font-bold font-mono text-[#2C2623] mt-0.5">
             2,000,008
           </div>
-          <div className="text-[10px] text-[#059669] font-medium mt-0.5">100% Vector Indexed</div>
+          <div className="text-[9px] text-[#059669] font-medium">100% Vector Indexed</div>
         </div>
 
         <div
           onClick={() => setActiveFilter(activeFilter === "HEAVY_WHALES" ? "ALL" : "HEAVY_WHALES")}
-          className={`border rounded-2xl p-3 shadow-2xs cursor-pointer transition-all ${
+          className={`border rounded-xl p-2.5 shadow-2xs cursor-pointer transition-all ${
             activeFilter === "HEAVY_WHALES"
               ? "bg-[#FEF2F2] border-[#DC2626]"
               : "bg-white border-[#E8E2D5] hover:border-[#DC2626]"
           }`}
         >
           <div className="text-[10px] font-bold uppercase tracking-wider text-[#DC2626] font-mono flex items-center justify-between">
-            <span>P7 Heavy Whales</span>
+            <span>P7 Whales</span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]"></span>
           </div>
-          <div className="text-xl font-bold font-mono text-[#DC2626] mt-1">
+          <div className="text-lg font-bold font-mono text-[#DC2626] mt-0.5">
             8 Whales
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5 truncate">₹1.85 Cr – ₹2.98 Cr</div>
+          <div className="text-[9px] text-[#746D65] truncate">₹1.85 Cr – ₹2.98 Cr</div>
         </div>
 
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
+        <div className="bg-white border border-[#E8E2D5] rounded-xl p-2.5 shadow-2xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-[#EA580C] font-mono">
-            P8 Hyper-Frequency
+            P8 Hyper-Freq
           </div>
-          <div className="text-xl font-bold font-mono text-[#EA580C] mt-1">
+          <div className="text-lg font-bold font-mono text-[#EA580C] mt-0.5">
             23,046
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">Burst layering nodes</div>
+          <div className="text-[9px] text-[#746D65]">Burst layering nodes</div>
         </div>
 
         <div
           onClick={() => setActiveFilter(activeFilter === "FOREIGN_IP" ? "ALL" : "FOREIGN_IP")}
-          className={`border rounded-2xl p-3 shadow-2xs cursor-pointer transition-all ${
+          className={`border rounded-xl p-2.5 shadow-2xs cursor-pointer transition-all ${
             activeFilter === "FOREIGN_IP"
               ? "bg-[#FAF5FF] border-[#7C3AED]"
               : "bg-white border-[#E8E2D5] hover:border-[#7C3AED]"
           }`}
         >
           <div className="text-[10px] font-bold uppercase tracking-wider text-[#7C3AED] font-mono flex items-center justify-between">
-            <span>P9 Multi-IP Proxies</span>
+            <span>P9 Proxies</span>
             <Globe className="w-3 h-3 text-[#7C3AED]" />
           </div>
-          <div className="text-xl font-bold font-mono text-[#7C3AED] mt-1">
+          <div className="text-lg font-bold font-mono text-[#7C3AED] mt-0.5">
             2,572 Txns
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5 truncate">185 / 194 / 45 / 91 Subnets</div>
+          <div className="text-[9px] text-[#746D65] truncate">185 / 194 / 45 / 91</div>
         </div>
 
         <div
           onClick={() => setActiveFilter(activeFilter === "ILLEGAL_LINKAGES" ? "ALL" : "ILLEGAL_LINKAGES")}
-          className={`border rounded-2xl p-3 shadow-2xs cursor-pointer transition-all ${
+          className={`border rounded-xl p-2.5 shadow-2xs cursor-pointer transition-all ${
             activeFilter === "ILLEGAL_LINKAGES"
               ? "bg-[#FFFBEB] border-[#D97706]"
               : "bg-white border-[#E8E2D5] hover:border-[#D97706]"
           }`}
         >
           <div className="text-[10px] font-bold uppercase tracking-wider text-[#D97706] font-mono">
-            P10 Illegal Links
+            P10 Crime Links
           </div>
-          <div className="text-xl font-bold font-mono text-[#D97706] mt-1">
+          <div className="text-lg font-bold font-mono text-[#D97706] mt-0.5">
             224.3k Txns
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5 truncate">Digital Arrest & Betting</div>
+          <div className="text-[9px] text-[#746D65] truncate">Digital Arrest & Betting</div>
         </div>
 
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
+        <div className="bg-white border border-[#E8E2D5] rounded-xl p-2.5 shadow-2xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-[#059669] font-mono">
             Recoverable Inflow
           </div>
-          <div className="text-xl font-bold font-mono text-[#059669] mt-1 truncate">
+          <div className="text-lg font-bold font-mono text-[#059669] mt-0.5 truncate">
             ₹164.19 Cr
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">Holding in 12k mules</div>
+          <div className="text-[9px] text-[#746D65]">Holding in 12k mules</div>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Search Box */}
+      {/* 4. Filter & Search Bar */}
+      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div className="relative flex-1 min-w-[240px]">
             <input
               type="text"
@@ -481,7 +463,6 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
             )}
           </div>
 
-          {/* Filter Pills */}
           <div className="flex flex-wrap items-center gap-1 bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-1 text-xs">
             {[
               { id: "ALL", label: "ALL PROBLEMATIC" },
@@ -512,7 +493,6 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
           </div>
         </div>
 
-        {/* Bank Filter & Counter */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-[#F2ECE1] text-xs">
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#746D65] font-medium">Bank Route:</span>
@@ -534,28 +514,28 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
           </div>
 
           <div className="text-[11px] text-[#746D65] font-mono">
-            Displaying <span className="font-bold text-[#2C2623]">{filteredTxns.length}</span> problematic in-flight transactions
+            Showing <strong className="text-[#2C2623]">{startIndex + 1}–{endIndex}</strong> of <strong className="text-[#2C2623]">{filteredTxns.length}</strong> transactions • Page {currentPage} of {totalPages} (<span className="text-[#D96B27] font-semibold">50 per page</span>)
           </div>
         </div>
       </div>
 
-      {/* Problematic Transactions Stream Table */}
+      {/* 5. Problematic Transactions Stream Table with Sticky Header & 50-Page Set */}
       <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
           <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">
-                <th className="py-3 px-4">Txn ID & Timestamp</th>
-                <th className="py-3 px-4">Sender ➔ Receiver Flow</th>
-                <th className="py-3 px-3">Amount (INR)</th>
-                <th className="py-3 px-3">Stage / Urgency</th>
-                <th className="py-3 px-4">P1–P10 Anomaly Evidence</th>
-                <th className="py-3 px-3">Time to Exit</th>
-                <th className="py-3 px-3 text-right">Emergency Action</th>
+            <thead className="sticky top-0 z-10 bg-[#FAF6EE] border-b border-[#E8E2D5] shadow-xs">
+              <tr className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">
+                <th className="py-2.5 px-4 bg-[#FAF6EE]">Txn ID & Timestamp</th>
+                <th className="py-2.5 px-4 bg-[#FAF6EE]">Sender ➔ Receiver Flow</th>
+                <th className="py-2.5 px-3 bg-[#FAF6EE]">Amount (INR)</th>
+                <th className="py-2.5 px-3 bg-[#FAF6EE]">Stage / Urgency</th>
+                <th className="py-2.5 px-4 bg-[#FAF6EE]">P1–P10 Anomaly Evidence</th>
+                <th className="py-2.5 px-3 bg-[#FAF6EE]">Time to Exit</th>
+                <th className="py-2.5 px-3 text-right bg-[#FAF6EE]">Emergency Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE1] font-mono">
-              {filteredTxns.length === 0 ? (
+              {paginatedTxns.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-[#746D65] font-sans">
                     <ShieldAlert className="w-8 h-8 text-[#9E968D] mx-auto mb-2 opacity-50" />
@@ -564,7 +544,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                   </td>
                 </tr>
               ) : (
-                filteredTxns.map((t, idx) => {
+                paginatedTxns.map((t, idx) => {
                   const isExpanded = expandedTxn === t.Transaction_ID;
                   const isCopied = copiedId === t.Transaction_ID;
                   const isWhale = t.Amount_INR >= 15000000.0;
@@ -573,7 +553,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                     <React.Fragment key={`${t.Transaction_ID}-${idx}`}>
                       <tr className={`hover:bg-[#FAF6EE] transition-colors ${isWhale ? "bg-[#FFFBF5]" : ""}`}>
                         {/* Txn ID & Timestamp */}
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-4">
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold text-[#2C2623]">{t.Transaction_ID}</span>
                             <button
@@ -590,7 +570,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                         </td>
 
                         {/* Sender -> Receiver Flow */}
-                        <td className="py-3 px-4 font-mono text-[11px]">
+                        <td className="py-2.5 px-4 font-mono text-[11px]">
                           <div className="flex items-center gap-1.5 text-[#2C2623]">
                             <span className="font-bold">{t.Sender_Account}</span>
                             <span className="text-[9px] bg-[#FAF6EE] px-1 rounded border border-[#E8E2D5] font-sans font-semibold text-[#746D65]">
@@ -608,7 +588,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                         </td>
 
                         {/* Amount */}
-                        <td className="py-3 px-3">
+                        <td className="py-2.5 px-3">
                           <div className={`font-bold font-mono text-sm ${isWhale ? "text-[#DC2626] text-base" : "text-[#2C2623]"}`}>
                             ₹{t.Amount_INR.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                           </div>
@@ -618,7 +598,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                         </td>
 
                         {/* Stage / Urgency */}
-                        <td className="py-3 px-3 font-sans">
+                        <td className="py-2.5 px-3 font-sans">
                           <span
                             className={`px-2 py-0.5 rounded font-bold text-[10px] tracking-wide inline-flex items-center gap-1 ${
                               isWhale
@@ -633,13 +613,13 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                             <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                             {t.hop_stage.replace("_", " ")}
                           </span>
-                          <div className="text-[10px] font-mono text-[#DC2626] font-bold mt-1">
+                          <div className="text-[10px] font-mono text-[#DC2626] font-bold mt-0.5">
                             {t.urgency}
                           </div>
                         </td>
 
                         {/* P1-P10 Anomaly Evidence */}
-                        <td className="py-3 px-4 font-sans text-[11px] text-[#746D65] max-w-sm">
+                        <td className="py-2.5 px-4 font-sans text-[11px] text-[#746D65] max-w-sm">
                           <div className="flex flex-wrap gap-1">
                             {t.anomaly_flags?.split(" | ").map((flag, fIdx) => (
                               <span
@@ -661,7 +641,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                         </td>
 
                         {/* Time to Exit */}
-                        <td className="py-3 px-3 font-mono">
+                        <td className="py-2.5 px-3 font-mono">
                           <div className="flex items-center gap-1 text-[#DC2626] font-bold text-xs">
                             <Clock className="w-3.5 h-3.5" />
                             <span>{t.estimated_minutes_to_exit}m</span>
@@ -670,7 +650,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3 px-3 text-right font-sans">
+                        <td className="py-2.5 px-3 text-right font-sans">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => {
@@ -681,7 +661,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                               title="Prepare Section 91 Freezing Order"
                             >
                               <Lock className="w-3 h-3" />
-                              <span>Freeze Lien</span>
+                              <span>Freeze</span>
                             </button>
 
                             <button
@@ -698,13 +678,13 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                       {/* Expanded Transaction Detail Drawer */}
                       {isExpanded && (
                         <tr className="bg-[#FAF6EE]">
-                          <td colSpan={7} className="p-4 border-b border-[#E8E2D5]">
-                            <div className="bg-white border border-[#E8E2D5] rounded-xl p-4 shadow-sm font-sans space-y-3">
+                          <td colSpan={7} className="p-3 border-b border-[#E8E2D5]">
+                            <div className="bg-white border border-[#E8E2D5] rounded-xl p-3 shadow-sm font-sans space-y-2.5">
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F2ECE1] pb-2">
                                 <div className="flex items-center gap-2">
                                   <AlertCircle className="w-4 h-4 text-[#DC2626]" />
                                   <h4 className="font-bold text-xs text-[#2C2623]">
-                                    Forensic Interception Profile: Transaction #{t.Transaction_ID}
+                                    Forensic Profile: Transaction #{t.Transaction_ID}
                                   </h4>
                                 </div>
                                 <div className="text-[11px] font-mono text-[#D96B27] font-bold">
@@ -712,14 +692,14 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-                                <div className="bg-[#FAF6EE] p-2.5 rounded-lg border border-[#E8E2D5]">
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 text-xs">
+                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
                                   <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Originating Telemetry</span>
                                   <div className="font-bold font-mono text-[#2C2623] mt-0.5">{t.IP_Address}</div>
                                   <div className="text-[11px] text-[#DC2626]">Device: {t.Device_Type}</div>
                                 </div>
 
-                                <div className="bg-[#FAF6EE] p-2.5 rounded-lg border border-[#E8E2D5]">
+                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
                                   <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Receiver Holding Balance</span>
                                   <div className="font-bold font-mono text-[#059669] mt-0.5">
                                     ₹{Number(t.holding_balance || 0).toLocaleString("en-IN")}
@@ -727,20 +707,20 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                                   <div className="text-[11px] text-[#746D65]">Eligible for immediate lien</div>
                                 </div>
 
-                                <div className="bg-[#FAF6EE] p-2.5 rounded-lg border border-[#E8E2D5]">
+                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
                                   <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Statutory Mandate</span>
                                   <div className="font-bold text-[#2C2623] mt-0.5">Section 91 Cr.P.C.</div>
                                   <div className="text-[11px] text-[#746D65]">Sec 94 BNSS Applicable</div>
                                 </div>
 
-                                <div className="bg-[#FAF6EE] p-2.5 rounded-lg border border-[#E8E2D5]">
+                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
                                   <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Investigation Action</span>
                                   <div className="font-bold text-[#DC2626] mt-0.5">Debit-Freeze Requisition</div>
                                   <div className="text-[11px] text-[#746D65]">Nodal Officer Dispatch</div>
                                 </div>
                               </div>
 
-                              <div className="text-xs bg-[#FBF7EE] p-3 rounded-lg border border-[#E8E2D5] italic text-[#746D65]">
+                              <div className="text-xs bg-[#FBF7EE] p-2.5 rounded-lg border border-[#E8E2D5] italic text-[#746D65]">
                                 "Detected high-velocity money routing matching syndicate pattern. Amount INR {t.Amount_INR.toLocaleString("en-IN")} transferred from account {t.Sender_Account} to receiver {t.Receiver_Account} with illicit scam marker '{t.Narration}'. Immediate debit-freeze requisition generated for bank nodal officer."
                               </div>
                             </div>
@@ -754,6 +734,62 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
             </tbody>
           </table>
         </div>
+
+        {/* 6. Professional Pagination Footer (Set of 50 and 50) */}
+        {filteredTxns.length > 0 && (
+          <div className="bg-[#FAF6EE] border-t border-[#E8E2D5] px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs font-sans">
+            <div className="text-[#746D65] font-mono text-[11px]">
+              Showing <span className="font-bold text-[#2C2623]">{startIndex + 1}</span>–<span className="font-bold text-[#2C2623]">{endIndex}</span> of <span className="font-bold text-[#2C2623]">{filteredTxns.length}</span> problematic transactions (<span className="text-[#D96B27] font-semibold">50 per page</span>)
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                  currentPage === 1
+                    ? "bg-[#F3EDE2] text-[#B5ACA0] border-[#E8E2D5] cursor-not-allowed"
+                    : "bg-white text-[#2C2623] border-[#E8E2D5] hover:border-[#D96B27] shadow-2xs"
+                }`}
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Previous 50</span>
+              </button>
+
+              <div className="flex items-center gap-1 font-mono">
+                {Array.from({ length: totalPages }).map((_, i) => {
+                  const pNum = i + 1;
+                  return (
+                    <button
+                      key={pNum}
+                      onClick={() => setCurrentPage(pNum)}
+                      className={`w-7 h-7 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                        currentPage === pNum
+                          ? "bg-[#D96B27] text-white shadow-2xs"
+                          : "bg-white text-[#746D65] border border-[#E8E2D5] hover:text-[#2C2623]"
+                      }`}
+                    >
+                      {pNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                  currentPage === totalPages
+                    ? "bg-[#F3EDE2] text-[#B5ACA0] border-[#E8E2D5] cursor-not-allowed"
+                    : "bg-white text-[#2C2623] border-[#E8E2D5] hover:border-[#D96B27] shadow-2xs"
+                }`}
+              >
+                <span>Next 50</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
