@@ -69,13 +69,16 @@ export default function EndpointTrailView({
   };
 
   // Group nodes by hop level (0: Victim, 1: L1 Collector, 2: L2 Distributors, 3: L3 Cashout)
-  const hopGroups = { 0: [], 1: [], 2: [], 3: [] };
-  if (traceData && traceData.nodes) {
-    traceData.nodes.forEach((n) => {
-      const h = Math.min(n.hop, 3);
-      if (hopGroups[h]) hopGroups[h].push(n);
-    });
-  }
+  const hopGroups = React.useMemo(() => {
+    const groups = { 0: [], 1: [], 2: [], 3: [] };
+    if (traceData && traceData.nodes) {
+      traceData.nodes.forEach((n) => {
+        const h = Math.min(n.hop, 3);
+        if (groups[h]) groups[h].push(n);
+      });
+    }
+    return groups;
+  }, [traceData]);
 
   // Synthesize or extract multi-hop links to guarantee 100% graph connectivity
   const effectiveLinks = React.useMemo(() => {
@@ -191,33 +194,25 @@ export default function EndpointTrailView({
       }
     });
 
-    setRenderedLinks(computed);
+    setRenderedLinks((prev) => {
+      if (prev.length === computed.length && prev.length > 0) {
+        if (prev[0].pathD === computed[0]?.pathD && prev[prev.length - 1].pathD === computed[computed.length - 1]?.pathD) {
+          return prev;
+        }
+      }
+      return computed;
+    });
   };
 
-  useLayoutEffect(() => {
-    updateConnections();
-    const t1 = setTimeout(updateConnections, 50);
-    const t2 = setTimeout(updateConnections, 150);
-    const t3 = setTimeout(updateConnections, 400);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [traceData, hop2Layout, zoom, lineStyle, effectiveLinks]);
+  useEffect(() => {
+    const timer = setTimeout(updateConnections, 60);
+    return () => clearTimeout(timer);
+  }, [traceData, hop2Layout, zoom, lineStyle, effectiveLinks.length]);
 
   useEffect(() => {
     window.addEventListener("resize", updateConnections);
-    let ro = null;
-    if (canvasRef.current && window.ResizeObserver) {
-      ro = new ResizeObserver(() => updateConnections());
-      ro.observe(canvasRef.current);
-    }
-    return () => {
-      window.removeEventListener("resize", updateConnections);
-      if (ro) ro.disconnect();
-    };
-  }, [lineStyle]);
+    return () => window.removeEventListener("resize", updateConnections);
+  }, []);
 
   // Pan interaction handlers
   const handleMouseDown = (e) => {

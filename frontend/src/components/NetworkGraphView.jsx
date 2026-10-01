@@ -46,16 +46,24 @@ export default function NetworkGraphView({ traceData }) {
   const visibleLinksCount = Math.max(1, Math.floor((rawLinks.length * timeProgress) / 100));
   const activeLinks = rawLinks.slice(0, visibleLinksCount);
 
-  // Group nodes by hop level
-  const hopGroups = { 0: [], 1: [], 2: [], 3: [] };
-  nodes.forEach((n) => {
-    const h = Math.min(n.hop, 3);
-    if (hopGroups[h]) hopGroups[h].push(n);
-  });
+  // Group nodes by hop level (memoized)
+  const hopGroups = React.useMemo(() => {
+    const groups = { 0: [], 1: [], 2: [], 3: [] };
+    const nList = traceData?.nodes || [];
+    nList.forEach((n) => {
+      const h = Math.min(n.hop, 3);
+      if (groups[h]) groups[h].push(n);
+    });
+    return groups;
+  }, [traceData]);
 
   // Guarantee complete multi-hop connectivity links
   const effectiveLinks = React.useMemo(() => {
-    if (activeLinks.length > 0) return activeLinks;
+    const rawLinks = traceData?.links || [];
+    const visibleLinksCount = Math.max(1, Math.floor((rawLinks.length * timeProgress) / 100));
+    const active = rawLinks.slice(0, visibleLinksCount);
+    if (active.length > 0) return active;
+
     const generated = [];
     const h0 = hopGroups[0] || [];
     const h1 = hopGroups[1] || [];
@@ -107,17 +115,15 @@ export default function NetworkGraphView({ traceData }) {
     }
 
     return generated;
-  }, [activeLinks, traceData, hopGroups]);
+  }, [traceData, timeProgress, hopGroups]);
 
   // Orthogonal Vertical Pipeline Path Generator (Top to Bottom)
   const makeVerticalPipelinePath = (x1, y1, x2, y2) => {
-    // If cards are almost horizontally centered, draw straight vertical pipe
     if (Math.abs(x1 - x2) < 4) {
       return `M ${x1} ${y1} L ${x2} ${y2}`;
     }
-
     const midY = y1 + (y2 - y1) * 0.48;
-    const radius = Math.min(16, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 4);
+    const radius = Math.min(16, Math.abs(x2 - x1) / 2, Math.abs(x2 - x1) / 4);
     const signX = x2 > x1 ? 1 : -1;
 
     return `M ${x1} ${y1} L ${x1} ${midY - radius} Q ${x1} ${midY} ${x1 + radius * signX} ${midY} L ${x2 - radius * signX} ${midY} Q ${x2} ${midY} ${x2} ${midY + radius} L ${x2} ${y2}`;
@@ -168,7 +174,6 @@ export default function NetworkGraphView({ traceData }) {
         let x1, y1, x2, y2, pathD;
 
         if (viewOrientation === "vertical") {
-          // Bottom center of source node -> Top center of target node
           x1 = (srcRect.left + srcRect.width / 2 - canvasRect.left) / zoom;
           y1 = (srcRect.bottom - canvasRect.top) / zoom;
           x2 = (tgtRect.left + tgtRect.width / 2 - canvasRect.left) / zoom;
@@ -178,7 +183,6 @@ export default function NetworkGraphView({ traceData }) {
             ? makeVerticalPipelinePath(x1, y1, x2, y2)
             : makeBezierPath(x1, y1, x2, y2, "vertical");
         } else {
-          // Right center of source node -> Left center of target node
           x1 = (srcRect.right - canvasRect.left) / zoom;
           y1 = (srcRect.top + srcRect.height / 2 - canvasRect.top) / zoom;
           x2 = (tgtRect.left - canvasRect.left) / zoom;
@@ -204,33 +208,25 @@ export default function NetworkGraphView({ traceData }) {
       }
     });
 
-    setRenderedLinks(computed);
+    setRenderedLinks((prev) => {
+      if (prev.length === computed.length && prev.length > 0) {
+        if (prev[0].pathD === computed[0]?.pathD && prev[prev.length - 1].pathD === computed[computed.length - 1]?.pathD) {
+          return prev;
+        }
+      }
+      return computed;
+    });
   };
 
-  useLayoutEffect(() => {
-    updateConnections();
-    const t1 = setTimeout(updateConnections, 60);
-    const t2 = setTimeout(updateConnections, 180);
-    const t3 = setTimeout(updateConnections, 400);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [traceData, viewOrientation, lineStyle, zoom, effectiveLinks]);
+  useEffect(() => {
+    const timer = setTimeout(updateConnections, 60);
+    return () => clearTimeout(timer);
+  }, [traceData, viewOrientation, lineStyle, zoom, effectiveLinks.length]);
 
   useEffect(() => {
     window.addEventListener("resize", updateConnections);
-    let ro = null;
-    if (canvasRef.current && window.ResizeObserver) {
-      ro = new ResizeObserver(() => updateConnections());
-      ro.observe(canvasRef.current);
-    }
-    return () => {
-      window.removeEventListener("resize", updateConnections);
-      if (ro) ro.disconnect();
-    };
-  }, [viewOrientation, lineStyle]);
+    return () => window.removeEventListener("resize", updateConnections);
+  }, []);
 
   // Temporal Playback Animation Loop
   useEffect(() => {
