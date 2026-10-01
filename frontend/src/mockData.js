@@ -1,7 +1,7 @@
 // Complete offline-ready fallback and instant seed data
 // Guarantees zero blank screens under any network/warmup conditions
 
-export const DEFAULT_VICTIM = "100000000001";
+export const DEFAULT_VICTIM = "KKBK10000000";
 
 export const DEFAULT_TRACE = {
   victim_account: "100000000001",

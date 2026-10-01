@@ -96,12 +96,20 @@ class IngestionEngine:
         ip_col = mappings.get("ip_address") or ("IP_Address" if "IP_Address" in col_names else "'103.118.12.1'")
         device_col = mappings.get("device_type") or ("Device_Type" if "Device_Type" in col_names else "'Android'")
 
-        # Robust Account Sanitizer: Strips non-digits, hyphens, spaces, and restores leading zeroes
+        # Robust Account Sanitizer: Strips spaces and hyphens; if purely numeric and < 12 digits, pads to 12 digits; otherwise preserves full alphanumeric ID
         clean_sender_expr = f"""
-            LPAD(REGEXP_REPLACE(CAST({sender_col} AS VARCHAR), '[^0-9]', '', 'g'), 12, '0')
+            CASE 
+                WHEN REGEXP_MATCHES(TRIM(CAST({sender_col} AS VARCHAR)), '^[0-9]+$') 
+                THEN LPAD(TRIM(CAST({sender_col} AS VARCHAR)), 12, '0')
+                ELSE UPPER(REGEXP_REPLACE(TRIM(CAST({sender_col} AS VARCHAR)), '[ -]', '', 'g'))
+            END
         """
         clean_receiver_expr = f"""
-            LPAD(REGEXP_REPLACE(CAST({receiver_col} AS VARCHAR), '[^0-9]', '', 'g'), 12, '0')
+            CASE 
+                WHEN REGEXP_MATCHES(TRIM(CAST({receiver_col} AS VARCHAR)), '^[0-9]+$') 
+                THEN LPAD(TRIM(CAST({receiver_col} AS VARCHAR)), 12, '0')
+                ELSE UPPER(REGEXP_REPLACE(TRIM(CAST({receiver_col} AS VARCHAR)), '[ -]', '', 'g'))
+            END
         """
 
         # Robust Amount Sanitizer: Strips ₹, commas, whitespace, handles negative debits

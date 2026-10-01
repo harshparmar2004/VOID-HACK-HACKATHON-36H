@@ -46,7 +46,7 @@ export default function App() {
   const [firNumber, setFirNumber] = useState("FIR-0142/2026/CYBER-INDORE");
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [cases, setCases] = useState(["100000000001", "100000000002", "100000000003", "100000000004", "100000000005"]);
+  const [cases, setCases] = useState(["KKBK10000000", "SBIN10000294", "AXIS10000018", "HDFC10000062", "SBIN10000268"]);
   const [systemStatus, setSystemStatus] = useState({
     status: "ready",
     system_name: "Operation Abhedya-Chakra",

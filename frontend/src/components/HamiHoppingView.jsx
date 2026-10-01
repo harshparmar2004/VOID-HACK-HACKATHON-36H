@@ -22,8 +22,8 @@ import {
 import { fetchHamiHopping, fetchHamiClusters } from "../api";
 
 export default function HamiHoppingView({ victimAccount, onSelectVictim, onNavigateTab }) {
-  const [selectedAccount, setSelectedAccount] = useState(victimAccount || "100000000001");
-  const [searchInput, setSearchInput] = useState(victimAccount || "100000000001");
+  const [selectedAccount, setSelectedAccount] = useState(victimAccount || "KKBK10000000");
+  const [searchInput, setSearchInput] = useState(victimAccount || "KKBK10000000");
   const [hoppingData, setHoppingData] = useState(null);
   const [clusters, setClusters] = useState([]);
   const [loading, setLoading] = useState(false);
