@@ -3,28 +3,18 @@ import {
   Zap,
   ShieldAlert,
   AlertTriangle,
-  Play,
-  RotateCcw,
   Download,
   Lock,
   Copy,
   Check,
   Search,
   Clock,
-  Activity,
   ArrowRight,
-  Globe,
-  Radio,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
   ChevronLeft,
   ChevronRight,
-  Cpu,
-  Layers,
-  Database,
-  Building2,
-  AlertCircle
+  CheckCircle2,
+  X,
+  FileText
 } from "lucide-react";
 import { DEFAULT_PROBLEMATIC_TXNS } from "../mockData";
 import { run60sFraudBenchmark, fetchProblematicTransactions, executeEmergencyFreeze } from "../api";
@@ -37,9 +27,11 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBank, setSelectedBank] = useState("ALL");
   const [copiedId, setCopiedId] = useState(null);
-  const [expandedTxn, setExpandedTxn] = useState(null);
   const [freezeStatus, setFreezeStatus] = useState(null);
   
+  // Slide-Over Forensic Inspector Drawer State
+  const [selectedTxn, setSelectedTxn] = useState(null);
+
   // 50-Item Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
@@ -47,7 +39,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
   // Real-time animated timer state during benchmark run
   const [odometerRecords, setOdometerRecords] = useState(2000008);
   const [elapsedTimer, setElapsedTimer] = useState(1.25);
-  const [countdownSeconds, setCountdownSeconds] = useState(570); // 9m 30s remaining
+  const [countdownSeconds, setCountdownSeconds] = useState(534); // ~8m 54s remaining
 
   // Countdown timer effect
   useEffect(() => {
@@ -124,7 +116,8 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
     }
   };
 
-  const handleCopy = (id) => {
+  const handleCopy = (id, e) => {
+    if (e) e.stopPropagation();
     navigator.clipboard.writeText(id);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1800);
@@ -228,118 +221,158 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
   const formatCountdown = (secs) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
-    return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  // Helper to extract primary anomaly and extra count
+  const parseAnomalySummary = (flags) => {
+    if (!flags) return { primary: "Suspicious Flow", extraCount: 0 };
+    const parts = flags.split(" | ");
+    return {
+      primary: parts[0],
+      extraCount: Math.max(0, parts.length - 1)
+    };
   };
 
   return (
     <div className="space-y-4">
-      {/* 1. Header & Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs">
+      {/* 1. Refined Header & Primary Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs">
         <div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] animate-pulse"></span>
+            <span className="w-2 h-2 rounded-full bg-[#059669]"></span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-              JEV-Accelerated Vector Engine • 10 Parameters (P1–P10)
+              Live Detection Engine • Vector Accelerated
             </span>
           </div>
           <h2 className="text-xl font-serif font-bold text-[#2C2623] mt-0.5">
-            Real-Time 60s 2M Fraud Scanner & Early Intercept Monitor
+            Real-Time 2M Fraud Scanner
           </h2>
           <p className="text-xs text-[#746D65] mt-0.5">
-            Detects heavy ₹2–3 Crore whale transfers, smurfing layers, multi-IP anomalies, and illegal scam linkages to freeze stolen funds before terminal exit.
+            Screening 2,000,000 transactions to intercept multi-crore whale outflows and synthetic smurfing rings.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FAF6EE] hover:bg-[#F3EDE2] border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold shadow-2xs transition-all cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5 text-[#D96B27]" />
-            <span>Export CSV Callset</span>
+            <Download className="w-3.5 h-3.5 text-[#746D65]" />
+            <span>Export CSV</span>
           </button>
 
           <button
             onClick={handleRunBenchmark}
             disabled={benchmarkLoading}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-semibold text-xs shadow-sm transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-semibold text-xs shadow-2xs transition-all cursor-pointer ${
               benchmarkLoading
-                ? "bg-[#EAE4D8] text-[#746D65]"
+                ? "bg-[#EAE4D8] text-[#746D65] cursor-not-allowed"
                 : "bg-[#D96B27] text-white hover:bg-[#C25B1D]"
             }`}
           >
             <Zap className={`w-3.5 h-3.5 ${benchmarkLoading ? "animate-spin" : ""}`} />
-            <span>{benchmarkLoading ? "Scanning 2M Rows..." : "Run 2M Real-Time Fraud Scan"}</span>
+            <span>{benchmarkLoading ? "Scanning 2M Records..." : "Run 2M Benchmark Scan"}</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Compact 60-Second Benchmark + Early Intervention Strip */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* Left: 60s Benchmark Box */}
-        <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs flex flex-col justify-between space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-[#D96B27]" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#2C2623] font-mono">
-                The 60s Challenge: 2M Rows Scanned
-              </span>
-            </div>
-            <span className="bg-[#D1FAE5] text-[#059669] text-[10px] font-mono px-2 py-0.5 rounded font-bold">
-              PASSED: {elapsedTimer}s (Target: ≤ 60s)
+      {/* 2. Unified Executive Metric Strip (Consolidated from 8 boxes into 1 sleek card) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs space-y-4">
+        {/* Top Operational Status Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#F2ECE1]">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E6F4EA] text-[#137333] font-mono font-semibold text-[11px] border border-[#CEEAD6]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#137333]"></span>
+              Benchmark Passed: {elapsedTimer}s (Target ≤ 60s)
+            </span>
+            <span className="text-[#9E968D] hidden sm:inline">•</span>
+            <span className="text-[#746D65] font-mono text-[11px]">
+              Throughput: <strong className="text-[#2C2623]">16,00,006 txns/s</strong>
+            </span>
+            <span className="text-[#9E968D] hidden sm:inline">•</span>
+            <span className="text-[#746D65] font-mono text-[11px]">
+              Speedup: <strong className="text-[#D96B27]">48x Real-Time</strong>
             </span>
           </div>
 
-          <div className="w-full bg-[#EAE4D8] h-2 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-[#D96B27] to-[#059669] rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(100, (odometerRecords / 2000008) * 100)}%` }}
-            ></div>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] font-mono text-[#746D65] pt-0.5">
-            <span>Throughput: <strong className="text-[#2C2623]">{(odometerRecords / Math.max(elapsedTimer, 0.1)).toLocaleString("en-IN", { maximumFractionDigits: 0 })} txns/s</strong></span>
-            <span>Speedup: <strong className="text-[#D96B27]">48x Faster</strong></span>
-            <span>Clock: <strong className="text-[#059669]">{elapsedTimer}s</strong></span>
-          </div>
-        </div>
-
-        {/* Right: Urgent Early Intervention Box */}
-        <div className="bg-[#FEF2F2] border border-[#FCA5A5] rounded-2xl p-3 shadow-2xs flex flex-col justify-between space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-[#DC2626]" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#DC2626] font-mono">
-                Active Siphoning In-Flight
-              </span>
-            </div>
-            <span className="bg-[#DC2626] text-white text-[10px] font-mono px-2 py-0.5 rounded-full font-bold animate-pulse">
-              ⏱ {formatCountdown(countdownSeconds)} Before Exit
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between text-xs">
-            <div>
-              <span className="text-[10px] text-[#991B1B] font-mono uppercase block">Trapped Balance at Risk</span>
-              <span className="font-bold font-mono text-[#DC2626] text-sm">₹164.19 Crore</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-[#DC2626] font-mono font-semibold bg-[#FEF2F2] border border-[#FCA5A5] px-2.5 py-1 rounded-lg">
+              <Clock className="w-3.5 h-3.5" />
+              <span>⏱ {formatCountdown(countdownSeconds)} to cashout exit</span>
             </div>
 
             <button
               onClick={handleEmergencyFreeze}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#DC2626] text-white hover:bg-[#B91C1C] text-xs font-bold shadow-sm transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
             >
-              <Lock className="w-3.5 h-3.5" />
+              <Lock className="w-3 h-3" />
               <span>Emergency Freeze 100+ Accounts</span>
             </button>
+          </div>
+        </div>
+
+        {/* 4 Clean Metric Columns */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-1">
+          {/* Metric 1 */}
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              Scanned Records
+            </span>
+            <div className="text-xl font-bold font-mono text-[#2C2623]">
+              {odometerRecords.toLocaleString("en-IN")}
+            </div>
+            <p className="text-[11px] text-[#059669] font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> 100% Vector Indexed
+            </p>
+          </div>
+
+          {/* Metric 2 */}
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              Trapped Inflow at Risk
+            </span>
+            <div className="text-xl font-bold font-mono text-[#DC2626]">
+              ₹164.19 Crore
+            </div>
+            <p className="text-[11px] text-[#746D65]">
+              Actionable balance in 12,016 mules
+            </p>
+          </div>
+
+          {/* Metric 3 */}
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              Heavy Whales (₹2–3 Cr)
+            </span>
+            <div className="text-xl font-bold font-mono text-[#D96B27]">
+              8 Outliers
+            </div>
+            <p className="text-[11px] text-[#746D65]">
+              Max: ₹2.98 Cr single RTGS transfer
+            </p>
+          </div>
+
+          {/* Metric 4 */}
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              Network Anomalies
+            </span>
+            <div className="text-xl font-bold font-mono text-[#2C2623]">
+              2,572 IPs • 224k Links
+            </div>
+            <p className="text-[11px] text-[#746D65] truncate">
+              Foreign Proxies & Digital Arrest links
+            </p>
           </div>
         </div>
       </div>
 
       {/* Freeze Success Notification */}
       {freezeStatus && (
-        <div className="bg-[#D1FAE5] border border-[#6EE7B7] p-2.5 rounded-xl text-xs text-[#065F46] flex items-center justify-between shadow-2xs">
+        <div className="bg-[#D1FAE5] border border-[#6EE7B7] p-3 rounded-xl text-xs text-[#065F46] flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-[#059669]" />
+            <CheckCircle2 className="w-4 h-4 text-[#059669]" />
             <span className="font-semibold">
               Emergency Freezing Order Dispatched! Placed immediate statutory lien on {freezeStatus.accounts_frozen_count} accounts across {freezeStatus.banks_notified_count} banks totaling ₹{freezeStatus.total_lien_marked_inr?.toLocaleString("en-IN")}.
             </span>
@@ -355,151 +388,77 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
         </div>
       )}
 
-      {/* 3. Compact 6-Column KPI Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        <div className="bg-white border border-[#E8E2D5] rounded-xl p-2.5 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-            Scanned Records
-          </div>
-          <div className="text-lg font-bold font-mono text-[#2C2623] mt-0.5">
-            2,000,008
-          </div>
-          <div className="text-[9px] text-[#059669] font-medium">100% Vector Indexed</div>
-        </div>
-
-        <div
-          onClick={() => setActiveFilter(activeFilter === "HEAVY_WHALES" ? "ALL" : "HEAVY_WHALES")}
-          className={`border rounded-xl p-2.5 shadow-2xs cursor-pointer transition-all ${
-            activeFilter === "HEAVY_WHALES"
-              ? "bg-[#FEF2F2] border-[#DC2626]"
-              : "bg-white border-[#E8E2D5] hover:border-[#DC2626]"
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#DC2626] font-mono flex items-center justify-between">
-            <span>P7 Whales</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]"></span>
-          </div>
-          <div className="text-lg font-bold font-mono text-[#DC2626] mt-0.5">
-            8 Whales
-          </div>
-          <div className="text-[9px] text-[#746D65] truncate">₹1.85 Cr – ₹2.98 Cr</div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-xl p-2.5 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#EA580C] font-mono">
-            P8 Hyper-Freq
-          </div>
-          <div className="text-lg font-bold font-mono text-[#EA580C] mt-0.5">
-            23,046
-          </div>
-          <div className="text-[9px] text-[#746D65]">Burst layering nodes</div>
-        </div>
-
-        <div
-          onClick={() => setActiveFilter(activeFilter === "FOREIGN_IP" ? "ALL" : "FOREIGN_IP")}
-          className={`border rounded-xl p-2.5 shadow-2xs cursor-pointer transition-all ${
-            activeFilter === "FOREIGN_IP"
-              ? "bg-[#FAF5FF] border-[#7C3AED]"
-              : "bg-white border-[#E8E2D5] hover:border-[#7C3AED]"
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#7C3AED] font-mono flex items-center justify-between">
-            <span>P9 Proxies</span>
-            <Globe className="w-3 h-3 text-[#7C3AED]" />
-          </div>
-          <div className="text-lg font-bold font-mono text-[#7C3AED] mt-0.5">
-            2,572 Txns
-          </div>
-          <div className="text-[9px] text-[#746D65] truncate">185 / 194 / 45 / 91</div>
-        </div>
-
-        <div
-          onClick={() => setActiveFilter(activeFilter === "ILLEGAL_LINKAGES" ? "ALL" : "ILLEGAL_LINKAGES")}
-          className={`border rounded-xl p-2.5 shadow-2xs cursor-pointer transition-all ${
-            activeFilter === "ILLEGAL_LINKAGES"
-              ? "bg-[#FFFBEB] border-[#D97706]"
-              : "bg-white border-[#E8E2D5] hover:border-[#D97706]"
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#D97706] font-mono">
-            P10 Crime Links
-          </div>
-          <div className="text-lg font-bold font-mono text-[#D97706] mt-0.5">
-            224.3k Txns
-          </div>
-          <div className="text-[9px] text-[#746D65] truncate">Digital Arrest & Betting</div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-xl p-2.5 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#059669] font-mono">
-            Recoverable Inflow
-          </div>
-          <div className="text-lg font-bold font-mono text-[#059669] mt-0.5 truncate">
-            ₹164.19 Cr
-          </div>
-          <div className="text-[9px] text-[#746D65]">Holding in 12k mules</div>
-        </div>
-      </div>
-
-      {/* 4. Filter & Search Bar */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs space-y-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <div className="relative flex-1 min-w-[240px]">
+      {/* 3. Streamlined Search & Segmented Filter Toolbar */}
+      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-[260px]">
             <input
               type="text"
-              placeholder="Search Txn ID, Account ID, IFSC, Narration (Digital Arrest, Mahadev, USDT)..."
+              placeholder="Search Txn ID, Account, IFSC, Narration (Digital Arrest, Mahadev, USDT)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl pl-8 pr-3 py-1.5 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+              className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl pl-9 pr-8 py-2 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
             />
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#9E968D]" />
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#9E968D]" />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className="absolute right-2.5 top-2 text-[10px] text-[#9E968D] hover:text-[#2C2623]"
+                className="absolute right-2.5 top-2.5 text-xs text-[#9E968D] hover:text-[#2C2623]"
               >
-                Clear
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
+          {/* Segmented Filter Pills */}
           <div className="flex flex-wrap items-center gap-1 bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-1 text-xs">
             {[
-              { id: "ALL", label: "ALL PROBLEMATIC" },
-              { id: "HEAVY_WHALES", label: "HEAVY WHALES (₹2-3 CR)", highlight: true },
-              { id: "SMURFING_HOPS", label: "HOP 2 SMURFING" },
-              { id: "ILLEGAL_LINKAGES", label: "ILLEGAL LINKAGES" },
-              { id: "FOREIGN_IP", label: "FOREIGN PROXY IPS" }
+              { id: "ALL", label: "All Flagged", count: 100 },
+              { id: "HEAVY_WHALES", label: "Whales (₹2–3 Cr)", count: 8, isRed: true },
+              { id: "SMURFING_HOPS", label: "Hop 2 Smurfing", count: 65 },
+              { id: "FOREIGN_IP", label: "Foreign Proxies", count: 18 },
+              { id: "ILLEGAL_LINKAGES", label: "Crime Links", count: 9 }
             ].map((tab) => {
               const isSelected = activeFilter === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveFilter(tab.id)}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer text-xs flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 ${
                     isSelected
-                      ? tab.highlight
+                      ? tab.isRed
                         ? "bg-[#DC2626] text-white shadow-2xs"
                         : "bg-[#D96B27] text-white shadow-2xs"
-                      : tab.highlight
+                      : tab.isRed
                       ? "text-[#DC2626] hover:bg-[#FEE2E2]"
-                      : "text-[#746D65] hover:text-[#2C2623]"
+                      : "text-[#746D65] hover:text-[#2C2623] hover:bg-white"
                   }`}
                 >
                   <span>{tab.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      isSelected
+                        ? "bg-white/20 text-white"
+                        : "bg-[#EAE4D8] text-[#746D65]"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-[#F2ECE1] text-xs">
+        {/* Secondary Bar: Bank Filter + Page Counter */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#F2ECE1] text-xs">
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#746D65] font-medium">Bank Route:</span>
             <select
               value={selectedBank}
               onChange={(e) => setSelectedBank(e.target.value)}
-              className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+              className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
             >
               <option value="ALL">All Banks</option>
               <option value="SBIN">State Bank of India (SBIN)</option>
@@ -514,24 +473,26 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
           </div>
 
           <div className="text-[11px] text-[#746D65] font-mono">
-            Showing <strong className="text-[#2C2623]">{startIndex + 1}–{endIndex}</strong> of <strong className="text-[#2C2623]">{filteredTxns.length}</strong> transactions • Page {currentPage} of {totalPages} (<span className="text-[#D96B27] font-semibold">50 per page</span>)
+            Showing <strong className="text-[#2C2623]">{startIndex + 1}–{endIndex}</strong> of{" "}
+            <strong className="text-[#2C2623]">{filteredTxns.length}</strong> transactions • Page {currentPage} of {totalPages} (
+            <span className="text-[#D96B27] font-semibold">50 per page</span>)
           </div>
         </div>
       </div>
 
-      {/* 5. Problematic Transactions Stream Table with Sticky Header & 50-Page Set */}
+      {/* 4. Clean, Uncluttered Data Table with Sticky Header */}
       <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
-        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <div className="overflow-x-auto max-h-[620px] overflow-y-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-[#FAF6EE] border-b border-[#E8E2D5] shadow-xs">
               <tr className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">
-                <th className="py-2.5 px-4 bg-[#FAF6EE]">Txn ID & Timestamp</th>
-                <th className="py-2.5 px-4 bg-[#FAF6EE]">Sender ➔ Receiver Flow</th>
-                <th className="py-2.5 px-3 bg-[#FAF6EE]">Amount (INR)</th>
-                <th className="py-2.5 px-3 bg-[#FAF6EE]">Stage / Urgency</th>
-                <th className="py-2.5 px-4 bg-[#FAF6EE]">P1–P10 Anomaly Evidence</th>
-                <th className="py-2.5 px-3 bg-[#FAF6EE]">Time to Exit</th>
-                <th className="py-2.5 px-3 text-right bg-[#FAF6EE]">Emergency Action</th>
+                <th className="py-3 px-4 bg-[#FAF6EE]">Transaction ID</th>
+                <th className="py-3 px-4 bg-[#FAF6EE]">Sender ➔ Receiver Flow</th>
+                <th className="py-3 px-3 bg-[#FAF6EE]">Amount (INR)</th>
+                <th className="py-3 px-3 bg-[#FAF6EE]">Severity</th>
+                <th className="py-3 px-4 bg-[#FAF6EE]">Primary Anomaly Evidence</th>
+                <th className="py-3 px-3 bg-[#FAF6EE]">Exit Window</th>
+                <th className="py-3 px-4 text-right bg-[#FAF6EE]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE1] font-mono">
@@ -540,194 +501,139 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                   <td colSpan={7} className="py-12 text-center text-[#746D65] font-sans">
                     <ShieldAlert className="w-8 h-8 text-[#9E968D] mx-auto mb-2 opacity-50" />
                     <p className="font-semibold text-sm text-[#2C2623]">No problematic transactions match filter</p>
-                    <p className="text-xs text-[#746D65] mt-1">Select "ALL PROBLEMATIC" to view complete flagged stream.</p>
+                    <p className="text-xs text-[#746D65] mt-1">Select "All Flagged" to view complete flagged stream.</p>
                   </td>
                 </tr>
               ) : (
                 paginatedTxns.map((t, idx) => {
-                  const isExpanded = expandedTxn === t.Transaction_ID;
                   const isCopied = copiedId === t.Transaction_ID;
                   const isWhale = t.Amount_INR >= 15000000.0;
+                  const { primary, extraCount } = parseAnomalySummary(t.anomaly_flags);
 
                   return (
-                    <React.Fragment key={`${t.Transaction_ID}-${idx}`}>
-                      <tr className={`hover:bg-[#FAF6EE] transition-colors ${isWhale ? "bg-[#FFFBF5]" : ""}`}>
-                        {/* Txn ID & Timestamp */}
-                        <td className="py-2.5 px-4">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-[#2C2623]">{t.Transaction_ID}</span>
-                            <button
-                              onClick={() => handleCopy(t.Transaction_ID)}
-                              className="text-[#9E968D] hover:text-[#D96B27] p-0.5 rounded cursor-pointer"
-                            >
-                              {isCopied ? <Check className="w-3 h-3 text-[#059669]" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                          </div>
-                          <div className="text-[11px] text-[#746D65] font-sans mt-0.5 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-[#9E968D]" />
-                            <span>{t.txn_timestamp}</span>
-                          </div>
-                        </td>
+                    <tr
+                      key={`${t.Transaction_ID}-${idx}`}
+                      onClick={() => setSelectedTxn(t)}
+                      className={`hover:bg-[#FAF6EE] transition-colors cursor-pointer group ${
+                        isWhale ? "bg-[#FFFBF5]" : ""
+                      }`}
+                    >
+                      {/* Transaction ID & Timestamp */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-[#2C2623] group-hover:text-[#D96B27] transition-colors">
+                            {t.Transaction_ID}
+                          </span>
+                          <button
+                            onClick={(e) => handleCopy(t.Transaction_ID, e)}
+                            className="text-[#9E968D] hover:text-[#D96B27] p-0.5 rounded cursor-pointer"
+                            title="Copy Transaction ID"
+                          >
+                            {isCopied ? <Check className="w-3 h-3 text-[#059669]" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-[#746D65] font-sans mt-0.5">
+                          {t.txn_timestamp}
+                        </div>
+                      </td>
 
-                        {/* Sender -> Receiver Flow */}
-                        <td className="py-2.5 px-4 font-mono text-[11px]">
-                          <div className="flex items-center gap-1.5 text-[#2C2623]">
-                            <span className="font-bold">{t.Sender_Account}</span>
-                            <span className="text-[9px] bg-[#FAF6EE] px-1 rounded border border-[#E8E2D5] font-sans font-semibold text-[#746D65]">
-                              {t.Sender_IFSC.substring(0, 4)}
-                            </span>
-                            <ArrowRight className="w-3 h-3 text-[#D96B27] shrink-0" />
-                            <span className="font-bold text-[#DC2626]">{t.Receiver_Account}</span>
-                            <span className="text-[9px] bg-[#FAF6EE] px-1 rounded border border-[#E8E2D5] font-sans font-semibold text-[#746D65]">
-                              {t.Receiver_IFSC.substring(0, 4)}
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-[#746D65] font-sans truncate max-w-xs mt-0.5">
-                            Narration: <span className="font-mono text-[#2C2623]">{t.Narration}</span>
-                          </div>
-                        </td>
+                      {/* Sender -> Receiver Flow */}
+                      <td className="py-3 px-4 font-mono text-[11px]">
+                        <div className="flex items-center gap-1.5 text-[#2C2623]">
+                          <span className="font-semibold">{t.Sender_Account}</span>
+                          <span className="text-[9px] bg-[#FAF6EE] px-1.5 py-0.2 rounded border border-[#E8E2D5] font-sans text-[#746D65]">
+                            {t.Sender_IFSC.substring(0, 4)}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-[#D96B27] shrink-0" />
+                          <span className="font-bold text-[#DC2626]">{t.Receiver_Account}</span>
+                          <span className="text-[9px] bg-[#FAF6EE] px-1.5 py-0.2 rounded border border-[#E8E2D5] font-sans text-[#746D65]">
+                            {t.Receiver_IFSC.substring(0, 4)}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-[#746D65] font-sans truncate max-w-xs mt-0.5">
+                          {t.Narration}
+                        </div>
+                      </td>
 
-                        {/* Amount */}
-                        <td className="py-2.5 px-3">
-                          <div className={`font-bold font-mono text-sm ${isWhale ? "text-[#DC2626] text-base" : "text-[#2C2623]"}`}>
-                            ₹{t.Amount_INR.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                          </div>
-                          <div className="text-[10px] font-sans text-[#746D65] mt-0.5">
-                            Mode: <span className="font-bold">{t.Payment_Mode}</span>
-                          </div>
-                        </td>
+                      {/* Amount */}
+                      <td className="py-3 px-3">
+                        <div className={`font-bold font-mono text-xs ${isWhale ? "text-[#DC2626] font-extrabold text-sm" : "text-[#2C2623]"}`}>
+                          ₹{t.Amount_INR.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </div>
+                        <span className="text-[9px] font-sans text-[#746D65] bg-[#FAF6EE] px-1 py-0.2 rounded border border-[#E8E2D5]">
+                          {t.Payment_Mode}
+                        </span>
+                      </td>
 
-                        {/* Stage / Urgency */}
-                        <td className="py-2.5 px-3 font-sans">
+                      {/* Severity Pill */}
+                      <td className="py-3 px-3 font-sans">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold text-[10px] tracking-wide inline-flex items-center gap-1 ${
+                            isWhale
+                              ? "bg-[#FEE2E2] text-[#DC2626] border border-[#FCA5A5]"
+                              : t.urgency === "CRITICAL"
+                              ? "bg-[#FEE2E2] text-[#DC2626]"
+                              : "bg-[#FEF3C7] text-[#D97706]"
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                          {isWhale ? "CRITICAL WHALE" : t.urgency || "HIGH"}
+                        </span>
+                      </td>
+
+                      {/* Primary Anomaly Evidence */}
+                      <td className="py-3 px-4 font-sans text-[11px] text-[#746D65]">
+                        <div className="flex items-center gap-1.5">
                           <span
-                            className={`px-2 py-0.5 rounded font-bold text-[10px] tracking-wide inline-flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded font-mono text-[10px] ${
                               isWhale
-                                ? "bg-[#FEE2E2] text-[#DC2626] border border-[#FCA5A5]"
-                                : t.hop_stage === "HOP_1_INTAKE"
-                                ? "bg-[#FFEDD5] text-[#EA580C]"
-                                : t.hop_stage === "HOP_2_SMURFING"
-                                ? "bg-[#FEF3C7] text-[#D97706]"
-                                : "bg-[#EDE9FE] text-[#7C3AED]"
+                                ? "bg-[#FEE2E2] text-[#DC2626] font-bold"
+                                : "bg-[#FAF6EE] text-[#2C2623] border border-[#E8E2D5]"
                             }`}
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                            {t.hop_stage.replace("_", " ")}
+                            {primary}
                           </span>
-                          <div className="text-[10px] font-mono text-[#DC2626] font-bold mt-0.5">
-                            {t.urgency}
-                          </div>
-                        </td>
+                          {extraCount > 0 && (
+                            <span className="text-[10px] bg-[#FAF6EE] border border-[#E8E2D5] text-[#746D65] px-1.5 py-0.2 rounded-full font-mono">
+                              +{extraCount} flags
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                        {/* P1-P10 Anomaly Evidence */}
-                        <td className="py-2.5 px-4 font-sans text-[11px] text-[#746D65] max-w-sm">
-                          <div className="flex flex-wrap gap-1">
-                            {t.anomaly_flags?.split(" | ").map((flag, fIdx) => (
-                              <span
-                                key={fIdx}
-                                className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
-                                  flag.startsWith("P7")
-                                    ? "bg-[#FEE2E2] text-[#DC2626] font-bold border border-[#FCA5A5]"
-                                    : flag.startsWith("P10")
-                                    ? "bg-[#FEF3C7] text-[#D97706] font-bold"
-                                    : flag.startsWith("P9")
-                                    ? "bg-[#EDE9FE] text-[#7C3AED]"
-                                    : "bg-[#FAF6EE] text-[#746D65] border border-[#E8E2D5]"
-                                }`}
-                              >
-                                {flag}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
+                      {/* Time to Exit */}
+                      <td className="py-3 px-3 font-mono">
+                        <div className="flex items-center gap-1 text-[#DC2626] font-bold text-xs">
+                          <Clock className="w-3 h-3 text-[#DC2626]" />
+                          <span>{t.estimated_minutes_to_exit}m</span>
+                        </div>
+                        <span className="text-[9px] text-[#746D65] font-sans">to cashout</span>
+                      </td>
 
-                        {/* Time to Exit */}
-                        <td className="py-2.5 px-3 font-mono">
-                          <div className="flex items-center gap-1 text-[#DC2626] font-bold text-xs">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>{t.estimated_minutes_to_exit}m</span>
-                          </div>
-                          <span className="text-[9px] text-[#746D65] font-sans">Before cashout</span>
-                        </td>
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-right font-sans">
+                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => setSelectedTxn(t)}
+                            className="px-2.5 py-1 rounded-lg border border-[#E8E2D5] bg-white hover:bg-[#FAF6EE] text-[#2C2623] text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                          >
+                            Inspect
+                          </button>
 
-                        {/* Actions */}
-                        <td className="py-2.5 px-3 text-right font-sans">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => {
-                                if (onSelectCase) onSelectCase(t.Sender_Account);
-                                if (onNavigateTab) onNavigateTab("notices");
-                              }}
-                              className="px-2 py-1 rounded-lg bg-[#DC2626] text-white hover:bg-[#B91C1C] text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
-                              title="Prepare Section 91 Freezing Order"
-                            >
-                              <Lock className="w-3 h-3" />
-                              <span>Freeze</span>
-                            </button>
-
-                            <button
-                              onClick={() => setExpandedTxn(isExpanded ? null : t.Transaction_ID)}
-                              className="p-1 rounded-lg border border-[#E8E2D5] hover:border-[#D96B27] text-[#746D65] hover:text-[#2C2623] cursor-pointer"
-                              title="Toggle Details"
-                            >
-                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {/* Expanded Transaction Detail Drawer */}
-                      {isExpanded && (
-                        <tr className="bg-[#FAF6EE]">
-                          <td colSpan={7} className="p-3 border-b border-[#E8E2D5]">
-                            <div className="bg-white border border-[#E8E2D5] rounded-xl p-3 shadow-sm font-sans space-y-2.5">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F2ECE1] pb-2">
-                                <div className="flex items-center gap-2">
-                                  <AlertCircle className="w-4 h-4 text-[#DC2626]" />
-                                  <h4 className="font-bold text-xs text-[#2C2623]">
-                                    Forensic Profile: Transaction #{t.Transaction_ID}
-                                  </h4>
-                                </div>
-                                <div className="text-[11px] font-mono text-[#D96B27] font-bold">
-                                  Status: {t.intervention_status}
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 text-xs">
-                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
-                                  <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Originating Telemetry</span>
-                                  <div className="font-bold font-mono text-[#2C2623] mt-0.5">{t.IP_Address}</div>
-                                  <div className="text-[11px] text-[#DC2626]">Device: {t.Device_Type}</div>
-                                </div>
-
-                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
-                                  <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Receiver Holding Balance</span>
-                                  <div className="font-bold font-mono text-[#059669] mt-0.5">
-                                    ₹{Number(t.holding_balance || 0).toLocaleString("en-IN")}
-                                  </div>
-                                  <div className="text-[11px] text-[#746D65]">Eligible for immediate lien</div>
-                                </div>
-
-                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
-                                  <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Statutory Mandate</span>
-                                  <div className="font-bold text-[#2C2623] mt-0.5">Section 91 Cr.P.C.</div>
-                                  <div className="text-[11px] text-[#746D65]">Sec 94 BNSS Applicable</div>
-                                </div>
-
-                                <div className="bg-[#FAF6EE] p-2 rounded-lg border border-[#E8E2D5]">
-                                  <span className="text-[10px] text-[#9E968D] uppercase font-mono block">Investigation Action</span>
-                                  <div className="font-bold text-[#DC2626] mt-0.5">Debit-Freeze Requisition</div>
-                                  <div className="text-[11px] text-[#746D65]">Nodal Officer Dispatch</div>
-                                </div>
-                              </div>
-
-                              <div className="text-xs bg-[#FBF7EE] p-2.5 rounded-lg border border-[#E8E2D5] italic text-[#746D65]">
-                                "Detected high-velocity money routing matching syndicate pattern. Amount INR {t.Amount_INR.toLocaleString("en-IN")} transferred from account {t.Sender_Account} to receiver {t.Receiver_Account} with illicit scam marker '{t.Narration}'. Immediate debit-freeze requisition generated for bank nodal officer."
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
+                          <button
+                            onClick={() => {
+                              if (onSelectCase) onSelectCase(t.Sender_Account);
+                              if (onNavigateTab) onNavigateTab("notices");
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
+                            title="Freeze Beneficiary Account"
+                          >
+                            <Lock className="w-3 h-3" />
+                            <span>Freeze</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })
               )}
@@ -735,11 +641,14 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
           </table>
         </div>
 
-        {/* 6. Professional Pagination Footer (Set of 50 and 50) */}
+        {/* 5. Pagination Footer (50 per page) */}
         {filteredTxns.length > 0 && (
           <div className="bg-[#FAF6EE] border-t border-[#E8E2D5] px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs font-sans">
             <div className="text-[#746D65] font-mono text-[11px]">
-              Showing <span className="font-bold text-[#2C2623]">{startIndex + 1}</span>–<span className="font-bold text-[#2C2623]">{endIndex}</span> of <span className="font-bold text-[#2C2623]">{filteredTxns.length}</span> problematic transactions (<span className="text-[#D96B27] font-semibold">50 per page</span>)
+              Showing <span className="font-bold text-[#2C2623]">{startIndex + 1}</span>–
+              <span className="font-bold text-[#2C2623]">{endIndex}</span> of{" "}
+              <span className="font-bold text-[#2C2623]">{filteredTxns.length}</span> transactions (
+              <span className="text-[#D96B27] font-semibold">50 per page</span>)
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -791,6 +700,200 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
           </div>
         )}
       </div>
+
+      {/* 6. Slide-Over Forensic Inspector Drawer */}
+      {selectedTxn && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-xs transition-opacity"
+            onClick={() => setSelectedTxn(null)}
+          ></div>
+
+          {/* Drawer Panel */}
+          <div className="relative w-full max-w-xl bg-white h-full shadow-2xl flex flex-col z-10 border-l border-[#E8E2D5] animate-in slide-in-from-right duration-200">
+            {/* Drawer Header */}
+            <div className="px-6 py-4 border-b border-[#E8E2D5] flex items-center justify-between bg-[#FAF6EE]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold font-mono uppercase tracking-wider text-[#9E968D]">
+                    Forensic Inspector
+                  </span>
+                  <span className="px-2 py-0.2 rounded-full font-bold text-[10px] font-mono bg-[#FEE2E2] text-[#DC2626] border border-[#FCA5A5]">
+                    {selectedTxn.urgency || "CRITICAL"}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold font-mono text-[#2C2623] mt-0.5 flex items-center gap-2">
+                  <span>{selectedTxn.Transaction_ID}</span>
+                  <button
+                    onClick={(e) => handleCopy(selectedTxn.Transaction_ID, e)}
+                    className="text-[#9E968D] hover:text-[#D96B27] p-0.5 cursor-pointer"
+                  >
+                    {copiedId === selectedTxn.Transaction_ID ? (
+                      <Check className="w-3.5 h-3.5 text-[#059669]" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </h3>
+              </div>
+
+              <button
+                onClick={() => setSelectedTxn(null)}
+                className="p-1.5 rounded-lg border border-[#E8E2D5] hover:bg-white text-[#746D65] hover:text-[#2C2623] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs font-sans">
+              {/* Financial Flow Card */}
+              <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-4 space-y-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono block">
+                  Transaction Summary
+                </span>
+                
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-semibold text-[#746D65]">Transfer Volume:</span>
+                  <span className="text-xl font-bold font-mono text-[#DC2626]">
+                    ₹{selectedTxn.Amount_INR.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#E8E2D5] text-[11px]">
+                  <div>
+                    <span className="text-[#9E968D] block">Timestamp</span>
+                    <span className="font-mono font-semibold text-[#2C2623]">{selectedTxn.txn_timestamp}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#9E968D] block">Payment Rail</span>
+                    <span className="font-mono font-semibold text-[#2C2623]">{selectedTxn.Payment_Mode}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#9E968D] block">Hop Stage</span>
+                    <span className="font-semibold text-[#D96B27]">{selectedTxn.hop_stage?.replace("_", " ")}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#9E968D] block">Time to Cashout Exit</span>
+                    <span className="font-bold text-[#DC2626] font-mono">⏱ {selectedTxn.estimated_minutes_to_exit} minutes</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Counterparty Analysis */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono block">
+                  Counterparty Routing
+                </span>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Sender */}
+                  <div className="bg-white border border-[#E8E2D5] rounded-xl p-3 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-[#746D65] block">Originating Source</span>
+                    <div className="font-bold font-mono text-sm text-[#2C2623]">{selectedTxn.Sender_Account}</div>
+                    <div className="text-[11px] text-[#746D65] font-mono">IFSC: {selectedTxn.Sender_IFSC}</div>
+                  </div>
+
+                  {/* Receiver */}
+                  <div className="bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl p-3 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-[#DC2626] block">Beneficiary Target</span>
+                    <div className="font-bold font-mono text-sm text-[#DC2626]">{selectedTxn.Receiver_Account}</div>
+                    <div className="text-[11px] text-[#991B1B] font-mono">IFSC: {selectedTxn.Receiver_IFSC}</div>
+                    <div className="text-[10px] text-[#DC2626] font-semibold mt-1">
+                      Actionable Lien: ₹{Number(selectedTxn.holding_balance || selectedTxn.Amount_INR).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#E8E2D5] text-[11px]">
+                  <span className="text-[#9E968D] block font-mono text-[10px] uppercase">Remittance Narration:</span>
+                  <span className="font-mono text-[#2C2623] font-semibold">{selectedTxn.Narration}</span>
+                </div>
+              </div>
+
+              {/* 10-Parameter Forensic Evaluation */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono block">
+                  10-Parameter Anomaly Evaluation
+                </span>
+
+                <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-3 space-y-2">
+                  {selectedTxn.anomaly_flags?.split(" | ").map((flag, fIdx) => (
+                    <div key={fIdx} className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#E8E2D5]">
+                      <AlertTriangle className="w-4 h-4 text-[#D96B27] shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-mono font-bold text-xs text-[#2C2623]">{flag}</div>
+                        <div className="text-[11px] text-[#746D65] mt-0.5">
+                          {flag.startsWith("P7")
+                            ? "High-value outlier exceeding ₹1.85 Cr threshold, indicative of top-tier syndicate treasury transfer."
+                            : flag.startsWith("P9")
+                            ? `Foreign proxy / VPN routing detected via ${selectedTxn.IP_Address} matching syndicate infrastructure.`
+                            : flag.startsWith("P10")
+                            ? `High-risk illegal keyword matching active cyber fraud campaign (${selectedTxn.Narration}).`
+                            : "High-frequency automated transaction velocity violating consumer banking baseline."}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Telemetry & Device Footprint */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono block">
+                  Originating Digital Footprint
+                </span>
+
+                <div className="grid grid-cols-2 gap-3 bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-3 text-[11px] font-mono">
+                  <div>
+                    <span className="text-[#9E968D] block text-[10px]">Source IP</span>
+                    <span className="font-bold text-[#2C2623]">{selectedTxn.IP_Address}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#9E968D] block text-[10px]">Device Type</span>
+                    <span className="font-bold text-[#2C2623]">{selectedTxn.Device_Type}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#9E968D] block text-[10px]">Infrastructure</span>
+                    <span className="text-[#746D65]">Hosting / VPN CIDR Block</span>
+                  </div>
+                  <div>
+                    <span className="text-[#9E968D] block text-[10px]">Statutory Status</span>
+                    <span className="text-[#059669] font-bold">Lien Eligible</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div className="p-4 border-t border-[#E8E2D5] bg-[#FAF6EE] flex items-center justify-between gap-3">
+              <button
+                onClick={() => {
+                  setSelectedTxn(null);
+                  if (onSelectCase) onSelectCase(selectedTxn.Sender_Account);
+                  if (onNavigateTab) onNavigateTab("notices");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-white border border-[#E8E2D5] hover:bg-[#FAF6EE] text-[#2C2623] text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#D96B27]" />
+                <span>Issue Section 91 Notice</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedTxn(null);
+                  handleEmergencyFreeze();
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Emergency Debit Freeze</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
