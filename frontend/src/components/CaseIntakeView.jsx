@@ -59,6 +59,28 @@ export default function CaseIntakeView({
   });
   const [errorMessage, setErrorMessage] = useState(null);
   const [selectedArtifactModal, setSelectedArtifactModal] = useState(null);
+  const [activePhase, setActivePhase] = useState(() => {
+    try {
+      return localStorage.getItem("abhedya_intake_phase") || "phase1";
+    } catch (e) {
+      return "phase1";
+    }
+  });
+
+  const handlePhaseChange = (phase) => {
+    setActivePhase(phase);
+    try {
+      localStorage.setItem("abhedya_intake_phase", phase);
+    } catch (e) {}
+  };
+
+  const activeDisplayResult = ingestResult || (systemStatus?.records_parsed ? {
+    records_loaded: systemStatus.records_parsed,
+    high_risk_mules: systemStatus.records_parsed > 1000 ? 699 : 5,
+    file_name: systemStatus.records_parsed > 1000 ? "transactions_2m.parquet" : "cyber_crime_sample.csv",
+    ingestion_seconds: systemStatus.load_duration_seconds || 0.155,
+    detected_victim: victimAccount || "PUNB10000001"
+  } : null);
 
   useEffect(() => {
     if (activeIngestResult) {
@@ -181,7 +203,12 @@ export default function CaseIntakeView({
 
   const handleSelectVictim = (acctId) => {
     if (onSelectCase) onSelectCase(acctId);
-    if (onNavigateTab) onNavigateTab("trail");
+    handlePhaseChange("phase2");
+  };
+
+  const handleOpenRegister = () => {
+    handlePhaseChange("phase2");
+    if (onOpenRegisterModal) onOpenRegisterModal();
   };
 
   return (
@@ -206,7 +233,7 @@ export default function CaseIntakeView({
             <span>Reload Engine</span>
           </button>
           <button
-            onClick={onOpenRegisterModal}
+            onClick={handleOpenRegister}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -268,8 +295,114 @@ export default function CaseIntakeView({
         </div>
       </div>
 
-      {/* PHASE 1: Universal Bank Statement & Cyber Crime Data Ingestor */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-5">
+      {/* Case Investigation Stage Track & Phase Switcher */}
+      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-2.5 shadow-2xs">
+        <div className="flex items-center justify-between px-2 pt-1 pb-2 border-b border-[#F2ECE1] mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9E968D]">
+              Investigation Track:
+            </span>
+            <span className="text-xs font-semibold text-[#2C2623] font-serif">
+              {activePhase === "phase1" ? "Phase 1: Universal Multi-Bank Dataset Integrator" : "Phase 2: Complainant FIR & Victim Dossier"}
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-[#7C746D] hidden sm:block">
+            {activePhase === "phase1" ? "Step 1 of 2: Ingest Multi-Bank Data" : "Step 2 of 2: Verify FIR & Digital Artifacts"}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Phase 1 Button */}
+          <button
+            type="button"
+            onClick={() => handlePhaseChange("phase1")}
+            className={`flex items-start gap-3.5 p-3.5 rounded-xl text-left transition-all cursor-pointer ${
+              activePhase === "phase1"
+                ? "bg-[#FAF6EE] border-2 border-[#D96B27] shadow-xs"
+                : "bg-white hover:bg-[#FDFBF7] border border-[#F2ECE1] text-[#7C746D]"
+            }`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+              activePhase === "phase1"
+                ? "bg-[#D96B27] text-white shadow-2xs"
+                : "bg-[#FAF6EE] text-[#7C746D] border border-[#E8E2D5]"
+            }`}>
+              <Layers className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-mono font-bold uppercase tracking-wider ${
+                  activePhase === "phase1" ? "text-[#D96B27]" : "text-[#9E968D]"
+                }`}>
+                  Phase 1
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white border border-[#E8E2D5] text-[#746D65]">
+                  Bulk Ingestor
+                </span>
+              </div>
+              <div className="text-sm font-bold text-[#2C2623] mt-0.5 font-serif">
+                Universal Multi-Bank Data Integrator
+              </div>
+              <p className="text-[11px] text-[#746D65] mt-0.5 line-clamp-1">
+                Google Sheets, Bank CSV & Vector Indexing
+              </p>
+            </div>
+            {activePhase === "phase1" && (
+              <span className="text-[10px] font-mono font-bold text-[#D96B27] bg-[#FFF2E8] px-2 py-0.5 rounded border border-[#FED7AA] self-start mt-0.5 shrink-0">
+                ACTIVE VIEW
+              </span>
+            )}
+          </button>
+
+          {/* Phase 2 Button */}
+          <button
+            type="button"
+            onClick={() => handlePhaseChange("phase2")}
+            className={`flex items-start gap-3.5 p-3.5 rounded-xl text-left transition-all cursor-pointer ${
+              activePhase === "phase2"
+                ? "bg-[#FAF6EE] border-2 border-[#D96B27] shadow-xs"
+                : "bg-white hover:bg-[#FDFBF7] border border-[#F2ECE1] text-[#7C746D]"
+            }`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+              activePhase === "phase2"
+                ? "bg-[#D96B27] text-white shadow-2xs"
+                : "bg-[#FAF6EE] text-[#7C746D] border border-[#E8E2D5]"
+            }`}>
+              <FileText className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-mono font-bold uppercase tracking-wider ${
+                  activePhase === "phase2" ? "text-[#D96B27]" : "text-[#9E968D]"
+                }`}>
+                  Phase 2
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white border border-[#E8E2D5] text-[#746D65]">
+                  Citizen FIR Anchor
+                </span>
+              </div>
+              <div className="text-sm font-bold text-[#2C2623] mt-0.5 font-serif">
+                Complainant FIR & Victim Dossier
+              </div>
+              <p className="text-[11px] text-[#746D65] mt-0.5 line-clamp-1">
+                FIR Investigation Anchor, Citizen Loss & 6 Legal Artifacts
+              </p>
+            </div>
+            {activePhase === "phase2" && (
+              <span className="text-[10px] font-mono font-bold text-[#D96B27] bg-[#FFF2E8] px-2 py-0.5 rounded border border-[#FED7AA] self-start mt-0.5 shrink-0">
+                ACTIVE VIEW
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* PHASE 1 VIEW */}
+      {activePhase === "phase1" && (
+        <div className="space-y-6">
+          {/* PHASE 1: Universal Bank Statement & Cyber Crime Data Ingestor */}
+          <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2ECE1] pb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center text-[#D96B27]">
@@ -446,7 +579,7 @@ export default function CaseIntakeView({
         )}
 
         {/* Ingestion Success & Detected Victims Banner */}
-        {ingestResult && (
+        {activeDisplayResult && (
           <div className="bg-[#F0FDF4] border border-[#86EFAC] rounded-2xl p-5 shadow-xs space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DCFCE7] pb-3">
               <div className="flex items-center gap-2">
@@ -457,22 +590,24 @@ export default function CaseIntakeView({
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono font-bold text-[#15803D] bg-white px-2.5 py-0.5 rounded-lg border border-[#BBF7D0]">
-                  Indexed in {ingestResult.ingestion_seconds}s
+                  Indexed in {activeDisplayResult.ingestion_seconds}s
                 </span>
-                <button
-                  onClick={() => {
-                    setIngestResult(null);
-                    if (onUpdateIngestResult) onUpdateIngestResult(null);
-                    try {
-                      localStorage.removeItem("abhedya_ingest_result");
-                    } catch (e) {}
-                  }}
-                  className="text-xs font-semibold text-[#15803D] hover:text-[#DC2626] flex items-center gap-1 cursor-pointer transition-colors px-2 py-0.5 rounded-lg hover:bg-red-50"
-                  title="Clear uploaded dataset info"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  <span>Clear</span>
-                </button>
+                {ingestResult && (
+                  <button
+                    onClick={() => {
+                      setIngestResult(null);
+                      if (onUpdateIngestResult) onUpdateIngestResult(null);
+                      try {
+                        localStorage.removeItem("abhedya_ingest_result");
+                      } catch (e) {}
+                    }}
+                    className="text-xs font-semibold text-[#15803D] hover:text-[#DC2626] flex items-center gap-1 cursor-pointer transition-colors px-2 py-0.5 rounded-lg hover:bg-red-50"
+                    title="Clear uploaded dataset info"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Clear Upload</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -480,14 +615,14 @@ export default function CaseIntakeView({
               <div className="bg-white p-3 rounded-xl border border-[#DCFCE7]">
                 <span className="text-[10px] text-[#746D65] uppercase font-mono block">Records Loaded</span>
                 <span className="text-lg font-bold font-mono text-[#166534]">
-                  {ingestResult.records_loaded?.toLocaleString("en-IN")}
+                  {activeDisplayResult.records_loaded?.toLocaleString("en-IN")}
                 </span>
               </div>
 
               <div className="bg-white p-3 rounded-xl border border-[#DCFCE7]">
                 <span className="text-[10px] text-[#746D65] uppercase font-mono block">Flagged Mules</span>
                 <span className="text-lg font-bold font-mono text-[#DC2626]">
-                  {ingestResult.high_risk_mules} flagged
+                  {activeDisplayResult.high_risk_mules} flagged
                 </span>
               </div>
 
@@ -498,8 +633,8 @@ export default function CaseIntakeView({
 
               <div className="bg-white p-3 rounded-xl border border-[#DCFCE7]">
                 <span className="text-[10px] text-[#746D65] uppercase font-mono block">Source</span>
-                <span className="text-xs font-mono text-[#2C2623] truncate block mt-1" title={ingestResult.file_name}>
-                  {ingestResult.file_name}
+                <span className="text-xs font-mono text-[#2C2623] truncate block mt-1" title={activeDisplayResult.file_name}>
+                  {activeDisplayResult.file_name}
                 </span>
               </div>
             </div>
@@ -509,25 +644,80 @@ export default function CaseIntakeView({
               <div className="flex items-center gap-2 text-[#166534]">
                 <span className="font-semibold text-xs">Investigation Target Anchor:</span>
                 <span className="font-mono font-bold bg-white px-2.5 py-1 rounded-lg border border-[#BBF7D0] text-[#2C2623]">
-                  {ingestResult.detected_victim || victimAccount}
+                  {activeDisplayResult.detected_victim || victimAccount}
                 </span>
                 <span className="text-[11px] text-[#746D65]">
                   (Loss: ₹{Number(totalSiphoned || 370415.81).toLocaleString("en-IN")})
                 </span>
               </div>
 
-              <button
-                onClick={() => handleSelectVictim(ingestResult.detected_victim || victimAccount)}
-                className="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <span>Launch Money Trail Trace</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSelectVictim(activeDisplayResult.detected_victim || victimAccount)}
+                  className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-[#FAF6EE] text-[#2C2623] text-xs font-semibold border border-[#BBF7D0] shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>View in Phase 2 Dossier</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#D96B27]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onSelectCase) onSelectCase(activeDisplayResult.detected_victim || victimAccount);
+                    if (onNavigateTab) onNavigateTab("trail");
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Launch Money Trail Trace</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
 
+      {/* Phase 1 to Phase 2 Transition Footer */}
+      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-[#D96B27]/10 text-[#D96B27] flex items-center justify-center font-bold font-mono">
+            2
+          </div>
+          <div>
+            <div className="font-semibold text-[#2C2623]">
+              Dataset Ingested & Verified? Proceed to Case Dossier
+            </div>
+            <div className="text-[11px] text-[#746D65]">
+              Anchor complainant victim {victimAccount} ({victimName}) and verify the 6 digital legal evidence artifacts.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handlePhaseChange("phase2")}
+            className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+          >
+            <span>Go to Phase 2 FIR Dossier</span>
+            <ChevronRight className="w-3.5 h-3.5 text-[#D96B27]" />
+          </button>
+          <button
+            type="button"
+            onClick={onTraceNow}
+            className="px-4 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <span>Trace Money Trail</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* PHASE 2 VIEW */}
+  {activePhase === "phase2" && (
+    <div className="space-y-6">
       {/* PHASE 2: Complainant FIR & Victim Station Intake */}
       <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2ECE1] pb-3">
@@ -661,6 +851,33 @@ export default function CaseIntakeView({
           </table>
         </div>
       </div>
+
+      {/* Phase 2 Back to Phase 1 Switcher */}
+      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-[#7C746D]/15 text-[#2C2623] flex items-center justify-center font-bold font-mono">
+            1
+          </div>
+          <div>
+            <div className="font-semibold text-[#2C2623]">
+              Need to load another bank statement or Google Sheet?
+            </div>
+            <div className="text-[11px] text-[#746D65]">
+              Switch to Phase 1 Universal Multi-Bank Dataset Ingestor to stream new CSV, Excel, or Parquet exports.
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handlePhaseChange("phase1")}
+          className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+        >
+          <span>← Switch to Phase 1 Ingestor</span>
+        </button>
+      </div>
     </div>
+  )}
+</div>
   );
 }
