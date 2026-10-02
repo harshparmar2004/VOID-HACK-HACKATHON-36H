@@ -452,6 +452,8 @@ export default function App() {
               <Section91NoticesView
                 noticesData={noticesData}
                 victimAccount={activeCase}
+                victimName={victimName}
+                firNumber={firNumber}
               />
             </ErrorBoundary>
           </div>

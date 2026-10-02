@@ -55,3 +55,64 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #C4BCAD;
 }
+
+/* Print Styles: Isolates the Official Government Requisition Document */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 6mm;
+  }
+
+  body, html {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide all dashboard navigation, sidebar, top headers, buttons, pills */
+  header,
+  aside,
+  nav,
+  button,
+  .no-print,
+  [role="navigation"],
+  .assistant-bubble,
+  .sidebar,
+  .top-header,
+  footer {
+    display: none !important;
+  }
+
+  /* Reset layout containers */
+  #root,
+  main,
+  div[class*="min-h-screen"],
+  div[class*="flex-1"] {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Government Requisition Certificate Print Style */
+  .government-requisition-doc {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 16px 20px !important;
+    box-shadow: none !important;
+    background: #FFFFFF !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+  }
+}
