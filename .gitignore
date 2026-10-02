@@ -1,0 +1,11 @@
+data/
+.venv/
+wheels/
+abhedya/
+node_modules/
+.ipynb_checkpoints/
+__pycache__/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.csv

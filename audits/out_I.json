@@ -1,0 +1,294 @@
+{
+  "section": "I",
+  "written_at": "2026-10-02T08:12:50",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 3.518,
+  "checks": [
+    {
+      "id": "I1",
+      "result": "shapes=[{'shape': 'N.N.N.N', 'n': 2000000, 'min_len': 10, 'max_len': 15}]; non-int octets=0; >255=0; neg=0; leading-zero octets=0; empty/wrong-dot-count=0",
+      "count": 0,
+      "examples": [
+        {
+          "shape": "N.N.N.N",
+          "n": 2000000,
+          "min_len": 10,
+          "max_len": 15
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Validate 4 integer octets 0-255. Leading zeros are cosmetic; do not rewrite IPs.",
+      "extra": {
+        "shapes": [
+          {
+            "shape": "N.N.N.N",
+            "n": 2000000,
+            "min_len": 10,
+            "max_len": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "I2",
+      "result": "contains colon (IPv6?)=0; not dotted-decimal=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "IPv6/non-IP should go to rejects; none expected.",
+      "extra": {}
+    },
+    {
+      "id": "I3",
+      "result": "private/reserved counts={'rfc_10': 0, 'rfc_172': 0, 'rfc_192168': 0, 'loopback': 0, 'o_zero': 0, 'mcast': 0, 'link_local': 0} total=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "is_reserved_ip should cover 10/8, 172.16/12, 192.168/16, 127/8, 0/8, 224+, 169.254. Current file has none.",
+      "extra": {
+        "rfc_10": 0,
+        "rfc_172": 0,
+        "rfc_192168": 0,
+        "loopback": 0,
+        "o_zero": 0,
+        "mcast": 0,
+        "link_local": 0
+      }
+    },
+    {
+      "id": "I4",
+      "result": "103.x=1997346, 185.x=1327, 194.x=1327; other first-octets=[]",
+      "count": 2654,
+      "examples": [
+        {
+          "o1": 103,
+          "n": 1997346
+        },
+        {
+          "o1": 185,
+          "n": 1327
+        },
+        {
+          "o1": 194,
+          "n": 1327
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Foreign = 185.x or 194.x only on this file. Do not treat other non-103 as foreign without evidence.",
+      "extra": {
+        "octets": [
+          {
+            "o1": 103,
+            "n": 1997346
+          },
+          {
+            "o1": 185,
+            "n": 1327
+          },
+          {
+            "o1": 194,
+            "n": 1327
+          }
+        ]
+      }
+    },
+    {
+      "id": "I5",
+      "result": "top IP by distinct senders has 5 senders. top5=[{'ip': '103.38.180.4', 'n_tx': 5, 'n_senders': 5}, {'ip': '103.213.216.183', 'n_tx': 5, 'n_senders': 5}, {'ip': '103.45.48.204', 'n_tx': 5, 'n_senders': 5}, {'ip': '103.23.10.240', 'n_tx': 5, 'n_senders': 5}, {'ip': '103.54.32.155', 'n_tx': 4, 'n_senders': 4}]",
+      "count": 5,
+      "examples": [
+        {
+          "ip": "103.38.180.4",
+          "n_tx": 5,
+          "n_senders": 5
+        },
+        {
+          "ip": "103.213.216.183",
+          "n_tx": 5,
+          "n_senders": 5
+        },
+        {
+          "ip": "103.45.48.204",
+          "n_tx": 5,
+          "n_senders": 5
+        },
+        {
+          "ip": "103.23.10.240",
+          "n_tx": 5,
+          "n_senders": 5
+        },
+        {
+          "ip": "103.54.32.155",
+          "n_tx": 4,
+          "n_senders": 4
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Shared-IP cluster is M5; strong only with foreign/headless.",
+      "extra": {
+        "top20": [
+          {
+            "ip": "103.38.180.4",
+            "n_tx": 5,
+            "n_senders": 5
+          },
+          {
+            "ip": "103.213.216.183",
+            "n_tx": 5,
+            "n_senders": 5
+          },
+          {
+            "ip": "103.45.48.204",
+            "n_tx": 5,
+            "n_senders": 5
+          },
+          {
+            "ip": "103.23.10.240",
+            "n_tx": 5,
+            "n_senders": 5
+          },
+          {
+            "ip": "103.54.32.155",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.126.39.223",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.122.69.141",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.214.172.44",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.160.132.112",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.137.20.15",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.182.246.179",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.50.100.58",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.159.70.236",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.97.91.66",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.174.39.131",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.217.69.58",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.139.2.137",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.34.77.70",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.114.178.252",
+            "n_tx": 4,
+            "n_senders": 4
+          },
+          {
+            "ip": "103.182.151.52",
+            "n_tx": 4,
+            "n_senders": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "I6",
+      "result": "distinct IPs per sender: min=1 p50=84 p99=107 max=122; accounts mixing domestic+foreign=0 / 24488",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Domestic\u2194foreign switching is an M9 bot feature. Do not reject those rows.",
+      "extra": {}
+    },
+    {
+      "id": "I7",
+      "result": "foreign rows=2654 accounts=688 devices=[('Web_Emulator', 1327), ('Linux_Script', 1327)] modes=[('IMPS', 1327), ('UPI', 1327)] avg_amount=61348.936744536484; top cats=[('P2A', 1327), ('WALLET_LOAD', 1327)]",
+      "count": 2654,
+      "examples": [
+        {
+          "tx_id": "TXN477979674",
+          "src_acct": "IPOS10000416",
+          "ip": "185.45.177.159",
+          "device": "Web_Emulator",
+          "mode": "IMPS",
+          "amount": 7021.28,
+          "narration": "IMPS/P2A/INTERNAL_SETTLEMENT_5271"
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Foreign IP co-occurs with headless/cash-out \u2014 L3/M4. Profile in extra.",
+      "extra": {
+        "devices": [
+          {
+            "device": "Web_Emulator",
+            "n": 1327
+          },
+          {
+            "device": "Linux_Script",
+            "n": 1327
+          }
+        ],
+        "modes": [
+          {
+            "mode": "IMPS",
+            "n": 1327
+          },
+          {
+            "mode": "UPI",
+            "n": 1327
+          }
+        ],
+        "cats": [
+          {
+            "cat": "P2A",
+            "n": 1327
+          },
+          {
+            "cat": "WALLET_LOAD",
+            "n": 1327
+          }
+        ]
+      }
+    }
+  ],
+  "extra": {}
+}

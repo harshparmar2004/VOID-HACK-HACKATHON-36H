@@ -1,0 +1,4 @@
+igraph==1.0.0
+scikit-learn==1.9.1
+scipy==1.18.1
+polars==1.44.2

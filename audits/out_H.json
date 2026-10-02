@@ -1,0 +1,474 @@
+{
+  "section": "H",
+  "written_at": "2026-10-02T08:13:18",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 5.513,
+  "checks": [
+    {
+      "id": "H1",
+      "result": "hash #n pattern=1569833/2000000; underscore _n pattern=2954/2000000; 3-part RAIL/CAT/DETAIL=1714459/2000000; empty=0; non-3-part=285541",
+      "count": 285541,
+      "examples": [
+        {
+          "hash_pat": 1569833,
+          "uscore_pat": 2954,
+          "samples": [
+            {
+              "narration": "IMPS/FriendSplit#29109"
+            },
+            {
+              "narration": "UPI/Recharge/Mobile#30104"
+            },
+            {
+              "narration": "UPI/Zomato/Order#12419"
+            },
+            {
+              "narration": "NEFT/RentPayment#91668"
+            },
+            {
+              "narration": "UPI/Recharge/Mobile#37643"
+            }
+          ]
+        },
+        {
+          "narration": "IMPS/FriendSplit#33083",
+          "n": 9
+        },
+        {
+          "narration": "IMPS/FriendSplit#11687",
+          "n": 9
+        },
+        {
+          "narration": "IMPS/FriendSplit#45751",
+          "n": 9
+        }
+      ],
+      "verdict": "TRAP",
+      "handling": "Do not require '#<number>'. Real pattern is RAIL/CATEGORY/DETAIL_digits. Quarantine non-3-part only.",
+      "extra": {}
+    },
+    {
+      "id": "H2",
+      "result": "143283 distinct category segments. rarest=[{'cat': 'FriendSplit#10002', 'n': 1}, {'cat': 'FriendSplit#10004', 'n': 1}, {'cat': 'FriendSplit#10005', 'n': 1}, {'cat': 'FriendSplit#10006', 'n': 1}, {'cat': 'FriendSplit#10008', 'n': 1}]; most common=[{'cat': 'Flipkart', 'n': 143516}, {'cat': 'Recharge', 'n': 143156}, {'cat': 'Swiggy', 'n': 143049}, {'cat': 'Pharmacy', 'n': 142937}, {'cat': 'Bill', 'n': 142782}]",
+      "count": 143283,
+      "examples": [
+        {
+          "cat": "FriendSplit#10002",
+          "n": 1
+        },
+        {
+          "cat": "FriendSplit#10004",
+          "n": 1
+        },
+        {
+          "cat": "FriendSplit#10005",
+          "n": 1
+        },
+        {
+          "cat": "FriendSplit#10006",
+          "n": 1
+        },
+        {
+          "cat": "FriendSplit#10008",
+          "n": 1
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Rare categories are candidate M4 cash-out markers. Build narr_flags from a measured list, not guesses.",
+      "extra": {
+        "rarest": [
+          {
+            "cat": "FriendSplit#10002",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10004",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10005",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10006",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10008",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10012",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10014",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10015",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10017",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10021",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10023",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10025",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10026",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10027",
+            "n": 1
+          },
+          {
+            "cat": "FriendSplit#10033",
+            "n": 1
+          }
+        ],
+        "common": [
+          {
+            "cat": "Flipkart",
+            "n": 143516
+          },
+          {
+            "cat": "Recharge",
+            "n": 143156
+          },
+          {
+            "cat": "Swiggy",
+            "n": 143049
+          },
+          {
+            "cat": "Pharmacy",
+            "n": 142937
+          },
+          {
+            "cat": "Bill",
+            "n": 142782
+          },
+          {
+            "cat": "Merchant",
+            "n": 142751
+          },
+          {
+            "cat": "PetrolPump",
+            "n": 142606
+          },
+          {
+            "cat": "AmazonPay",
+            "n": 142434
+          },
+          {
+            "cat": "Zomato",
+            "n": 142371
+          },
+          {
+            "cat": "Family",
+            "n": 142258
+          }
+        ]
+      }
+    },
+    {
+      "id": "H3",
+      "result": "keyword hits: crypto=1327, p2p=1327, wallet=1327, task=300, refund=300",
+      "count": 4581,
+      "examples": [
+        {
+          "tx_id": "TXN515751130",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_2360",
+          "device": "Linux_Script",
+          "is_headless": true
+        },
+        {
+          "tx_id": "TXN515751130",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_2360",
+          "device": "Linux_Script",
+          "is_headless": true
+        },
+        {
+          "tx_id": "TXN515751130",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_2360",
+          "device": "Linux_Script",
+          "is_headless": true
+        },
+        {
+          "tx_id": "TXN401119292",
+          "narration": "UPI/REF/TASK_EARNING_REFUND_37961",
+          "device": "Android",
+          "is_headless": false
+        },
+        {
+          "tx_id": "TXN401119292",
+          "narration": "UPI/REF/TASK_EARNING_REFUND_37961",
+          "device": "Android",
+          "is_headless": false
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Score cash-out/scam keywords in later narration segments (M4). Do not send raw narration to the LLM.",
+      "extra": {
+        "keywords": [
+          {
+            "kw": "crypto",
+            "n": 1327
+          },
+          {
+            "kw": "usdt",
+            "n": 0
+          },
+          {
+            "kw": "p2p",
+            "n": 1327
+          },
+          {
+            "kw": "binance",
+            "n": 0
+          },
+          {
+            "kw": "wazirx",
+            "n": 0
+          },
+          {
+            "kw": "wallet",
+            "n": 1327
+          },
+          {
+            "kw": "gateway",
+            "n": 0
+          },
+          {
+            "kw": "atm",
+            "n": 0
+          },
+          {
+            "kw": "cash",
+            "n": 0
+          },
+          {
+            "kw": "withdraw",
+            "n": 0
+          },
+          {
+            "kw": "offshore",
+            "n": 0
+          },
+          {
+            "kw": "task",
+            "n": 300
+          },
+          {
+            "kw": "bonus",
+            "n": 0
+          },
+          {
+            "kw": "invest",
+            "n": 0
+          },
+          {
+            "kw": "ipo",
+            "n": 0
+          },
+          {
+            "kw": "kyc",
+            "n": 0
+          },
+          {
+            "kw": "customs",
+            "n": 0
+          },
+          {
+            "kw": "arrest",
+            "n": 0
+          },
+          {
+            "kw": "cbi",
+            "n": 0
+          },
+          {
+            "kw": "police",
+            "n": 0
+          },
+          {
+            "kw": "loan",
+            "n": 0
+          },
+          {
+            "kw": "refund",
+            "n": 300
+          },
+          {
+            "kw": "betting",
+            "n": 0
+          },
+          {
+            "kw": "hawala",
+            "n": 0
+          },
+          {
+            "kw": "mule",
+            "n": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "H4",
+      "result": "injection-like words=[{'kw': 'ignore', 'n': 0}, {'kw': 'previous', 'n': 0}, {'kw': 'instruction', 'n': 0}, {'kw': 'system', 'n': 0}, {'kw': 'assistant', 'n': 0}, {'kw': 'prompt', 'n': 0}, {'kw': 'override', 'n': 0}]; special tokens={'mustache': 0, 'dollar': 0, 'script': 0, 'close_xml': 0, 'or_sql': 0, 'drop_kw': 0, 'dashdash': 0, 'semicolon': 0}",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Never send raw Narration to the LLM. Treat injection-like hits as untrusted text, not mule labels.",
+      "extra": {
+        "words": [
+          {
+            "kw": "ignore",
+            "n": 0
+          },
+          {
+            "kw": "previous",
+            "n": 0
+          },
+          {
+            "kw": "instruction",
+            "n": 0
+          },
+          {
+            "kw": "system",
+            "n": 0
+          },
+          {
+            "kw": "assistant",
+            "n": 0
+          },
+          {
+            "kw": "prompt",
+            "n": 0
+          },
+          {
+            "kw": "override",
+            "n": 0
+          }
+        ],
+        "special": {
+          "mustache": 0,
+          "dollar": 0,
+          "script": 0,
+          "close_xml": 0,
+          "or_sql": 0,
+          "drop_kw": 0,
+          "dashdash": 0,
+          "semicolon": 0
+        }
+      }
+    },
+    {
+      "id": "H5",
+      "result": "length min=21 p50=24 p99=26 max=33 >200=0; non-ascii rows=0; zero-width rows=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Strip/flag zero-width and non-ASCII before any LLM; keep original in rejects/evidence.",
+      "extra": {}
+    },
+    {
+      "id": "H6",
+      "result": "rows with account-like token in narration=0; IFSC-like=0; account tokens not equal to sender/receiver=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "If decoy account numbers appear in narration, never copy them into notices; always use src/dst columns.",
+      "extra": {}
+    },
+    {
+      "id": "H7",
+      "result": "#digit suffix=1855374; _digit suffix=2954 (2607 distinct); ref equals own tx_id=0; ref equals some tx_id=0; duplicated refs=320",
+      "count": 2954,
+      "examples": [
+        {
+          "tx_id": "TXN401119292",
+          "narration": "UPI/REF/TASK_EARNING_REFUND_37961",
+          "ref": "37961"
+        },
+        {
+          "tx_id": "TXN953843067",
+          "narration": "IMPS/P2A/INTERNAL_SETTLEMENT_8255",
+          "ref": "8255"
+        },
+        {
+          "tx_id": "TXN515751130",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_2360",
+          "ref": "2360"
+        },
+        {
+          "tx_id": "TXN892472963",
+          "narration": "IMPS/P2A/INTERNAL_SETTLEMENT_1044",
+          "ref": "1044"
+        },
+        {
+          "tx_id": "TXN195243830",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_7085",
+          "ref": "7085"
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Trailing _digits is a generator reference, not Transaction_ID. Do not join on it.",
+      "extra": {}
+    },
+    {
+      "id": "H8",
+      "result": "categories with any headless row (top by headless rate)=[{'cat': 'P2A', 'n': 1327, 'n_headless': 1327, 'n_foreign': 1327, 'p_headless': 1.0}, {'cat': 'WALLET_LOAD', 'n': 1327, 'n_headless': 1327, 'n_foreign': 1327, 'p_headless': 1.0}]",
+      "count": 2654,
+      "examples": [
+        {
+          "cat": "P2A",
+          "n": 1327,
+          "n_headless": 1327,
+          "n_foreign": 1327,
+          "p_headless": 1.0
+        },
+        {
+          "cat": "WALLET_LOAD",
+          "n": 1327,
+          "n_headless": 1327,
+          "n_foreign": 1327,
+          "p_headless": 1.0
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Co-occurrence of category \u00d7 headless/foreign is an L3/M4 feature. Do not use rail prefix.",
+      "extra": {
+        "cats": [
+          {
+            "cat": "P2A",
+            "n": 1327,
+            "n_headless": 1327,
+            "n_foreign": 1327,
+            "p_headless": 1.0
+          },
+          {
+            "cat": "WALLET_LOAD",
+            "n": 1327,
+            "n_headless": 1327,
+            "n_foreign": 1327,
+            "p_headless": 1.0
+          }
+        ]
+      }
+    }
+  ],
+  "extra": {}
+}

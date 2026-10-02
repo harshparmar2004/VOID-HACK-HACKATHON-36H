@@ -1,0 +1,125 @@
+{
+  "section": "K",
+  "written_at": "2026-10-02T08:12:33",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 2.291,
+  "checks": [
+    {
+      "id": "K1",
+      "result": "account-prefix vs IFSC-prefix mismatches: src=0 dst=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Confirmed 0 mismatches. Keep as an ingest consistency check.",
+      "extra": {}
+    },
+    {
+      "id": "K2",
+      "result": "accounts whose bank prefix changes across rows=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "One account = one bank prefix. If this ever fires, conflict-flag the account.",
+      "extra": {}
+    },
+    {
+      "id": "K3",
+      "result": "generator vs real rail limits \u2014 UPI>1L=355, RTGS<2L=59747, IMPS>5L=0 (same as E8)",
+      "count": 60102,
+      "examples": [
+        {
+          "tx_id": "TXN583175063",
+          "mode": "UPI",
+          "amount": 177797.14
+        },
+        {
+          "tx_id": "TXN287031124",
+          "mode": "UPI",
+          "amount": 163532.28
+        },
+        {
+          "tx_id": "TXN825647943",
+          "mode": "UPI",
+          "amount": 144911.95
+        },
+        {
+          "tx_id": "TXN880426739",
+          "mode": "UPI",
+          "amount": 102517.66
+        },
+        {
+          "tx_id": "TXN552971441",
+          "mode": "UPI",
+          "amount": 188085.63
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Do not enforce NPCI/RBI rail limits at ingest; the file does not follow them.",
+      "extra": {}
+    },
+    {
+      "id": "K4",
+      "result": "foreign IP on iOS=0 Android=0 Windows_Browser=0; full device\u00d7foreign matrix=[{'device': 'Android', 'is_foreign': False, 'n': 665425}, {'device': 'Linux_Script', 'is_foreign': True, 'n': 1327}, {'device': 'Web_Emulator', 'is_foreign': True, 'n': 1327}, {'device': 'Windows_Browser', 'is_foreign': False, 'n': 666004}, {'device': 'iOS', 'is_foreign': False, 'n': 665917}]",
+      "count": 0,
+      "examples": [
+        {
+          "device": "Android",
+          "is_foreign": false,
+          "n": 665425
+        },
+        {
+          "device": "Linux_Script",
+          "is_foreign": true,
+          "n": 1327
+        },
+        {
+          "device": "Web_Emulator",
+          "is_foreign": true,
+          "n": 1327
+        },
+        {
+          "device": "Windows_Browser",
+          "is_foreign": false,
+          "n": 666004
+        },
+        {
+          "device": "iOS",
+          "is_foreign": false,
+          "n": 665917
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "If foreign IPs appear only on headless devices, that is the injected L3 combo \u2014 one signal, not two.",
+      "extra": {
+        "matrix": [
+          {
+            "device": "Android",
+            "is_foreign": false,
+            "n": 665425
+          },
+          {
+            "device": "Linux_Script",
+            "is_foreign": true,
+            "n": 1327
+          },
+          {
+            "device": "Web_Emulator",
+            "is_foreign": true,
+            "n": 1327
+          },
+          {
+            "device": "Windows_Browser",
+            "is_foreign": false,
+            "n": 666004
+          },
+          {
+            "device": "iOS",
+            "is_foreign": false,
+            "n": 665917
+          }
+        ]
+      }
+    }
+  ],
+  "extra": {}
+}

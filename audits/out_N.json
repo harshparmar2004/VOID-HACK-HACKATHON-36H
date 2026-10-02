@@ -1,0 +1,67 @@
+{
+  "section": "N",
+  "written_at": "2026-10-02T08:10:30",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 1.084,
+  "checks": [
+    {
+      "id": "N1",
+      "result": "Transaction_ID not unique: 2250 IDs over 4502 rows; thrice=2. Handled with tx_key.",
+      "count": 4502,
+      "examples": [
+        {
+          "n_ids": 2250,
+          "n_rows": 4502,
+          "thrice": 2
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Already decided: keep both rows; join on tx_key.",
+      "extra": {}
+    },
+    {
+      "id": "N2",
+      "result": "accounts matching ^[A-Z]{4}[0-9]{8}$ : 2000000/2000000",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Already decided: 4 letters + 8 digits.",
+      "extra": {}
+    },
+    {
+      "id": "N3",
+      "result": "narration rail vs Payment_Mode shares by mode=[{'mode': 'IMPS', 'p_upi': 0.713, 'p_imps': 0.145, 'p_neft': 0.142}, {'mode': 'NEFT', 'p_upi': 0.714, 'p_imps': 0.143, 'p_neft': 0.143}, {'mode': 'RTGS', 'p_upi': 0.719, 'p_imps': 0.141, 'p_neft': 0.14}, {'mode': 'UPI', 'p_upi': 0.715, 'p_imps': 0.143, 'p_neft': 0.142}]",
+      "count": 0,
+      "examples": [
+        {
+          "mode": "IMPS",
+          "p_upi": 0.713,
+          "p_imps": 0.145,
+          "p_neft": 0.142
+        },
+        {
+          "mode": "NEFT",
+          "p_upi": 0.714,
+          "p_imps": 0.143,
+          "p_neft": 0.143
+        },
+        {
+          "mode": "RTGS",
+          "p_upi": 0.719,
+          "p_imps": 0.141,
+          "p_neft": 0.14
+        },
+        {
+          "mode": "UPI",
+          "p_upi": 0.715,
+          "p_imps": 0.143,
+          "p_neft": 0.142
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Already decided: rail mismatch is noise, do not score.",
+      "extra": {}
+    }
+  ],
+  "extra": {}
+}
