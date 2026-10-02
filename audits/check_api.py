@@ -1,7 +1,17 @@
 """
-audits/check_api.py -- checks the Step 6 API (batches B1, B2, B3) against the database.
+audits/check_api.py -- checks the Step 6 API (batches B1, B2, B3, B4a, B4b) against the database.
 
 Read-only. Uses FastAPI's TestClient (no server, no network).
+
+Checked (B4b): the benchmark's ingest and graph times equal ingest_meta and
+the graph manifest, its trace sample is measured and no speed-up is claimed; the
+blind test marks every VICTIM account correct, agrees with GET /trace on what
+each trace found, repeats for a seed, and carries no ground-truth metric.
+
+Checked (B4a): the scanner summary and the problematic-transaction filters equal
+SQL written here, and the fields our data lacks are null; the CSV template has
+the 11 columns and one example row; deferred endpoints answer 501, dropped ones
+410, the frozen-accounts list is empty.
 
 Checked (B3): the active profile's weights, switches and gate status equal the
 stored definition; a preview with NO changes reproduces the stored scores (0
@@ -48,9 +58,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 from api.deps import db_path  # noqa: E402
 from api.main import app  # noqa: E402
 from api.middleware import ALLOWED_ORIGINS, TIMING_HEADER  # noqa: E402
+from api.schemas.benchmark import (  # noqa: E402
+    DEFAULT_JURY_VICTIMS, MAX_JURY_VICTIMS, BenchmarkResponse, JuryResponse)
 from api.schemas.entities import EntitiesResponse  # noqa: E402
 from api.schemas.mules import MuleItem  # noqa: E402
 from api.schemas.profiles import PreviewResponse, ProfileResponse  # noqa: E402
+from api.schemas.scanner import (  # noqa: E402
+    MAX_SCANNER_LIMIT, ProblematicTransaction, ScannerSummary)
 from api.schemas.status import StatusResponse  # noqa: E402
 from api.schemas.trace import (  # noqa: E402
     BatchNotFound, BatchResponse, CellsResponse, CellSummary, CellVictims, NetworkResponse,
@@ -77,15 +91,50 @@ SCHEMAS = {
     "profile": TypeAdapter(ProfileResponse),
     "preview": TypeAdapter(PreviewResponse),
     "/api/transactions/search": TypeAdapter(TransactionSearchResponse),
+    "/api/scanner/summary": TypeAdapter(ScannerSummary),
+    "benchmark": TypeAdapter(BenchmarkResponse),
+    "jury": TypeAdapter(JuryResponse),
+    "/api/scanner/problematic-transactions": TypeAdapter(list[ProblematicTransaction]),
 }
 
 SAMPLE_VICTIM = "SBIN10000294"     # the trace the task names; 11 accounts, 11 transfers
 SAMPLE_ACCOUNTS = 11
 SAMPLE_LINKS = 11
 UNKNOWN_ACCOUNT = "NOSUCHACCOUNT0000"
-READ_ONLY_POSTS = ["POST /api/profiles/preview", "POST /api/trace/batch"]
+READ_ONLY_POSTS = ["POST /api/profiles/preview", "POST /api/trace/batch",
+                   "POST /api/scanner/run-60s-benchmark", "POST /api/jury/blind-test"]
+BENCHMARK_TRACES = 20             # the sample size the task names
+JURY_SEED = 7                     # any fixed seed: the same victims twice
 # Writes are deferred: these routes exist and answer 501.
 DEFERRED_POSTS = ["POST /api/profiles", "POST /api/profiles/{profile_id}/activate"]
+# API_CONTRACT.md rows marked DEFERRED / LATER (501) and DROP (410), as (method, path called).
+DEFERRED_B4 = [
+    ("POST", "/api/upload"), ("POST", "/api/scanner/emergency-freeze"),
+    ("POST", "/api/scanner/unfreeze"), ("GET", "/api/legal/notices/" + SAMPLE_VICTIM),
+    ("GET", "/api/legal/case-diary/" + SAMPLE_VICTIM), ("GET", "/api/vault/artifacts"),
+    ("POST", "/api/vault/verify"), ("GET", "/api/vault/certificate/x")]
+DROPPED = [
+    ("POST", "/api/victim/load-demo/case_sunil_4hop"), ("POST", "/api/ingest-url"),
+    ("GET", "/api/settings"), ("POST", "/api/settings"),
+    ("POST", "/api/settings/test-connection"), ("POST", "/api/assistant/chat")]
+REFUSED_POSTS = [
+    "POST /api/upload", "POST /api/scanner/emergency-freeze", "POST /api/scanner/unfreeze",
+    "POST /api/vault/verify", "POST /api/victim/load-demo/{demo_id}", "POST /api/ingest-url",
+    "POST /api/settings", "POST /api/settings/test-connection", "POST /api/assistant/chat"]
+TEMPLATE_COLUMNS = [
+    "Transaction_ID", "Sender_Account", "Receiver_Account", "Sender_IFSC", "Receiver_IFSC",
+    "Amount", "Timestamp", "Payment_Mode", "Narration", "IP_Address", "Device_Type"]
+# Fields the UI reads that our data does not have: always null.
+SUMMARY_NULLS = ("elapsed_seconds", "speedup_factor", "throughput_txns_per_second",
+                 "benchmark_passed", "target_seconds", "parameters_evaluated",
+                 "heavy_whale_transactions", "hyper_frequency_accounts")
+ROW_NULLS = ("hop_stage", "anomaly_flags", "urgency", "estimated_minutes_to_exit",
+             "is_scam_narration")
+# The explorer's population, written here independently of the API's joins.
+SCOPE = ("(EXISTS (SELECT 1 FROM layer_links l WHERE l.tx_key = t.tx_key AND l.profile_id = ?) "
+         "OR t.src IN (SELECT acct_id FROM scores WHERE profile_id = ? AND is_flagged) "
+         "OR t.dst IN (SELECT acct_id FROM scores WHERE profile_id = ? AND is_flagged))")
+LINK = "EXISTS (SELECT 1 FROM layer_links l WHERE l.tx_key = t.tx_key AND l.profile_id = ?{})"
 PREVIEW_PARAMETER = "MP4"         # the change the task names: its weight set to 0
 PREVIEW_LIST_LIMIT = 200          # the preview's default account_limit
 
@@ -209,6 +258,36 @@ def expected_b3(db: Path, pid: str) -> dict:
             "links": con.execute(
                 "SELECT count(*) FROM layer_links WHERE profile_id = ?", [pid]).fetchone()[0],
         }
+    finally:
+        con.close()
+
+
+def expected_b4(db: Path, pid: str) -> dict:
+    """What the B4a scanner endpoints should agree with, from SQL written here."""
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        scope = ("FROM tx t JOIN accounts s ON s.acct_id = t.src "
+                 "JOIN accounts d ON d.acct_id = t.dst WHERE " + SCOPE)
+        e = {"tx": con.execute("SELECT count(*) FROM tx").fetchone()[0]}
+        e["scope_n"], e["scope_paise"], e["foreign_n"], e["foreign_paise"] = con.execute(
+            "SELECT count(*), sum(t.amount_paise), count(*) FILTER (WHERE t.is_foreign_ip), "
+            "coalesce(sum(t.amount_paise) FILTER (WHERE t.is_foreign_ip), 0) " + scope,
+            [pid] * 3).fetchone()
+        e["types"] = {k: (n, amt) for k, n, amt in con.execute(
+            "SELECT link_type, count(*), sum(amount_paise) FROM layer_links "
+            "WHERE profile_id = ? GROUP BY link_type", [pid]).fetchall()}
+        e["holders"] = con.execute(
+            "SELECT count(*) FROM scores WHERE profile_id = ? AND is_flagged "
+            "AND holding_paise > 0", [pid]).fetchone()[0]
+        e["amount_cut"] = con.execute(
+            "SELECT CAST(median(t.amount_paise) AS BIGINT) " + scope, [pid] * 3).fetchone()[0]
+        e["bank"] = con.execute(
+            "SELECT d.bank " + scope + " GROUP BY d.bank ORDER BY count(*) DESC, d.bank LIMIT 1",
+            [pid] * 3).fetchone()[0]
+        e["category"] = con.execute(
+            "SELECT split_part(split_part(t.narration, '/', 2), '#', 1) AS c " + scope
+            + " GROUP BY c ORDER BY count(*) DESC, c LIMIT 1", [pid] * 3).fetchone()[0]
+        return e
     finally:
         con.close()
 
@@ -678,6 +757,202 @@ def main() -> None:
             r = client.get(sp, params=query)
             check(f"search {name} -> 422", r.status_code == 422, f"HTTP {r.status_code}")
 
+        # B4a: /scanner/summary
+        pid = e["profile_id"]
+        b4 = expected_b4(db, pid)
+        sm = get(client, "/api/scanner/summary")
+        samples["/api/scanner/summary"] = sm
+        same("scanner records_scanned", sm["records_scanned"], b4["tx"])
+        same("scanner profile", sm["profile_id"], pid)
+        same("scanner flagged transfers", sm["flagged_transfers"]["count"], b4["scope_n"])
+        same("scanner flagged transfer volume",
+             paise(sm["flagged_transfers"]["total_volume_inr"]), b4["scope_paise"])
+        same("scanner layer links", sm["illegal_linkages"]["flagged_txns"],
+             sum(n for n, _ in b4["types"].values()))
+        same("scanner layer link volume", paise(sm["illegal_linkages"]["total_volume_inr"]),
+             sum(amt for _, amt in b4["types"].values()))
+        same("scanner link types", {x["link_type"]: (x["count"], paise(x["total_volume_inr"]))
+                                    for x in sm["link_types"]}, b4["types"])
+        same("scanner foreign ip transfers",
+             sm["multi_ip_geolocation"]["foreign_ip_txns"], b4["foreign_n"])
+        same("scanner foreign ip volume",
+             paise(sm["multi_ip_geolocation"]["total_volume_inr"]), b4["foreign_paise"])
+        same("scanner holding accounts",
+             sm["early_intervention"]["holding_accounts_at_risk"], b4["holders"])
+        same("scanner recoverable holding",
+             paise(sm["early_intervention"]["recoverable_holding_inr"]), e["holding_paise"])
+        check("scanner summary: fields we lack are null", all(sm[k] is None for k in SUMMARY_NULLS)
+              and sm["multi_ip_geolocation"]["subnets_flagged"] is None
+              and sm["early_intervention"]["predicted_cashout_window_mins"] is None)
+
+        # B4a: /scanner/problematic-transactions
+        pp = "/api/scanner/problematic-transactions"
+        top = MAX_SCANNER_LIMIT
+        rows = get(client, pp, limit=top)
+        samples[pp] = rows
+        same("problematic no filter returned", len(rows), min(top, b4["scope_n"]))
+        same("problematic default limit", len(get(client, pp)), min(100, b4["scope_n"]))
+        check("problematic rows: fields we lack are null",
+              all(x[k] is None for x in rows for k in ROW_NULLS))
+        check("problematic rows are a link or touch a flagged account", all(
+            x["link_type"] or x["sender_flagged"] or x["receiver_flagged"] for x in rows))
+        check("problematic rows newest first",
+              [x["txn_timestamp"] for x in rows] == sorted(
+                  (x["txn_timestamp"] for x in rows), reverse=True))
+        keys = [x["tx_key"] for x in rows]
+        same("problematic tx_keys unique", len(set(keys)), len(keys))
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            stored = {k: v for k, *v in con.execute(
+                "SELECT t.tx_key, t.amount_paise, t.tx_id, s.acct_no, d.acct_no, d.ifsc "
+                "FROM tx t JOIN accounts s ON s.acct_id = t.src "
+                "JOIN accounts d ON d.acct_id = t.dst WHERE t.tx_key IN (SELECT unnest(?))",
+                [keys]).fetchall()}
+        finally:
+            con.close()
+        same("problematic rows = stored transactions",
+             {x["tx_key"]: [paise(x["Amount_INR"]), x["Transaction_ID"], x["Sender_Account"],
+                            x["Receiver_Account"], x["Receiver_IFSC"]] for x in rows}, stored)
+        cut4 = b4["amount_cut"]
+        cases = {
+            "filter_type=ILLEGAL_LINKAGES": (LINK.format(""), [pid],
+                                             {"filter_type": "ILLEGAL_LINKAGES"}),
+            "filter_type=FOREIGN_IP": ("t.is_foreign_ip", [], {"filter_type": "FOREIGN_IP"}),
+            "min_amount": ("t.amount_paise >= ?", [cut4], {"min_amount": cut4 / 100}),
+            "bank_filter": ("(s.bank = ? OR d.bank = ?)", [b4["bank"]] * 2,
+                            {"bank_filter": b4["bank"]}),
+            "keyword": ("contains(lower(split_part(split_part(t.narration, '/', 2), '#', 1)), "
+                        "lower(?))", [b4["category"]], {"keyword": b4["category"].lower()}),
+            "bank + min_amount": ("(s.bank = ? OR d.bank = ?) AND t.amount_paise >= ?",
+                                  [b4["bank"]] * 2 + [cut4],
+                                  {"bank_filter": b4["bank"], "min_amount": cut4 / 100}),
+        }
+        for lt in b4["types"]:
+            cases[f"link_type={lt}"] = (LINK.format(" AND l.link_type = ?"), [pid, lt],
+                                        {"link_type": lt})
+            cases[f"filter_type={lt}"] = (LINK.format(" AND l.link_type = ?"), [pid, lt],
+                                          {"filter_type": lt})
+        for name, (where, params, query) in cases.items():
+            got = get(client, pp, limit=top, **query)
+            want = tx_count(db, SCOPE + " AND " + where, [pid] * 3 + params)
+            same(f"problematic {name} returned", len(got), min(top, want))
+            if "link_type" in query:
+                check(f"problematic {name} rows carry it",
+                      all(x["link_type"] == query["link_type"] for x in got))
+        check("problematic ALL / bank ALL = no filter",
+              get(client, pp, limit=top, filter_type="ALL", bank_filter="ALL") == rows)
+        for name, query in (("whale tab", {"filter_type": "HEAVY_WHALES"}),
+                            ("hop tab", {"filter_type": "SMURFING_HOPS"}),
+                            ("unknown link_type", {"link_type": "L9_L9"}),
+                            ("unknown filter", {"order_by": "ts"}),
+                            ("limit above the cap", {"limit": top + 1})):
+            r = client.get(pp, params=query)
+            check(f"problematic {name} -> 422", r.status_code == 422, f"HTTP {r.status_code}")
+
+        # B4a: CSV template
+        r = client.get("/api/templates/Sample_Victim_4Hop_CyberCrime_Statement.csv")
+        lines = r.text.splitlines()
+        check("template 200 text/csv", r.status_code == 200
+              and r.headers.get("content-type", "").startswith("text/csv"),
+              f"HTTP {r.status_code} {r.headers.get('content-type')}")
+        same("template columns", lines[0].split(",") if lines else [], TEMPLATE_COLUMNS)
+        check("template has one example row",
+              len(lines) == 2 and len(lines[1].split(",")) == len(TEMPLATE_COLUMNS), str(lines[1:]))
+        for name in ("Sample_Victim_4Hop_CyberCrime_Statement.pdf", "template.xlsx"):
+            r = client.get(f"/api/templates/{name}")
+            check(f"template {name} 404", r.status_code == 404, f"HTTP {r.status_code}")
+
+        # B4a: deferred -> 501, dropped -> 410, frozen-accounts -> []
+        for method, path in DEFERRED_B4:
+            r = client.request(method, path)
+            check(f"{method} {path} 501", r.status_code == 501
+                  and r.json().get("detail") == "not yet available", r.text[:120])
+        for method, path in DROPPED:
+            r = client.request(method, path)
+            check(f"{method} {path} 410", r.status_code == 410 and "detail" in r.json(),
+                  r.text[:120])
+        r = client.get("/api/scanner/frozen-accounts")
+        check("frozen-accounts is an empty list", r.status_code == 200 and r.json() == [],
+              r.text[:120])
+
+        # B4b: /scanner/run-60s-benchmark
+        bm = post(client, "/api/scanner/run-60s-benchmark", "benchmark", {})
+        samples["/api/scanner/run-60s-benchmark"] = bm
+        same("benchmark ingest rows", bm["ingestion"]["rows_loaded"], e["ingest"][0])
+        same("benchmark ingest seconds", bm["ingestion"]["load_seconds"], e["ingest"][2])
+        manifest = json.loads((db.parent / "graph" / "manifest.json").read_text(encoding="utf-8"))
+        same("benchmark graph build seconds", bm["graph"]["build_seconds"],
+             manifest["build_seconds"])
+        same("benchmark graph rows", bm["graph"]["rows"], manifest["rows"])
+        check("benchmark graph is current", bm["graph"]["current"] is True)
+        ts_ = bm["trace_sample"]
+        same("benchmark trace sample size", ts_["traces"], BENCHMARK_TRACES)
+        check("benchmark trace timings are measured and ordered",
+              0 < ts_["min_ms"] <= ts_["median_ms"] <= ts_["max_ms"] <= ts_["total_ms"], str(ts_))
+        check("benchmark claims no speed-up", all(bm[k] is None for k in SUMMARY_NULLS))
+        same("benchmark carries the scanner summary",
+             {k: v for k, v in bm.items() if k in sm}, sm)
+
+        # B4b: /jury/blind-test
+        jp = "/api/jury/blind-test"
+        r = client.post(jp)                    # the UI sends no body
+        check("jury no body 200", r.status_code == 200, f"HTTP {r.status_code} {r.text[:160]}")
+        same("jury no body default n",
+             r.json()["jury_criteria_summary"]["victims_traced"] if r.status_code == 200 else None,
+             min(DEFAULT_JURY_VICTIMS, e["roles"]["VICTIM"]))
+        jr = post(client, jp, "jury", {"seed": JURY_SEED})
+        samples[jp] = jr
+        js, q = jr["jury_criteria_summary"], jr["query_results"]
+        same("jury default n", len(q), min(DEFAULT_JURY_VICTIMS, e["roles"]["VICTIM"]))
+        same("jury victims distinct", len({x["victim_account"] for x in q}), len(q))
+        same("jury summary counts", (js["victims_traced"], js["correct"], js["incorrect"]),
+             (len(q), sum(x["correct"] for x in q), sum(not x["correct"] for x in q)))
+        check("jury no ground-truth metric", js["detection_metrics"] is None)
+        check("jury latencies measured", all(x["latency_ms"] > 0 for x in q)
+              and js["max_latency_ms"] == max(x["latency_ms"] for x in q))
+        again = post(client, jp, "jury", {"seed": JURY_SEED})
+        same("jury same seed = same victims and findings",
+             [(x["victim_account"], x["correct"], x["nodes_identified"])
+              for x in again["query_results"]],
+             [(x["victim_account"], x["correct"], x["nodes_identified"]) for x in q])
+        for x in q[:5]:                        # against GET /trace (nodes include the victim root)
+            t_ = get(client, f"/api/trace/{x['victim_account']}", "trace")
+            same(f"jury {x['victim_account']} = GET /trace",
+                 (x["nodes_identified"], x["transfers_found"], paise(x["siphoned_amount"]),
+                  x["freeze_targets"]),
+                 (len(t_["nodes"]) - 1, len(t_["links"]), paise(t_["total_siphoned_inr"]),
+                  len(t_["freeze_candidates"])))
+        full = post(client, jp, "jury", {"n": MAX_JURY_VICTIMS})
+        fq = full["query_results"]
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            victim_nos = {r_[0] for r_ in con.execute(
+                "SELECT a.acct_no FROM scores s JOIN accounts a USING (acct_id) "
+                "WHERE s.profile_id = ? AND s.role = 'VICTIM'", [e["profile_id"]]).fetchall()}
+        finally:
+            con.close()
+        same("jury all victims: exactly the VICTIM accounts",
+             {x["victim_account"] for x in fq}, victim_nos)
+        same("jury all victims correct", sum(x["correct"] for x in fq), len(victim_nos))
+        check("jury correct rows: found = expected", all(
+            x["nodes_identified"] == x["accounts_expected"]
+            and x["transfers_found"] == x["transfers_expected"]
+            and x["accounts_only_in_trace"] == 0 and x["accounts_only_in_chain"] == 0
+            for x in fq if x["correct"]))
+        check("jury roles add up to the accounts found", all(
+            sum(x["roles_breakdown"].values()) == x["nodes_identified"] for x in fq))
+        print(f"jury all victims: {len(fq)} traced, "
+              f"{full['jury_criteria_summary']['correct']} correct, median "
+              f"{full['jury_criteria_summary']['median_latency_ms']} ms, max "
+              f"{full['jury_criteria_summary']['max_latency_ms']} ms, chain "
+              f"{full['jury_criteria_summary']['chain_build_ms']} ms; benchmark sample: {ts_}; "
+              f"ingest {bm['ingestion']['load_seconds']} s, graph "
+              f"{bm['graph']['build_seconds']} s")
+        for name, bad in (("n = 0", {"n": 0}), ("n above the cap", {"n": MAX_JURY_VICTIMS + 1}),
+                          ("unknown field", {"ground_truth": "x"})):
+            r = client.post(jp, json=bad)
+            check(f"jury {name} -> 422", r.status_code == 422, f"HTTP {r.status_code}")
+
         # errors and CORS
         r = client.get("/api/nope")
         check("404 clean JSON", r.status_code == 404 and r.json().get("status") == 404
@@ -694,8 +969,9 @@ def main() -> None:
         writes = sorted(f"{m_.upper()} {p_}" for p_, ops in app.openapi()["paths"].items()
                         for m_ in ops if m_ not in ("get", "head", "options"))
         check("routes are listed", len(app.openapi()["paths"]) >= len(SCHEMAS) - 3)
-        check("no write routes (POSTs are read-only or deferred 501)",
-              writes == sorted(READ_ONLY_POSTS + DEFERRED_POSTS), ", ".join(writes))
+        check("no write routes (POSTs are read-only, deferred 501 or dropped 410)",
+              writes == sorted(READ_ONLY_POSTS + DEFERRED_POSTS + REFUSED_POSTS),
+              ", ".join(writes))
 
     after = file_state(db)
     check("database size unchanged", before[0] == after[0], f"{before[0]} -> {after[0]}")

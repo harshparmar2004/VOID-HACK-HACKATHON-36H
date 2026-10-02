@@ -55,19 +55,26 @@ DEFAULT_DB = ROOT / "data" / "case.duckdb"
 MEMORY_LIMIT = "3GB"
 
 
-def structural_chain(con: duckdb.DuckDBPyConnection, profile: dict) -> None:
-    """Build temp table `chain` (victim, hop, acct, tx_key) from tx alone."""
+def structural_chain(con: duckdb.DuckDBPyConnection, profile: dict,
+                     victims: list[int] | None = None) -> None:
+    """Build temp table `chain` (victim, hop, acct, tx_key) from tx alone.
+
+    `victims` (acct_ids) limits the chain to those send-only accounts; the
+    API's blind test uses it. None = every send-only account.
+    """
     w = profile["windows"]
     split_lo = int(w["split_forward_minutes"]["min"]) * 60
     split_hi = int(w["split_forward_minutes"]["max"]) * 60
     single_hi = int(w["single_forward_max_minutes"]) * 60
     max_hops = int((profile.get("trace") or {}).get("max_hops", 4))
 
+    only = "" if victims is None else " AND x.src IN (SELECT unnest(?))"
     con.execute("""
         CREATE OR REPLACE TEMP TABLE chain AS
         SELECT x.src AS victim, 1 AS hop, x.dst AS acct, x.ts_sec AS t, x.tx_key
         FROM tx x
-        WHERE x.src NOT IN (SELECT dst FROM tx)""")
+        WHERE x.src NOT IN (SELECT dst FROM tx)""" + only,
+                [] if victims is None else [victims])
     for hop in range(2, max_hops + 1):
         lo, hi = (split_lo, split_hi) if hop == 2 else (0, single_hi)
         con.execute(f"""

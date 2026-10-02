@@ -9,3 +9,4 @@ __pycache__/
 *.duckdb.wal
 *.parquet
 *.csv
+!api/static/*.csv

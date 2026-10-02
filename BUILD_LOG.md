@@ -341,3 +341,45 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - MP4 weight 0 loses no flags because weights are not rebalanced (stated in `warnings`) and the pass-through / sink override floor keeps the linked accounts above the flag threshold.
 - The preview does not rebuild cells / rings, and cannot preview window or feature-rule changes (those are measured into `features`).
 - The case file itself was not re-scored; the stored scores are the ones written before this batch.
+
+## 2026-10-02 — Step 6 batch B4a: scanner explorer, CSV template, deferred / dropped stubs
+
+**Step** — API_CONTRACT.md rows B4 (scanner summary + problematic transactions, templates) and every DEFERRED / LATER / DROP row. Read-only; database unchanged.
+
+**Files** — new `api\routers\scanner.py`, `templates.py`, `deferred.py`, `api\services\scanner.py`, `api\repositories\scanner.py`, `api\schemas\scanner.py`, `api\static\transactions_template.csv`; changed `api\main.py`, `audits\check_api.py`, `.gitignore` (`!api/static/*.csv`, the template was hidden by `*.csv`).
+
+**Key names** — `ScannerSummary`, `ProblematicTransaction`, `MAX_SCANNER_LIMIT`, `CONDITIONS` (scanner filter whitelist), `FILTER_FIELDS`, `FILTER_LINKED` / `FILTER_FOREIGN`, `TEMPLATE_CSV`, `DEFERRED`, `DROPPED`, `NOT_YET`; audit: `expected_b4`, `SCOPE`, `DEFERRED_B4`, `REFUSED_POSTS`.
+
+**Endpoints**
+- GET `/api/scanner/summary`: `records_scanned`, `flagged_transfers`, `illegal_linkages` (layer links), `link_types[]`, `multi_ip_geolocation` (foreign-IP transfers inside the explorer set), `early_intervention` (flagged accounts holding money). Null: `elapsed_seconds`, `speedup_factor`, `throughput_txns_per_second`, `benchmark_passed`, `target_seconds`, `parameters_evaluated`, `heavy_whale_transactions`, `hyper_frequency_accounts`, `subnets_flagged`, `predicted_cashout_window_mins`.
+- GET `/api/scanner/problematic-transactions?limit,filter_type,link_type,min_amount,bank_filter,keyword` (limit cap 1000, newest first, bare list as the UI expects). Population: layer links of the active profile + transfers whose sender or receiver is flagged. `filter_type` / `link_type` take a link type; `filter_type` also `ILLEGAL_LINKAGES` (any link) and `FOREIGN_IP`; `keyword` = contains on the narration category. UI names (`Transaction_ID`, `txn_timestamp`, `Sender_Account`, `Receiver_IFSC`, `Amount_INR`, `receiver_role`, `holding_balance`, ...) plus ours (`tx_key`, `link_type`, `lag_seconds`, `sender_flagged`, `receiver_flagged`, `narration_category`). Null: `hop_stage`, `anomaly_flags`, `urgency`, `estimated_minutes_to_exit`, `is_scam_narration`.
+- GET `/api/templates/{file}`: any `.csv` name returns the one template (11 columns + 1 example row); other extensions 404. The requested name is never used as a path.
+- 501 `not yet available`: POST `/upload`, `/scanner/emergency-freeze`, `/scanner/unfreeze`, `/vault/verify`; GET `/legal/notices/{victim}`, `/legal/case-diary/{victim}`, `/vault/artifacts`, `/vault/certificate/{id}`. 410: POST `/victim/load-demo/{id}`, `/ingest-url`, `/settings`, `/settings/test-connection`, `/assistant/chat`; GET `/settings`. GET `/scanner/frozen-accounts` -> `[]`.
+
+**Results** — `audits\check_api.py` PASSED, 1206 checks (was 1098), 14.6 s. Summary: 2,000,000 scanned; 2,954 flagged transfers = 2,954 layer links (VICTIM_L1 300, L1_L2 1,327, L2_L3 1,327), Rs 24.76 cr; 2,654 of them from a foreign IP; 1,073 flagged accounts holding Rs 8.48 cr. Timings: summary 53 ms, problematic 114 ms median / 404 ms max. Database size and modified time unchanged, no `.wal`.
+
+**Deviations / open items**
+- With the active profile no transfer touches a flagged account without being a layer link, so the "flagged transfers" part adds 0 rows today.
+- The UI tabs `HEAVY_WHALES` and `SMURFING_HOPS` answer 422 (no whales; no roles by hop); Step 7 must replace them with link-type tabs. `is_foreign_ip` is a boolean, the UI compares with `1`.
+- Not built here (still 404): POST `/scanner/run-60s-benchmark`, POST `/jury/blind-test` (rest of B4), POST `/parameters/simulate` (replaced by the profile endpoints in B3, not marked DROP).
+- TestClient only; not run under a real uvicorn process.
+
+## 2026-10-02 — Step 6 batch B4b: honest benchmark, jury blind test
+
+**Step** — API_CONTRACT.md rows `/scanner/run-60s-benchmark` and `/jury/blind-test`. Read-only; database unchanged; ingestion is never re-run.
+
+**Files** — new `api\routers\benchmark.py`, `api\services\benchmark.py`, `api\repositories\benchmark.py`, `api\schemas\benchmark.py`; changed `api\main.py`, `audits\check_api.py`, `audits\check_trace.py`.
+
+**Key names** — `BenchmarkResponse` (extends `ScannerSummary`), `IngestionTiming`, `GraphTiming`, `TraceSample`, `JuryRequest`, `JuryResult`, `JurySummary`, `JuryResponse`, `TRACE_SAMPLE`, `DEFAULT_JURY_VICTIMS`, `MAX_JURY_VICTIMS`, `_timed_traces`, `_sample`; `structural_chain(con, profile, victims=None)` in `check_trace.py` (new optional `victims` acct_id list; None = every send-only account, as before).
+
+**Endpoints**
+- POST `/api/scanner/run-60s-benchmark` (no body): the scanner summary plus `ingestion` (`load_seconds`, `rows_loaded`, `rows_per_second` from the latest `ingest_meta`), `graph` (`build_seconds`, `built_at`, `rows`, `accounts`, `current` from `graph\manifest.json`; null if not built) and `trace_sample` (20 random VICTIM accounts traced live: `total_ms`, `median_ms`, `min_ms`, `max_ms`, `accounts_median`). `elapsed_seconds`, `speedup_factor`, `throughput_txns_per_second`, `benchmark_passed`, `target_seconds` stay null.
+- POST `/api/jury/blind-test` `{n=20, seed?}` (body optional; n 1..1000, capped at the number of VICTIM accounts): per victim `victim_account`, `correct`, `latency_ms`, `nodes_identified`, `accounts_expected`, `transfers_found`, `transfers_expected`, `accounts_only_in_trace`, `accounts_only_in_chain`, `siphoned_amount`, `roles_breakdown`, `freeze_targets`; `jury_criteria_summary` with `victims_traced`, `correct`, `incorrect`, avg / median / max latency, `chain_build_ms`; `detection_metrics` null (no ground truth). correct = the trace's accounts and transfers equal the chain built from `tx` alone inside the profile's windows.
+
+**Results** — `audits\check_api.py` PASSED, 1258 checks (was 1206), 15.5 s. All 300 VICTIM accounts: 300 correct, median 0.91 ms, max 58 ms per trace, chain built in 49 ms. Benchmark: ingest 5.96 s for 2,000,000 rows (stored), graph 0.396 s (stored), 20 live traces in 20.6 ms (median 1.03 ms, median 9 accounts). Database size and modified time unchanged, no `.wal`. `check_trace.py` PASSED after the `structural_chain` change (0 mismatches).
+
+**Deviations / open items**
+- The API imports `structural_chain` from `audits\check_trace.py` (reuse asked for); the audit folder is now a runtime dependency of the API.
+- Trace timings are the engine call only, with the graph context already loaded; they exclude the HTTP layer and the UI field mapping.
+- UI (Step 7): the jury page reads `detection_metrics.f1_score` and role keys `L1_COLLECTOR` / `L2_DISTRIBUTOR` / `L3_CASHOUT`; we return null and our role names (L1 / L2 / L3), so its hard-coded fallbacks must go.
+- POST `/parameters/simulate` is still 404. TestClient only; not run under a real uvicorn process.
