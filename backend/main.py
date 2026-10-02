@@ -154,16 +154,14 @@ def get_hami_hopping_analysis(victim_account: str, max_hops: int = 4, time_windo
     """
     HAMI AML Detector: Multi-Hop Topological Hopping & GAT Attention Analysis
     Direct integration of Ymak7/HAMI-AML-DETECTOR from Hugging Face.
-    Classifies Fan-Out, Fan-In, Cycle, and Scatter-Gather bunny hopping.
+    Classifies Fan-Out, Fan-In, Cycle, Scatter-Gather, Gather-Scatter, and Rapid Pass-Through.
     """
     if not is_initialized:
         initialize_core()
     global hami_engine
     if hami_engine is None:
         hami_engine = HAMIHoppingEngine(engine.con)
-    analysis = hami_engine.analyze_victim_hopping(victim_account, max_hops=max_hops, time_window_minutes=time_window)
-    if not analysis.get("found", True):
-        raise HTTPException(status_code=404, detail="No outgoing transactions found for this account.")
+    analysis = hami_engine.analyze_account_hopping(victim_account, max_hops=max_hops, time_window_minutes=time_window)
     return analysis
 
 @app.get("/api/hami/clusters")
