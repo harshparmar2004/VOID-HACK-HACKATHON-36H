@@ -458,11 +458,11 @@ Place: Cyber Police Commissionerate
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono">
-                <th className="py-2.5 px-4 w-[27%]">Artifact &amp; Source</th>
-                <th className="py-2.5 px-4 w-[31%]">SHA-256 Cryptographic Hash</th>
-                <th className="py-2.5 px-4 w-[21%]">Intake Timestamp &amp; Examiner</th>
-                <th className="py-2.5 px-4 w-[11%]">Records &amp; Size</th>
-                <th className="py-2.5 px-4 w-[10%] text-right">Statutory Status</th>
+                <th className="py-2.5 px-4 w-[28%]">Artifact &amp; Source</th>
+                <th className="py-2.5 px-4 w-[20%]">SHA-256 Cryptographic Hash</th>
+                <th className="py-2.5 px-4 w-[22%]">Intake Timestamp &amp; Examiner</th>
+                <th className="py-2.5 px-4 w-[15%]">Records &amp; Size</th>
+                <th className="py-2.5 px-4 w-[15%] text-right">Statutory Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE1]">
@@ -493,20 +493,20 @@ Place: Cyber Police Commissionerate
                       </div>
                     </td>
 
-                    {/* Col 2: SHA-256 Hash (Sharp Square Box with Copy Action) */}
+                    {/* Col 2: SHA-256 Hash (Slightly Smaller, Compact Sharp Square Box) */}
                     <td className="py-3 px-4">
                       <div
                         onClick={() => handleCopyHash(item.sha256)}
-                        className="font-mono text-[11px] text-[#4A443E] bg-[#FAF6EE]/50 hover:bg-white border border-[#E8E2D5] hover:border-[#D96B27] rounded-sm px-2.5 py-1.5 cursor-pointer transition-all flex items-center justify-between gap-2 max-w-sm shadow-2xs group-hover:bg-white"
-                        title="Click to copy full SHA-256 digest"
+                        className="font-mono text-[10px] text-[#4A443E] bg-[#FAF6EE]/60 hover:bg-white border border-[#E8E2D5] hover:border-[#D96B27] rounded-sm px-2 py-1 cursor-pointer transition-all flex items-center justify-between gap-1.5 w-44 sm:w-52 shadow-2xs group-hover:bg-white"
+                        title={`Full SHA-256: ${item.sha256} (Click to copy)`}
                       >
                         <span className="truncate tracking-tight select-all">{item.sha256}</span>
                         {copiedHash === item.sha256 ? (
-                          <span className="text-[10px] text-[#059669] font-bold shrink-0 flex items-center gap-1 font-mono">
-                            <Check className="w-3 h-3" /> Copied
+                          <span className="text-[9px] text-[#059669] font-bold shrink-0 flex items-center gap-0.5 font-mono">
+                            <Check className="w-2.5 h-2.5" /> Copied
                           </span>
                         ) : (
-                          <Copy className="w-3 h-3 text-[#9E968D] group-hover:text-[#D96B27] shrink-0" />
+                          <Copy className="w-2.5 h-2.5 text-[#9E968D] group-hover:text-[#D96B27] shrink-0" />
                         )}
                       </div>
                     </td>
