@@ -50,6 +50,29 @@ commission_ranges:
 cashout_categories: [P2A, WALLET_LOAD, P2P_CRYPTO]
 
 # ---------------------------------------------------------------------------
+# Feature-measurement cut-offs (Section 4.6: none hard-coded).
+# These shape a MEASUREMENT in engine/features.py, not a score. They live here
+# so the whole definition of `features` is reproducible from the profile.
+# ---------------------------------------------------------------------------
+feature_rules:
+  # A sender counts as victim-like if it never receives and sends at most this
+  # many times ("send-only with a single or very few outflows"). Every verified
+  # victim on this file has exactly 1 outflow, so 3 leaves headroom without
+  # catching normal accounts (all >= 50 transactions, both directions).
+  victim_like_max_outflows: 3
+  # recurring_sender_share: a sender is recurring once it has sent on at least
+  # this many DISTINCT DAYS (Section 4.6 -- days, never transaction count).
+  recurring_min_days: 3
+  # odd_hour_share window, hours [from, to) -- "1-5 AM" in Section 4.1.
+  odd_hour_from: 1
+  odd_hour_to: 5
+  # structuring_share: "round amount" unit, 1,000 rupees expressed in paise.
+  round_unit_paise: 100000
+  # Allocation safety valve: maximum re-offer rounds before the build fails
+  # rather than silently leaving outflows unallocated (see features.py).
+  max_alloc_rounds: 25
+
+# ---------------------------------------------------------------------------
 # Mule Index -- MP1..MP8 (Section 4.1). Weights sum to 100.
 # ---------------------------------------------------------------------------
 mule_index:
@@ -137,14 +160,20 @@ mule_index:
     - id: MP6
       name: One-way flow
       index: mule
-      features: [reciprocity]
+      features: [is_send_only, is_receive_only]
       rule:
-        type: compound
-        full: {feature: reciprocity, equals: 0, and_one_directional: true}
-        half: {feature: reciprocity, max: 0.10}
-      rule_text: "full: reciprocity 0 and one-directional (send-only or receive-only); half: reciprocity <= 0.10"
+        type: boolean
+        full: {any_of: [{feature: is_send_only}, {feature: is_receive_only}]}
+        half: null
+      rule_text: "full if is_send_only or is_receive_only, else 0 (no reciprocity component)"
       weight: 10
       enabled: true
+      gate: gate_reciprocity
+      notes: >
+        Section 4.6: the reciprocity gate is closed on this dataset, so MP6 has
+        no reciprocity component. The old half rule (reciprocity <= 0.10) was
+        true for all 23,500 normal accounts (max 0.0267) and leaked 5 points to
+        the whole population.
 
     - id: MP7
       name: Neighbour risk
@@ -264,8 +293,11 @@ trust_index:
       features: [days_active]
       rule: {type: threshold_asc, feature: days_active, full_at: 12, half_at: null}
       rule_text: "days_active >= 12 -> full"
-      weight: 25
+      weight: 35
       enabled: true
+      notes: >
+        Section 4.6: +10 from T2, whose 20 points were redistributed when the
+        reciprocity gate closed (T1 25 -> 35, T5 15 -> 25).
 
     - id: T2
       name: Two-way relationships
@@ -273,8 +305,14 @@ trust_index:
       features: [reciprocity]
       rule: {type: threshold_asc, feature: reciprocity, full_at: 0.30, half_at: null}
       rule_text: "reciprocity >= 0.30 -> full"
-      weight: 20
-      enabled: true
+      weight: 0
+      enabled: false
+      gate: gate_reciprocity
+      disabled_reason: >
+        Gate gate_reciprocity is closed: the normal-population median
+        reciprocity is 0.0 (max 0.0267), because counterparties are drawn at
+        random and almost never recur in both directions. No account could ever
+        reach 0.30, so the 20 points moved to T1 (+10) and T5 (+10).
 
     - id: T3
       name: Balance retention
@@ -306,8 +344,9 @@ trust_index:
       features: [neighbour_risk]
       rule: {type: threshold_asc, feature: neighbour_risk, transform: "100 - neighbour_risk", full_at: 80, half_at: null}
       rule_text: "100 - neighbour_risk >= 80 -> full"
-      weight: 15
+      weight: 25
       enabled: true
+      notes: "Section 4.6: +10 from T2 when the reciprocity gate closed."
 
     - id: T6
       name: Recurring inflows
@@ -474,6 +513,24 @@ reliability_gates:
     measured_extra: {hour_cv: 0.002268, min_hour_rows: 83025, max_hour_rows: 83906}
     status: closed
     reason: "Hourly activity is flat (ratio 1.0106, cv 0.0023), so odd-hour and bot-timing parameters cannot discriminate."
+
+  - id: gate_reciprocity
+    gates: [T2, MP6]
+    test: normal_population_median_reciprocity
+    description: >
+      median `reciprocity` across accounts that are neither send-only nor
+      receive-only and sit outside the one-way chain cohorts
+    opens_when: {operator: ">", threshold: 0.05}
+    measured: 0.0
+    measured_extra: {p90: 0.006173, max: 0.026738, zero_accounts: 17234, nonzero_accounts: 6266}
+    status: closed
+    reason: >
+      Counterparties are drawn at random, so almost no counterparty of a normal
+      account appears in both directions: the median is 0.0 and the maximum
+      across all 23,500 normal accounts is 0.0267. T2 ("reciprocity >= 0.30")
+      can never fire, and MP6's old half rule ("reciprocity <= 0.10") fires for
+      every normal account. T2 goes to weight 0 with its 20 points moved to T1
+      and T5; MP6 keeps only the one-directional test.
 
   - id: gate_ip_reuse
     gates: [ZP2]
