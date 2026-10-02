@@ -239,3 +239,29 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 
 **Deviations / open items**
 - The open items of the Step 5c entry still stand (cell reach = the cell's L1; reverse fallback never run on real data).
+
+## 2026-10-02 — Step 5c follow-ups: victim first hop, L1 edge score
+
+**Step** — (a), (b), (c) were already done in the entry above and were skipped. Done here: (d) the victim's first hop when no layer link exists, and (e) the unflagged-ranking test.
+
+**Files** — `engine\victim_trace.py`; `engine\config.yaml` (new `trace.l1_edge_score` block); profile `v1-verified` reseeded with `engine\seed_profile.py` (new trace keys only, no scoring value changed, scoring not rerun).
+
+**Key names** — `_l1_edge_scores`, `_threshold`, `Context.edge_facts`; transfer fields `confidence` (high / medium / low) and `l1_edge_score`; summary fields `low_confidence`, `payments_not_followed`; stop reason `no_payment_with_l1_edge_score`.
+
+**Changes (d)**
+- Victim hop 1 with no layer link: payments to flagged receivers only. If none, only the payment(s) with the highest L1 edge score (ties together, score must be above 0), marked low confidence in the transfer, the findings and the `how` line. `coverage_target` is no longer applied to the victim's payments; the rest are reported as `payments_not_followed` and never tainted.
+- L1 edge score (Section 4.4 step 0), weights 40/20/15/15/10 from the profile: onward forwarding inside `trace.fallback_window`; burst fan-in from `features` against the ZP1 cut-offs; first-time payee AND amount vs population median against the MP8 cut-offs; forwarded money moving on again inside the single-forward window; the MP3 layering-edge combo on the payment.
+- Later hops are unchanged (`_fallback_choice`: flagged first, then unflagged by `final_index` to 0.90).
+
+**Results (e)** — `%TEMP%\unflagged_test` copy, victim BARB10000045 (Rs 285,262.68, 9 accounts with links): 9 `layer_links` rows deleted, `is_flagged = false` on its 4 L2 and 4 L3.
+- Hop 1 followed the flagged L1 IPOS10000434. At the L1 the unflagged ranking followed ICIC10000793 (Rs 206,254.40) and SBIN10001068 (Rs 51,625.23); they forwarded to AIRP10001394 and PYTM10001387.
+- 5 of 9 accounts, 5 transfers; Rs 21,677.80 untraced at the L1 (L2s SBIN10000910, AXIS10000802 and their L3s not reached); taint reconciles (difference 0); no unrelated account.
+- Extra run, L1 unflagged too: its payment was followed with L1 edge score 69.2, low confidence, same 5 accounts.
+- Copy and its graph deleted; live database written only by the reseed. Test 1.8 s.
+- `audits\check_trace.py`: PASSED — 300 victims, 0 account / 0 transfer mismatches, 0 traces needed the fallback; 129 cells, 0 reverse mismatches; trace median 0.91 ms.
+
+**Deviations / open items**
+- A locked profile was reseeded in place to add the trace keys (same as earlier trace keys); say if this should be a new profile_id instead.
+- Burst fan-in scores 0 in the edge score: the ZP1 cut-offs are null in the profile, so 20 of the 100 points cannot be earned on this file.
+- Every victim on this file has one payment, so "highest-scoring payment among several" is untested on real data.
+- The edge-score part definitions are my reading of the one-line step 0; they are written out in the `config.yaml` comment for review.

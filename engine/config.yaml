@@ -560,8 +560,36 @@ trace:
   fallback_window: single_forward_max_minutes
   # Fallback only: every in-window outflow to a flagged receiver is followed;
   # unflagged receivers are then followed, ranked by final_index and amount,
-  # until this share of the remaining tainted amount is covered.
+  # until this share of the remaining tainted amount is covered. Not used for
+  # the victim's own payments (see l1_edge_score).
   coverage_target: 0.90
+  # The VICTIM's own payments when none is a layer link (Section 4.4 step 0).
+  # Payments to flagged receivers are followed. If there is none, only the
+  # payment(s) with the highest L1 edge score are followed, marked low
+  # confidence; coverage_target is never applied to the victim's payments.
+  # Each part is a 0-1 fraction of its weight:
+  #   onward_forwarding   share of the payment the receiver sent on inside
+  #                       fallback_window after it arrived
+  #   burst_fan_in        receiver's features.burst_fan_in against the cut-offs
+  #                       of the parameter named in burst_fan_in_rule (null
+  #                       cut-offs = not applicable = 0 points)
+  #   first_time_payee_amount_anomaly
+  #                       victim never paid this receiver before AND the amount
+  #                       against the population median reaches the cut-offs of
+  #                       the parameter named in amount_anomaly_rule
+  #   downstream_l2_pattern
+  #                       share of the forwarded money whose next receiver sent
+  #                       it on again inside windows.single_forward_max_minutes
+  #   narration_device    the payment is a layering edge (the MP3 combo)
+  l1_edge_score:
+    weights:
+      onward_forwarding: 40
+      burst_fan_in: 20
+      first_time_payee_amount_anomaly: 15
+      downstream_l2_pattern: 15
+      narration_device: 10
+    burst_fan_in_rule: ZP1
+    amount_anomaly_rule: MP8
   # Safety cap for a very connected account: stop expanding, mark truncated.
   max_accounts: 500
   # Findings: at most this many evidence sentences per pattern (the rest are

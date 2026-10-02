@@ -22,6 +22,11 @@ HOW A HOP IS FOLLOWED
     such transfer to a flagged receiver is followed; then unflagged receivers,
     ranked by final_index and then amount, until trace.coverage_target of the
     remaining tainted amount is covered.
+  * The victim's own payments are different (Section 4.4 step 0). With no
+    layer link, payments to flagged receivers are followed. If there is none,
+    only the payment(s) with the highest L1 edge score are followed, marked
+    low confidence. Coverage is never filled from the victim's other payments;
+    they are reported as payments_not_followed.
   * Stops at receive-only accounts and at trace.max_hops (default 4).
     trace.max_accounts caps a very connected account (result: truncated).
 
@@ -47,7 +52,8 @@ OUTPUT (Section 4.4)
                      SCATTER_GATHER, CYCLE (only if present). Cut-offs come from
                      the profile; every number in an evidence sentence comes
                      from this trace. confidence is high when every transfer of
-                     the pattern is a proven layer link, medium otherwise.
+                     the pattern is a proven layer link, low when one was
+                     chosen by the L1 edge score, medium otherwise.
   summary            totals, the reconciliation, and who / how / why / when
   freeze_candidates  freeze_recommended accounts still holding this victim's
                      money, largest first, with the transfers proving receipt
@@ -89,7 +95,7 @@ import numpy as np
 
 # Same directory as this script: shared helpers, never re-implemented.
 import graph
-from features import active_profile
+from features import active_profile, sql_params
 
 ENGINE_DIR = Path(__file__).resolve().parent
 ROOT = ENGINE_DIR.parent
@@ -229,6 +235,16 @@ class Context:
         self.rapid_window = max(self.split_window[1], self.single_window[1])
         self.max_evidence = int(tr.get("max_evidence_sentences", 10))
 
+        # L1 edge score (Section 4.4 step 0): weights and the two reused
+        # cut-off rules. Read here, checked only when a trace needs them.
+        self.edge = tr.get("l1_edge_score")
+        rules = {p["id"]: p["rule"] for p in profile["mule_index"]["parameters"]
+                 + profile["mule_index"].get("zero_weight_parameters", [])}
+        self.edge_rules = {k: rules.get((self.edge or {}).get(k))
+                           for k in ("burst_fan_in_rule", "amount_anomaly_rule")}
+        self.cashout_list = sql_params(profile)["cashout_list"]
+        self._pop_median: float | None = None
+
     def _add_details(self, rows: list) -> None:
         for (acct_id, role, confirmed, final, mule, trust, band, flagged,
              ring_id, reasons, freeze, account_holding, victim) in rows:
@@ -262,6 +278,28 @@ class Context:
                 [tx_keys]).fetchall())
         finally:
             con.close()
+
+    def edge_facts(self, tx_keys: list[int], receivers: list[int]):
+        """What the L1 edge score reads from the database for one victim's
+        payments: the layering-edge payments (the same combo features.sql
+        counts for MP3), the receivers' burst_fan_in as stored in `features`,
+        and the population median amount."""
+        con = duckdb.connect(str(self.db), read_only=True)
+        try:
+            layering = {r[0] for r in con.execute(
+                "SELECT tx_key FROM tx WHERE tx_key IN (SELECT unnest(?)) "
+                "AND is_headless AND is_foreign_ip "
+                "AND split_part(split_part(narration, '/', 2), '#', 1) "
+                f"IN ({self.cashout_list})", [tx_keys]).fetchall()}
+            burst = dict(con.execute(
+                "SELECT acct_id, burst_fan_in FROM features "
+                "WHERE acct_id IN (SELECT unnest(?))", [receivers]).fetchall())
+            if self._pop_median is None:
+                self._pop_median = float(con.execute(
+                    "SELECT median(amount_paise) FROM tx").fetchone()[0])
+        finally:
+            con.close()
+        return layering, burst, self._pop_median
 
     def out_slice(self, a: int):
         lo, hi = self.g["out_ptr"][a], self.g["out_ptr"][a + 1]
@@ -309,6 +347,52 @@ def _fallback_choice(ctx: Context, dst, amt, candidates: np.ndarray,
     n_take = int(np.searchsorted(covered, target, side="left")) + 1
     chosen[order[:n_take]] = True
     return chosen
+
+
+def _threshold(value, rule: dict | None) -> float:
+    """threshold_desc as scoring reads it: 1 at full_at, 0.5 at half_at. A NULL
+    value or a null cut-off is not applicable: 0 points."""
+    if value is None or not rule or rule.get("full_at") is None or rule.get("half_at") is None:
+        return 0.0
+    return 1.0 if value >= rule["full_at"] else 0.5 if value >= rule["half_at"] else 0.0
+
+
+def _l1_edge_scores(ctx: Context, source: int) -> np.ndarray:
+    """L1 edge score of each of the victim's payments (Section 4.4 step 0),
+    0-100, weights from trace.l1_edge_score. The loops run over this one
+    account's payments and the handful of transfers each receiver sent on."""
+    if not ctx.edge or not ctx.edge.get("weights"):
+        raise SystemExit("profile has no trace.l1_edge_score block -- reseed from "
+                         "engine\\config.yaml")
+    w = ctx.edge["weights"]
+    dst, o_tx, o_ts, o_amt = ctx.out_slice(source)
+    layering, burst, pop_median = ctx.edge_facts(o_tx.tolist(), sorted(set(dst.tolist())))
+    scores = np.zeros(len(dst))
+    for k in range(len(dst)):
+        r, ts, amount = int(dst[k]), int(o_ts[k]), int(o_amt[k])
+        r_dst, _, r_ts, r_amt = ctx.out_slice(r)
+        sent_on = _in_window(r_ts, np.array([ts]), ctx.fallback_window)
+        forwarded = float(r_amt[sent_on].sum())
+        onward = min(1.0, forwarded / amount) if amount else 0.0
+        # Downstream L2 pattern: the forwarded money moved on once more.
+        again = 0.0
+        for j in np.flatnonzero(sent_on):
+            n_ts = ctx.out_slice(int(r_dst[j]))[2]
+            if len(n_ts) and _in_window(n_ts, np.array([int(r_ts[j])]), ctx.single_window).any():
+                again += float(r_amt[j])
+        downstream = again / forwarded if forwarded else 0.0
+        first_time = not (o_ts[dst == r] < ts).any()
+        anomaly = _threshold(amount / pop_median if pop_median else None,
+                             ctx.edge_rules["amount_anomaly_rule"])
+        parts = {
+            "onward_forwarding": onward,
+            "burst_fan_in": _threshold(burst.get(r), ctx.edge_rules["burst_fan_in_rule"]),
+            "first_time_payee_amount_anomaly": anomaly if first_time else 0.0,
+            "downstream_l2_pattern": downstream,
+            "narration_device": 1.0 if int(o_tx[k]) in layering else 0.0,
+        }
+        scores[k] = sum(float(w[name]) * parts[name] for name in parts)
+    return np.round(scores, 2)
 
 
 def _expand(ctx: Context, acct: int, batch: list[tuple[int, float, int]]):
@@ -423,12 +507,14 @@ def _findings(ctx: Context, source: int, nodes: dict[int, dict], transfers: list
     def finding(pattern: str, lines: list[str], accts: set[int], used: list[dict]) -> dict:
         used = sorted({t["tx_key"]: t for t in used}.values(), key=lambda t: t["tx_key"])
         proven = all(t["via"] == "layer_link" for t in used)
+        guessed = any(t.get("edge_score") is not None for t in used)
         extra = [f"and {len(lines) - cap} more."] if len(lines) > cap else []
         return {
             "pattern": pattern,
             # high = every transfer is a proven layer link; medium = at least
-            # one was followed by the fallback rules (time and amount only).
-            "confidence": "high" if proven else "medium",
+            # one was followed by the fallback rules (time and amount only);
+            # low = one was chosen by the L1 edge score.
+            "confidence": "low" if guessed else "high" if proven else "medium",
             "evidence": lines[:cap] + extra,
             "accounts": sorted(name[a] for a in accts),
             "tx_keys": [t["tx_key"] for t in used],
@@ -546,22 +632,32 @@ def trace_victim(acct_no: str, db: Path | str | None = None) -> dict:
     src = node(source, 0)
     dst, o_tx, o_ts, o_amt = ctx.out_slice(source)
     frontier: dict[int, list] = {}
+    not_followed = {"count": 0, "amount": 0}
     if not len(o_ts):
         src["stopped"] = "no_outgoing_transfers"
     else:
         linked = np.isin(o_tx, ctx.link_keys)
+        edge_scores = None
         if linked.any():
             via, follow = "layer_link", linked
         else:
-            via = "fallback"
-            follow = _fallback_choice(ctx, dst, o_amt, np.ones(len(dst), dtype=bool),
-                                      float(o_amt.sum()))
+            # No layer link: payments to flagged receivers only. If there is
+            # none, only the payment(s) with the highest L1 edge score (step 0),
+            # low confidence. Coverage is never filled from the other payments.
+            via, follow = "fallback", ctx.flagged[dst]
+            if not follow.any():
+                edge_scores = _l1_edge_scores(ctx, source)
+                follow = (edge_scores == edge_scores.max()) & (edge_scores > 0)
+                if not follow.any():
+                    src["stopped"] = "no_payment_with_l1_edge_score"
+        not_followed = {"count": int((~follow).sum()), "amount": int(o_amt[~follow].sum())}
         for k in np.flatnonzero(follow):
             amount = int(o_amt[k])
             src["out"] += amount
             transfers.append({"hop": 1, "from": source, "to": int(dst[k]), "tx_key": int(o_tx[k]),
                               "ts": int(o_ts[k]), "amount": amount, "tainted": float(amount),
-                              "via": via})
+                              "via": via,
+                              "edge_score": None if edge_scores is None else float(edge_scores[k])})
             frontier.setdefault(int(dst[k]), []).append((int(o_ts[k]), float(amount), int(o_tx[k])))
 
     hop = 1
@@ -629,6 +725,10 @@ def trace_victim(acct_no: str, db: Path | str | None = None) -> dict:
             "ts": _iso(t["ts"]), "amount": t["amount"],
             "tainted": int(round(t["tainted"])),
             "via": t["via"], "link_type": link[0] if link else None,
+            # low = chosen by the L1 edge score; high = proven layer link.
+            "confidence": ("low" if t.get("edge_score") is not None
+                           else "high" if t["via"] == "layer_link" else "medium"),
+            "l1_edge_score": t.get("edge_score"),
         })
 
     accounts = [account(a, nd) for a, nd in
@@ -696,6 +796,7 @@ def trace_victim(acct_no: str, db: Path | str | None = None) -> dict:
         })
 
     all_ts = [t["ts"] for t in transfers]
+    low_confidence = any(t.get("edge_score") is not None for t in transfers)
     victim = account(source, nodes[source])
     flagged = sum(1 for a in accounts if a["is_flagged"])
     role_text = ", ".join(f"{n} {r}" for r, n in sorted(by_role.items())) or "none"
@@ -714,7 +815,10 @@ def trace_victim(acct_no: str, db: Path | str | None = None) -> dict:
                f" {sum(1 for t in transfers if t['via'] == 'layer_link')} are proven layer links"
                f" and {sum(1 for t in transfers if t['via'] == 'fallback')} were followed by the"
                f" fallback rules. Patterns found: "
-               f"{', '.join(f['pattern'] for f in findings) or 'none'}.")
+               f"{', '.join(f['pattern'] for f in findings) or 'none'}."
+               + (" LOW CONFIDENCE: no payment of the victim went to a flagged account, so"
+                  " only the payment(s) with the highest L1 edge score were followed."
+                  if low_confidence else ""))
         # Roles are read from scores, never inferred from the hop.
         keepers = "/".join(sorted({a["role"] or "unroled" for a in forwarders})) or "forwarding"
         frozen = sum(c["holding"] for c in freeze_candidates)
@@ -757,6 +861,10 @@ def trace_victim(acct_no: str, db: Path | str | None = None) -> dict:
             "last_ts": _iso(max(all_ts)) if all_ts else None,
             "seconds_first_to_last": (max(all_ts) - min(all_ts)) if all_ts else None,
             "used_fallback": any(t["via"] == "fallback" for t in transfers),
+            # True when the first hop was chosen by the L1 edge score.
+            "low_confidence": low_confidence,
+            # The victim's payments the trace did not follow (never tainted).
+            "payments_not_followed": not_followed,
             "truncated": truncated,
         },
         "per_hop": per_hop,
@@ -866,6 +974,7 @@ def trace_victims(acct_nos: list[str], db: Path | str | None = None) -> dict:
             "cell_ids": sorted({c for v in victims for c in v["cell_ids"]}),
             "freeze_recommended": len(freeze_candidates),
             "used_fallback": any(r["summary"]["used_fallback"] for r in traces.values()),
+            "low_confidence": any(r["summary"]["low_confidence"] for r in traces.values()),
             "truncated": any(r["summary"]["truncated"] for r in traces.values()),
         },
         "freeze_candidates": freeze_candidates,
@@ -1022,7 +1131,11 @@ def print_summary(r: dict) -> None:
     print(f"freeze       : {s['freeze_recommended']} accounts recommended, holding"
           f" {_rupees(s['freeze_holding_total'])} of this victim's money")
     print(f"cells        : {s['cell_ids']}   network: {v['network_id']}")
-    print(f"fallback     : {s['used_fallback']}   truncated: {s['truncated']}")
+    print(f"fallback     : {s['used_fallback']}   truncated: {s['truncated']}"
+          f"   low confidence: {s['low_confidence']}")
+    nf = s["payments_not_followed"]
+    if nf["count"]:
+        print(f"not followed : {nf['count']} payment(s) of the victim, {_rupees(nf['amount'])}")
     for h in r["per_hop"]:
         print(f"  hop {h['hop']}: {h['accounts']} accounts, {h['transfers']} transfers,"
               f" {_rupees(h['tainted'])}, {h['first_ts']} -> {h['last_ts']}"
