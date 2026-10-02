@@ -350,34 +350,34 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
         </div>
       </div>
 
-      {/* 2. Unified Executive Metric Strip (Consolidated sleek card with crisp square boxes) */}
-      <div className="bg-white border border-[#E8E2D5] rounded-md p-4 sm:p-5 shadow-2xs space-y-4">
+      {/* 2. Unified Executive Metric Strip (Framed 4-Column Grid with Zero Line-Wrapping) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
         {/* Top Operational Status Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#F0EBE0]">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#E6F4EA] text-[#137333] font-mono font-semibold text-[11px] border border-[#CEEAD6]">
+        <div className="px-4 py-2.5 bg-[#FAF6EE] border-b border-[#E8E2D5] flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 font-mono text-[11px] whitespace-nowrap">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#E6F4EA] text-[#137333] font-bold border border-[#CEEAD6]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#137333]"></span>
-              Benchmark Passed: {elapsedTimer}s (Target ≤ 60s)
+              Benchmark: {elapsedTimer}s (≤60s)
             </span>
-            <span className="text-[#9E968D] hidden sm:inline">•</span>
-            <span className="text-[#746D65] font-mono text-[11px]">
-              Throughput: <strong className="text-[#2C2623] font-bold">{throughputRate} txns/s</strong>
+            <span className="text-[#D4CEBF]">•</span>
+            <span className="text-[#746D65]">
+              Throughput: <strong className="text-[#2C2623] font-bold font-mono">{throughputRate} txns/s</strong>
             </span>
-            <span className="text-[#9E968D] hidden sm:inline">•</span>
-            <span className="text-[#746D65] font-mono text-[11px]">
-              Speedup: <strong className="text-[#D96B27] font-bold">{speedupFactor}x Real-Time</strong>
+            <span className="text-[#D4CEBF]">•</span>
+            <span className="text-[#746D65]">
+              Speedup: <strong className="text-[#D96B27] font-bold font-mono">{speedupFactor}x Real-Time</strong>
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5 text-xs text-[#DC2626] font-mono font-semibold bg-[#FEF2F2] border border-[#FCA5A5] px-2.5 py-1 rounded-md">
+          <div className="flex items-center gap-2.5 whitespace-nowrap">
+            <div className="flex items-center gap-1.5 text-xs text-[#DC2626] font-mono font-bold bg-[#FEF2F2] border border-[#FCA5A5] px-2.5 py-1 rounded-sm">
               <Clock className="w-3.5 h-3.5" />
               <span>⏱ {formatCountdown(countdownSeconds)} to cashout exit</span>
             </div>
 
             <button
               onClick={handleEmergencyFreeze}
-              className="h-8 flex items-center gap-1.5 px-3.5 rounded-md bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer"
+              className="h-7.5 flex items-center gap-1.5 px-3 rounded-sm bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer whitespace-nowrap"
             >
               <Lock className="w-3 h-3" />
               <span>Emergency Freeze 100+ Accounts</span>
@@ -385,57 +385,58 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
           </div>
         </div>
 
-        {/* 4 Clean Metric Columns */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 pt-1">
-          {/* Metric 1 */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block">
+        {/* 4 Clean Framed Metric Columns with vertical dividing borders */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E2D5] bg-white">
+          {/* Column 1: Scanned Records */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Scanned Records
             </span>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-[#2C2623]">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#2C2623] tracking-tight my-1 whitespace-nowrap">
               {totalScanned.toLocaleString("en-IN")}
             </div>
-            <p className="text-[11px] text-[#059669] font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> 100% Vector Indexed
+            <p className="text-[11px] text-[#059669] font-medium flex items-center gap-1 whitespace-nowrap font-sans">
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#059669] shrink-0" />
+              <span>100% Vector Indexed</span>
             </p>
           </div>
 
-          {/* Metric 2 */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block">
+          {/* Column 2: Trapped Inflow */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Trapped Inflow at Risk
             </span>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-[#DC2626]">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#DC2626] tracking-tight my-1 whitespace-nowrap">
               ₹{recoverableCrores} Crore
             </div>
-            <p className="text-[11px] text-[#746D65]">
-              Actionable balance in {holdingMulesCount} mules
+            <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
+              Actionable balance in <strong className="text-[#2C2623] font-mono font-semibold">{holdingMulesCount}</strong> mules
             </p>
           </div>
 
-          {/* Metric 3 */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block">
+          {/* Column 3: Heavy Whales */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Heavy Whales (₹50L–3 Cr)
             </span>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-[#D96B27]">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#D96B27] tracking-tight my-1 whitespace-nowrap">
               {whaleCount} Outliers
             </div>
-            <p className="text-[11px] text-[#746D65]">
-              Max: {maxWhaleTransfer} single RTGS transfer
+            <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
+              Max transfer: <strong className="text-[#2C2623] font-mono font-semibold">{maxWhaleTransfer}</strong> single RTGS
             </p>
           </div>
 
-          {/* Metric 4 */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block">
+          {/* Column 4: Network Anomalies (Guaranteed Single-Line with zero wrapping) */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Network Anomalies
             </span>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-[#2C2623]">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#2C2623] tracking-tight my-1 whitespace-nowrap">
               {foreignIpCount} IPs • {illegalLinksCount} Links
             </div>
-            <p className="text-[11px] text-[#746D65] truncate">
-              Foreign Proxies &amp; Digital Arrest links
+            <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans truncate">
+              Foreign Proxies &amp; Scam Linkages
             </p>
           </div>
         </div>
@@ -461,77 +462,36 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
         </div>
       )}
 
-      {/* 3. Streamlined Search & Segmented Filter Toolbar */}
-      <div className="bg-white border border-[#E8E2D5] rounded-md p-3.5 shadow-2xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[260px]">
+      {/* 3. Streamlined Single-Frame Control Bar (Search + Bank + Categories + Counter in 1 Sleek Line) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md p-2.5 sm:p-3 shadow-2xs">
+        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2.5">
+          {/* Left: Search Input */}
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
             <input
               type="text"
-              placeholder="Search Txn ID, Account, IFSC, Narration (Digital Arrest, Mahadev, USDT)..."
+              placeholder="Search Txn ID, Account, IFSC, Narration..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-10 bg-white border border-[#D4CEBF] rounded-md pl-9 pr-8 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 transition-colors"
+              className="w-full h-9 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm pl-8 pr-7 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:ring-1 focus:ring-[#D96B27]/30 transition-colors"
             />
-            <Search className="w-4 h-4 absolute left-3 top-3 text-[#9E968D] pointer-events-none" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-3 text-[#9E968D] pointer-events-none" />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className="absolute right-2.5 top-3 text-xs text-[#9E968D] hover:text-[#2C2623] cursor-pointer"
+                className="absolute right-2 top-2.5 text-[#9E968D] hover:text-[#2C2623] cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* Segmented Filter Square Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            {[
-              { id: "ALL", label: "All Flagged", count: tabCounts.all },
-              { id: "HEAVY_WHALES", label: "Whales (₹50L–3 Cr)", count: tabCounts.whales, isRed: true },
-              { id: "SMURFING_HOPS", label: "Hop 2 Smurfing", count: tabCounts.smurfing },
-              { id: "FOREIGN_IP", label: "Foreign Proxies", count: tabCounts.foreignIp },
-              { id: "ILLEGAL_LINKAGES", label: "Crime Links", count: tabCounts.crimeLinks }
-            ].map((tab) => {
-              const isSelected = activeFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveFilter(tab.id)}
-                  className={`h-9 px-3 rounded-md font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 border shadow-2xs ${
-                    isSelected
-                      ? tab.isRed
-                        ? "bg-[#DC2626] border-[#DC2626] text-white"
-                        : "bg-[#D96B27] border-[#D96B27] text-white"
-                      : tab.isRed
-                      ? "bg-white border-[#FCA5A5] text-[#DC2626] hover:bg-[#FEF2F2]"
-                      : "bg-white border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] hover:border-[#2C2623]"
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-sm font-mono font-bold ${
-                      isSelected
-                        ? "bg-white/20 text-white"
-                        : "bg-[#FAF6EE] border border-[#E8E2D5] text-[#746D65]"
-                    }`}
-                  >
-                    {tab.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Secondary Bar: Bank Filter + Page Counter */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#F0EBE0] text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#746D65] font-semibold uppercase tracking-wider font-mono">Bank Route:</span>
+          {/* Middle Left: Bank Route Dropdown */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] text-[#746D65] font-bold uppercase tracking-wider font-mono hidden sm:inline">Bank:</span>
             <select
               value={selectedBank}
               onChange={(e) => setSelectedBank(e.target.value)}
-              className="h-8 bg-white border border-[#D4CEBF] rounded-md px-2.5 text-xs font-medium text-[#2C2623] focus:outline-none focus:border-[#D96B27] cursor-pointer"
+              className="h-9 bg-[#FAF6EE] hover:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-semibold font-mono text-[#2C2623] focus:outline-none cursor-pointer transition-colors"
             >
               <option value="ALL">All Banks</option>
               <option value="SBIN">State Bank of India (SBIN)</option>
@@ -545,10 +505,50 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
             </select>
           </div>
 
-          <div className="text-[11px] text-[#746D65] font-mono">
-            Showing <strong className="text-[#2C2623]">{filteredTxns.length === 0 ? 0 : startIndex + 1}–{endIndex}</strong> of{" "}
-            <strong className="text-[#2C2623]">{filteredTxns.length}</strong> transactions • Page {currentPage} of {totalPages} (
-            <span className="text-[#D96B27] font-semibold">50 per page</span>)
+          {/* Middle Right: Segmented Filter Chips */}
+          <div className="flex items-center gap-1 overflow-x-auto shrink-0 py-0.5">
+            {[
+              { id: "ALL", label: "All Flagged", count: tabCounts.all },
+              { id: "HEAVY_WHALES", label: "Whales (₹50L–3 Cr)", count: tabCounts.whales, isRed: true },
+              { id: "SMURFING_HOPS", label: "Hop 2 Smurfing", count: tabCounts.smurfing },
+              { id: "FOREIGN_IP", label: "Foreign Proxies", count: tabCounts.foreignIp },
+              { id: "ILLEGAL_LINKAGES", label: "Crime Links", count: tabCounts.crimeLinks }
+            ].map((tab) => {
+              const isSelected = activeFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveFilter(tab.id)}
+                  className={`h-9 px-2.5 rounded-sm font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 border whitespace-nowrap shadow-2xs ${
+                    isSelected
+                      ? tab.isRed
+                        ? "bg-[#DC2626] border-[#DC2626] text-white"
+                        : "bg-[#D96B27] border-[#D96B27] text-white"
+                      : tab.isRed
+                      ? "bg-white border-[#FCA5A5] text-[#DC2626] hover:bg-[#FEF2F2]"
+                      : "bg-white border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] hover:border-[#2C2623]"
+                  }`}
+                >
+                  <span className="font-sans text-[11px] font-bold">{tab.label}</span>
+                  <span
+                    className={`text-[10px] px-1 py-0.2 rounded-xs font-mono font-bold ${
+                      isSelected
+                        ? "bg-white/25 text-white"
+                        : "bg-[#FAF6EE] border border-[#E8E2D5] text-[#746D65]"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right: Counter badge */}
+          <div className="hidden xl:flex items-center text-[11px] text-[#746D65] font-mono shrink-0 pl-2 border-l border-[#E8E2D5] whitespace-nowrap">
+            <span>
+              <strong className="text-[#2C2623] font-bold">{filteredTxns.length}</strong> txns
+            </span>
           </div>
         </div>
       </div>
