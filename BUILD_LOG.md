@@ -605,3 +605,29 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - `requirements.txt` does not list `duckdb` or `PyYAML` (both imported by `api\` / `engine\`), so `wheels\` cannot rebuild the venv offline. Not changed.
 - A missing file under `/assets/` gets index.html with 200, not 404.
 - Stopped the old uvicorn on port 8000 (PID 32420) to run `run.bat`; the new one is left running.
+
+## 2026-10-02 — Step 8a: case store, directory placeholders, legal config
+
+**Step** — Section 15: SQLite case store, bank_directory placeholders, legal reference texts.
+
+**Files** — new `engine\case_store.py`, `legal\config.yaml`, `audits\check_case_store.py`, `data\cases.db` (git-ignored); changed `engine\seed_banks.py`.
+
+**Key names** — `case_store.connect`, `create_case` -> `CASE-000001`, `add_output` -> version, `add_freeze_action` -> seq, `verify` -> `{ok, rows, triggers, problems}`; `DOC_TYPES`, `GENERATORS`, `ACTIONS`, `COLUMNS`; `seed_banks.OFFICER_PLACEHOLDER`, `ADDRESS_PLACEHOLDER`; config keys `legal_references.production_of_records`, `.freezing`, `.confirmed_with_mentors`, `draft_label`.
+
+**What was built**
+- `cases`, `case_outputs`, `freeze_actions` with the Section 15 columns plus `seq`, `prev_hash`, `row_hash`. `victim_accts` is a JSON list (text); `validated` is 0/1.
+- Append-only: no update/delete helper; BEFORE UPDATE / BEFORE DELETE triggers abort (6); a SHA-256 hash chain per table + AUTOINCREMENT. `verify()` (read-only) recomputes the chain and checks seq gaps, the seq counter, triggers, orphan case_ids, SQLite integrity_check.
+- `add_output` takes sha256 from the file; version = next per (case_id, doc_type, bank).
+- `seed_banks`: title `[Nodal Officer, <bank name>]`, address `[Address to be confirmed]`, written only where NULL, so real details survive a rerun.
+
+**Results**
+- `case_store.py`: `data\cases.db` created, 0 rows in each table, 6/6 triggers, PASSED (0.07 s).
+- `seed_banks.py`: 10 banks, title 10/10, address 10/10, all placeholders, PASSED (0.53 s).
+- `check_case_store.py`: 40 checks, 0 failed (0.6 s). Writes only to a scratch store in %TEMP%. Covers UPDATE/DELETE refused on all 3 tables; verify catches a changed row, a deleted middle row, a deleted last row, a dropped trigger.
+
+**Deviations**
+- Draft label uses Section 15's em dash ("DRAFT — for ..."), not the hyphen in the task text.
+- `cases.case_id` is UNIQUE and there is no helper to change `status` (stays `OPEN`); a status change needs a design decision (new row vs. a status table).
+- `verify()` cannot detect a rewrite that also recomputes every hash and resets `sqlite_sequence`.
+- Only the two Section 15 legal defaults are in the config; the case-diary reference (4.5: CrPC 172 ≈ BNSS 192) is not.
+- `PROJECT_CONTEXT.md` shows as modified in git (Sections 14-17 added by the user); not committed here.

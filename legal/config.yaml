@@ -1,0 +1,16 @@
+# legal/config.yaml -- text shown on every Step 8 document (PROJECT_CONTEXT.md Section 15).
+#
+# The legal references below are DEFAULTS. They must be confirmed with the
+# police mentors before any document is relied on; edit them here, never in
+# code or in a template. Set confirmed_with_mentors to true only once they are.
+
+legal_references:
+  # Authority to call for records from a bank (freeze notice heading).
+  production_of_records: "Section 94 BNSS (corresponding to Section 91 CrPC)"
+  # Authority to freeze / seize the balance of an account.
+  freezing: "Section 106 BNSS / Section 102 CrPC"
+  confirmed_with_mentors: false
+
+# Printed on every document. A document is a draft until an officer signs it;
+# nothing here may say that a notice was sent.
+draft_label: "DRAFT — for officer review and signature"

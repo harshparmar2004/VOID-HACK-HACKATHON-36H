@@ -536,5 +536,83 @@ Record each result and the threshold chosen in a notebook Markdown cell. Dev-onl
   param_points), exploration tables dropped, v1-verified profile seeded. Project is a git repo
   (.gitignore excludes data\, .venv\, wheels\, abhedya\, data files).
 - Step 3 features: BUILT (2.5 s), structure verified (groups separate cleanly). Fixes pending — see 4.6.
-- NEXT: apply the 4.6 feature fixes, re-verify, commit; then Step 4 scoring.
+- Steps 4–6 done and verified; Step 7 (frontend) in progress.
+
+## 14. Judge view (Step 7f) — show how the system works, with measured numbers
+
+- `engine\run_all.py` runs the whole engine in order (ingest → features → scoring pass 1 → links →
+  scoring pass 2 → cells/rings → graph) and records every stage in two engine-written tables:
+  `engine_runs` (run_id, started_at, csv_sha256, total_seconds, status) and `engine_run_stages`
+  (run_id, stage, seconds, rows_in, rows_out). These are tables 13 and 14 (engine-owned, not UI-driven).
+- Audit scripts also save their results as JSON in `reports\json\` so the API can serve them.
+- The UI page shows: pipeline diagram with stage timings; table relations diagram with live row counts;
+  live trace benchmark vs the 2 s target; detection results (structural checks, not ground truth);
+  robustness and ablation results; an "explain one account" walkthrough. Endpoints in API_CONTRACT.md.
+- A live full re-run is allowed ONLY on a temp copy of the database, never on data\case.duckdb.
+
+## 15. Step 8 — Legal outputs (design decisions, 2 Oct)
+
+- **Separate case store:** officer actions and generated documents live in `data\cases.db` (SQLite, Python
+  stdlib), NOT in `case.duckdb`. The engine database stays read-only for the API; the case store is the only
+  thing the API writes. Tables: `cases` (case_id, created_at, officer, fir_number, complainant, victim_accts,
+  dataset_sha256, profile_id, status), `case_outputs` (case_id, doc_type FREEZE_NOTICE / CASE_DIARY / FIR,
+  bank, version, file_path, sha256, validated, generator TEMPLATE / LLM+VALIDATED / TEMPLATE_FALLBACK,
+  created_at), `freeze_actions` (case_id, account, bank, amount_paise, action REQUESTED / WITHDRAWN, note,
+  officer, created_at). Append-only: corrections add rows, never update or delete.
+- **bank_directory** gets nodal_officer_title and address_block placeholders: `[Nodal Officer, <bank name>]`
+  and `[Address to be confirmed]` until real details are supplied. Never invent addresses or names.
+- **Freeze notices:** one per bank, filled ONLY by code (Jinja2 templates → HTML) from the trace's
+  freeze_candidates: account, IFSC, holding, proving tx_ids with timestamp and amount, case/FIR number,
+  dataset SHA-256, trace fingerprint. Legal references come from a config value (default text: "Section 94
+  BNSS (corresponding to Section 91 CrPC)"; freezing per "Section 106 BNSS / Section 102 CrPC") and must be
+  confirmed with the police mentors. Never claim a notice was sent.
+- **Case diary:** chronological; total siphoned, layer-wise accounts with timestamps and amounts, accounts
+  recommended for freezing. Narrative sentences by local Ollama `qwen2.5:7b` over TOKENISED evidence
+  (ACC_n, AMT_n, TXN_n, TIME_n) with a JSON schema; code substitutes real values; validator checks every
+  account number, amount, tx_id and timestamp against the trace; on failure or if Ollama is down →
+  template-only diary (generator TEMPLATE_FALLBACK). Raw narration text never enters a prompt.
+- **FIR draft:** officer-entered complainant details + offence summary + traced accounts annexure (code).
+- **PDF:** printable HTML with print CSS; the browser's Save as PDF produces the PDF (no WeasyPrint).
+- Every document shows: case id, generated at, dataset SHA-256, trace fingerprint, profile id, generator,
+  and "DRAFT — for officer review and signature".
+
+## 16. Discovery engine — "How we found the mules" (planned; merges with the Data Audit, Step 9)
+
+Purpose: reproduce, automatically and label-free, the investigation that led to our design, so judges see
+HOW the 1,073 mules were found and why each threshold was chosen. Re-runnable on any dataset.
+
+Stages (each stores: the question, the exact SQL, the result numbers, and a verdict):
+1. **Profile & traps:** column shapes, validity, duplicate Transaction_IDs (collisions), rail-vs-mode
+   independence, amount/limit realism, file-level checks.
+2. **Population split:** activity distribution (normal ≥ 50 tx vs low-activity < 50), one-way accounts.
+3. **Flow discovery (funnel):** 24,873 accounts → send-only (victims, 300) → their payees (129) → those
+   payees' receivers (559) → receive-only sinks (385) = 1,073; per hop: timing, split count, out/in ratio.
+4. **Signal discovery:** where flags concentrate (headless + foreign + cash-out category on L1→L2 and L2→L3
+   transfers; 0% on victim payments), feature distributions per group, signals that carry no information
+   (gates closed).
+5. **Fingerprint scan:** generator artefacts found (row position, adjacency, account bands, device counts,
+   IP prefixes) — reported as warnings, never used.
+6. **Calibration evidence:** for every parameter, the observed values per group and the threshold chosen.
+7. **Agreement check:** structural discovery vs the independent weighted scoring: same 1,073 accounts,
+   same roles (two methods agree).
+
+Rules: discovery uses structural rules only to EXPLAIN the data; scoring never uses its hard cut-offs.
+Engine-owned outputs: `discovery_runs` + `discovery_findings` tables (or JSON in reports\json\),
+read-only API `GET /api/system/discovery`, UI page "How we found the mules" (funnel, charts, SQL shown).
+
+## 17. Local investigator — Qwen 2.5 7B over our tools (planned, after Section 16)
+
+Replaces the role cloud agents (Grok CLI) played in EXPLORING data, inside the product, fully offline.
+- **Engine does the analysis, Qwen orchestrates and explains.** Qwen (Ollama, local) chooses among a SMALL
+  fixed set of read-only tools and fills their parameters; deterministic code computes every number.
+- **Tools (≤ 8):** get_discovery_findings(stage?), run_discovery_stage(id), explain_account(acct),
+  trace_victim(acct), search_transactions(whitelisted filters), account_stats(whitelisted filters on
+  features/scores), compare_groups(feature, groups), get_status().
+- **Never:** free-form SQL from the model, raw narration text in prompts, writes of any kind.
+- **Every answer** shows the tool calls and their raw results beside the model's wording; a validator checks
+  every account number and number the model states against those results (retry once, else show results only).
+- **Development is separate:** cloud coding agents may still help write CODE using synthetic or aggregate
+  data; the shipped product never calls any cloud service.
+- Limits stated honestly: a 7B model follows clear tool descriptions well but cannot invent new analyses;
+  new kinds of checks are added as new deterministic tools by developers.
 
