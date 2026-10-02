@@ -75,6 +75,18 @@ export async function uploadBankStatement(file) {
   return res.json();
 }
 
+export async function loadDemoVictim(demoId = "case_sunil_4hop") {
+  const res = await fetch(`${API_BASE}/victim/load-demo/${demoId}`, {
+    method: "POST"
+  });
+  if (!res.ok) throw new Error("Failed to load 4-hop demo victim scenario");
+  return res.json();
+}
+
+export function getTemplateDownloadUrl(fileName) {
+  return `${API_BASE}/templates/${encodeURIComponent(fileName)}`;
+}
+
 export async function fetchScannerSummary() {
   const res = await fetch(`${API_BASE}/scanner/summary`);
   if (!res.ok) throw new Error("Failed to fetch scanner summary");

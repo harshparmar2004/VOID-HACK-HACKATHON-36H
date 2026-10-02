@@ -211,12 +211,26 @@ export default function App() {
     }
   };
 
-  const handleSelectCase = (victimId) => {
-    setActiveCase(victimId);
+  const handleSelectCase = (victimId, victimDetails = null) => {
+    let targetId = victimId;
+    if (typeof victimId === "object" && victimId !== null) {
+      victimDetails = victimId;
+      targetId = victimDetails.victim_account || victimDetails.accountNumber || victimDetails.account_id;
+    }
+    if (victimDetails) {
+      if (victimDetails.victim_name || victimDetails.victimName) {
+        const name = victimDetails.victim_name || victimDetails.victimName;
+        setVictimName(name);
+        try { localStorage.setItem("abhedya_victim_name", name); } catch (e) {}
+      }
+      if (victimDetails.mobile || victimDetails.mobileNumber) setMobileNumber(victimDetails.mobile || victimDetails.mobileNumber);
+      if (victimDetails.fir_number || victimDetails.firNumber) setFirNumber(victimDetails.fir_number || victimDetails.firNumber);
+    }
+    setActiveCase(targetId);
     try {
-      localStorage.setItem("abhedya_active_case", victimId);
+      localStorage.setItem("abhedya_active_case", targetId);
     } catch (e) {}
-    loadCaseData(victimId);
+    loadCaseData(targetId);
   };
 
   const handleRefreshAll = async (newVictimId = null) => {

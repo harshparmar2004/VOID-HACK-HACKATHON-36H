@@ -13,6 +13,7 @@ import urllib.request
 from datetime import datetime
 import hashlib
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -94,6 +95,21 @@ def get_system_status():
         "vault_verified": True
     }
 
+@app.post("/api/reload-master")
+def reload_master_dataset():
+    """
+    Reloads the master 2,000,000 transaction dataset into DuckDB.
+    """
+    global scorer, graph, scanner, is_initialized
+    is_initialized = False
+    initialize_core()
+    stats = engine.get_summary_stats()
+    return {
+        "status": "success",
+        "message": f"Successfully reloaded master dataset ({stats['total_transactions']:,} records)",
+        "records_parsed": stats["total_transactions"]
+    }
+
 class IngestUrlPayload(BaseModel):
     url: str
 
@@ -148,6 +164,105 @@ def upload_bank_statement(file: UploadFile = File(...)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+@app.get("/api/templates/{file_name}")
+def download_sample_template(file_name: str):
+    """
+    Allows investigators and evaluators to download sample statements
+    in CSV, Excel, or PDF format pre-configured for 4-Hop money trails.
+    """
+    allowed = [
+        "Sample_Victim_4Hop_CyberCrime_Statement.csv",
+        "Sample_Victim_4Hop_CyberCrime_Statement.xlsx",
+        "Sample_Victim_4Hop_CyberCrime_Statement.pdf"
+    ]
+    if file_name not in allowed:
+        raise HTTPException(status_code=404, detail="Template not found")
+    path = os.path.join(DATA_DIR, "sample_templates", file_name)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Template file not found on disk")
+    return FileResponse(path, filename=file_name)
+
+@app.post("/api/victim/load-demo/{demo_id}")
+def load_demo_victim(demo_id: str):
+    """
+    1-Click loads verified 4-Hop victim scenarios.
+    Guarantees non-empty money trail through to Layer 4 (L4).
+    """
+    global scorer, graph, scanner
+    if not is_initialized:
+        initialize_core()
+
+    demos = {
+        "case_sunil_4hop": {
+            "victim_account": "KKBK10000000",
+            "victim_name": "Sunil Kumar Verma",
+            "mobile": "+91 9811000001",
+            "fir_number": "FIR-0142/2026/CYBER-INDORE",
+            "bank_name": "Kotak Mahindra Bank",
+            "ifsc": "KKBK0001000",
+            "total_loss": 455541.61,
+            "modus_operandi": "DIGITAL_ARREST",
+            "description": "Digital Arrest CBI Impersonation • 4-Hop Trail to Binance Crypto Off-Ramp",
+            "template_file": "Sample_Victim_4Hop_CyberCrime_Statement.csv"
+        },
+        "case_priya_4hop": {
+            "victim_account": "SBIN10015314",
+            "victim_name": "Dr. Priya Sharma",
+            "mobile": "+91 9822334455",
+            "fir_number": "FIR-0143/2026/CYBER-INDORE",
+            "bank_name": "State Bank of India",
+            "ifsc": "SBIN0001000",
+            "total_loss": 101369.70,
+            "modus_operandi": "FAKE_TASK",
+            "description": "Telegram Daily Task Fraud • 4-Hop Fast Pass-Through Velocity",
+            "template_file": None
+        },
+        "case_ramesh_4hop": {
+            "victim_account": "BARB10005606",
+            "victim_name": "Ramesh Patel",
+            "mobile": "+91 9988776655",
+            "fir_number": "FIR-0144/2026/CYBER-INDORE",
+            "bank_name": "Bank of Baroda",
+            "ifsc": "BARB0001000",
+            "total_loss": 194223.94,
+            "modus_operandi": "STOCK_IPO",
+            "description": "SEBI Institutional Allotment • Massive 213-Node 4-Hop Syndicate",
+            "template_file": None
+        }
+    }
+    
+    if demo_id not in demos:
+        demo_id = "case_sunil_4hop"
+        
+    demo = demos[demo_id]
+    if demo.get("template_file"):
+        path = os.path.join(DATA_DIR, "sample_templates", demo["template_file"])
+        if os.path.exists(path):
+            engine.load_dataset(path)
+            scorer = MuleScorer(engine.con)
+            scorer.compute_all_scores()
+            graph = GraphEngine(engine.con)
+            scanner = FraudScanner(engine.con)
+    else:
+        if engine.active_file != DEFAULT_PARQUET and os.path.exists(DEFAULT_PARQUET):
+            engine.load_dataset(DEFAULT_PARQUET)
+            scorer = MuleScorer(engine.con)
+            scorer.compute_all_scores()
+            graph = GraphEngine(engine.con)
+            scanner = FraudScanner(engine.con)
+            
+    trace = graph.trace_victim_trail(demo["victim_account"], max_hops=4)
+    notices = legal.generate_bank_freeze_notices(demo["victim_account"], demo["fir_number"], trace)
+    diary = legal.generate_police_case_diary(demo["victim_account"], demo["fir_number"], trace)
+    
+    return {
+        "status": "success",
+        "demo": demo,
+        "trace": trace,
+        "notices": notices,
+        "case_diary": diary
+    }
 
 @app.post("/api/ingest-url")
 def ingest_from_url(payload: IngestUrlPayload):

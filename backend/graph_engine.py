@@ -115,14 +115,17 @@ class GraphEngine:
                     WHERE account_id = ?
                 """, [curr_acct]).fetchone()
                 
-                role = "L1_COLLECTOR" if hop == 1 else ("L2_DISTRIBUTOR" if hop == 2 else "L3_CASHOUT")
+                role = "L1_COLLECTOR" if hop == 1 else ("L2_DISTRIBUTOR" if hop == 2 else ("L3_CASHOUT" if hop == 3 else "L4_TERMINAL"))
                 risk_score = 85.0
                 risk_band = "HIGH_CONFIDENCE_MULE"
                 reasons = "Flagged in multi-tier money laundering chain"
                 
                 if profile:
                     ifsc = profile[0] or ifsc
-                    role = profile[1] if profile[1] != 'CLEAN' else role
+                    if hop >= 4:
+                        role = "L4_TERMINAL"
+                    else:
+                        role = profile[1] if profile[1] != 'CLEAN' else role
                     risk_score = profile[2]
                     risk_band = profile[3]
                     reasons = profile[4] or reasons

@@ -1,5 +1,18 @@
 [
   {
+    "id": "CUST-008",
+    "artifactName": "Sample_Victim_4Hop_CyberCrime_Statement.pdf",
+    "category": "Bank Statement / Ledger Transaction Export",
+    "sha256": "2E5E63C5B78AFE198A676D69059BDBEDCD84B691D051FA1918C5E6BA92189B43",
+    "filePath": "C:\\Users\\harsh parmar\\Desktop\\abhedya-chakra\\backend\\data\\uploads\\Sample_Victim_4Hop_CyberCrime_Statement.pdf",
+    "timestamp": "2026-10-02 16:19:11 IST",
+    "ingestedBy": "IO Inspector Rajesh Sharma (Cyber Branch)",
+    "recordsCount": "9 Transactions",
+    "fileSize": "3.3 KB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 Bharatiya Sakshya Adhiniyam (BSA), 2023"
+  },
+  {
     "id": "CUST-007",
     "artifactName": "Synthetic_MuleAccount_2M_Transactions.csv",
     "category": "Bank Statement / Ledger Transaction Export",
