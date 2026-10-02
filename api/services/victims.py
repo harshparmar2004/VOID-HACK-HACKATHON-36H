@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from api.deps import Profile
 from api.repositories import victims as repo
-from api.schemas.victims import VictimItem
+from api.schemas.victims import VictimItem, VictimsResponse
 from api.services import rupees
 
 
-def list_victims(con, profile: Profile) -> list[VictimItem]:
-    return [
+def list_victims(con, profile: Profile) -> VictimsResponse:
+    items = [
         VictimItem(
             account=r["acct_no"],
             account_id=r["acct_no"],
@@ -22,3 +22,4 @@ def list_victims(con, profile: Profile) -> list[VictimItem]:
         )
         for r in repo.list_victims(con, profile.profile_id)
     ]
+    return VictimsResponse(victims=[i.account for i in items], items=items)

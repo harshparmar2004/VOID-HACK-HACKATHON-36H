@@ -36,8 +36,11 @@
 --
 -- ORDERING. Every window function below orders by TIME alone; no tx_key appears
 -- in any ORDER BY. Rows sharing a timestamp are interchangeable: inside a tied
--- block only the first row can carry an episode break and the rest carry 0, so
--- the cumulative episode number is the same whichever tied row is taken first.
+-- block exactly one row carries an episode break and the rest carry 0, and the
+-- cumulative episode number uses a RANGE frame, so every row of the block gets
+-- the same episode whichever tied row each window happens to take first. (A
+-- ROWS frame did not guarantee that: the two windows may order a tied block
+-- differently, which split a block across two episodes on some runs.)
 -- ASOF likewise returns the same in_ts and ep for either of two tied inflows.
 -- No measurement here can change with row position.
 --
@@ -62,8 +65,8 @@ marked AS (
 )
 SELECT acct, in_key, in_ts, in_amt,
        sum(is_break) OVER (PARTITION BY acct ORDER BY in_ts
-                           ROWS BETWEEN UNBOUNDED PRECEDING
-                                    AND CURRENT ROW) AS ep
+                           RANGE BETWEEN UNBOUNDED PRECEDING
+                                     AND CURRENT ROW) AS ep
 FROM marked;
 
 -- 2. One row per episode: its window, its inflow count and its inflow total.

@@ -16,3 +16,8 @@ class VictimItem(ApiModel):
     victim_score: float | None
     cell_ids: list[int]
     network_id: int | None
+
+
+class VictimsResponse(ApiModel):
+    victims: list[str]            # account numbers (the UI's case list)
+    items: list[VictimItem]       # the same accounts, same order, with details

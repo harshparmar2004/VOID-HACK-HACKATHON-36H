@@ -747,6 +747,121 @@ def report(con: duckdb.DuckDBPyConnection, profile_id: str, plan: list[dict],
         print(f"    {p['id']:<4} w={w:>4g}  full {full:>6,}  half+ {half:>6,}  >0 {pos:>6,}   {e['state']}")
 
 
+def score(con: duckdb.DuckDBPyConnection, pass_no: int = 2, label: str = "") -> None:
+    """Score the active profile on `con` and refill its `scores` rows.
+
+    The one scoring path. `con` is either the case file (engine runs) or an
+    in-memory connection whose `scores`, `features`, `layer_links` and
+    `scoring_profiles` are in-memory tables (the API's profile preview); the
+    statements are the same and so are the results.
+    """
+    t0 = time.perf_counter()
+    for p in (SQL_PATH, PASS2_SQL_PATH):
+        if not p.is_file():
+            raise SystemExit(f"SQL not found: {p}")
+
+    for t, step in (("tx", "ingest.py"), ("features", "features.py"),
+                    ("scores", "apply_schema.py"), ("layer_links", "apply_schema.py")):
+        if not con.execute(
+                "SELECT count(*) FROM information_schema.tables "
+                "WHERE table_schema='main' AND table_name=?", [t]).fetchone()[0]:
+            raise SystemExit(f"table {t} is missing -- run engine\\{step} first")
+
+    profile_id, profile = active_profile(con)
+    feature_cols = {r[0] for r in con.execute("DESCRIBE features").fetchall()}
+    sql, builder, plan = build_sql(profile, feature_cols)
+
+    print(f"database     : {label}")
+    print(f"profile      : {profile_id}")
+    print(f"pass         : {pass_no}")
+    print("gates        :")
+    for g in profile.get("reliability_gates", []):
+        print(f"    {g['id']:<24} {g['status']:<6} gates {g['gates']}")
+
+    t_sql = time.perf_counter()
+    con.execute(sql)
+
+    # Pass 2 always starts from a fresh pass 1 (above), never from scores
+    # an earlier pass-2 run wrote.
+    work = "score_pass1"
+    role_cols = ""
+    if pass_no == 2:
+        builder, plan = run_pass2(con, profile_id, profile)
+        work = "score_roles"
+        role_cols = (", l1_score, l2_score, l3_score, victim_score, role, role_confirmed, "
+                     "candidate_roles, upstream_role_share, downstream_role_share, "
+                     "holding_paise, freeze_recommended")
+    for note in builder.notes:
+        print(f"  NOTE       : {note}")
+
+    # Refill this profile only; other profiles' rows are untouched (Section 9).
+    con.execute("BEGIN")
+    try:
+        if pass_no == 2:
+            # Fill the three pass-2 placeholders of `features`.
+            con.execute(
+                "UPDATE features SET neighbour_risk = r.neighbour_risk, "
+                "upstream_l1_share = r.upstream_l1_share, "
+                "upstream_l2_share = r.upstream_l2_share "
+                "FROM rel r WHERE features.acct_id = r.acct_id")
+        con.execute("DELETE FROM scores WHERE profile_id = ?", [profile_id])
+        con.execute(
+            "INSERT INTO scores (acct_id, profile_id, "
+            + ", ".join(SCORE_COLUMNS) + ", "
+            "mule_index, trust_index, final_index, band, is_flagged, "
+            f"override_applied, param_points, reasons{role_cols}) "
+            "SELECT acct_id, ?, " + ", ".join(SCORE_COLUMNS) + ", "
+            "mule_index, trust_index, final_index, band, is_flagged, "
+            f"override_applied, param_points, reasons{role_cols} FROM {work}",
+            [profile_id])
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    sql_seconds = time.perf_counter() - t_sql
+
+    n_rows = con.execute(
+        "SELECT count(*) FROM scores WHERE profile_id = ?", [profile_id]).fetchone()[0]
+    n_feat = con.execute("SELECT count(*) FROM features").fetchone()[0]
+    if n_rows != n_feat:
+        raise SystemExit(f"scores has {n_rows} rows for {profile_id} but features has {n_feat}")
+
+    # Every account must have a decision; only pass-2 parameters may be NULL.
+    # A flagged account always has a role and role scores; an unflagged one
+    # never has a mule role.
+    if pass_no == 2:
+        bad_role = con.execute(
+            "SELECT count(*) FROM scores WHERE profile_id = ? AND ("
+            " (is_flagged AND (role IS NULL OR role = 'VICTIM' OR l1_score IS NULL"
+            "                  OR l2_score IS NULL OR l3_score IS NULL))"
+            " OR (NOT is_flagged AND (coalesce(role, 'VICTIM') <> 'VICTIM'"
+            "                         OR victim_score IS NULL))"
+            " OR mp7 IS NULL OR t5 IS NULL"
+            " OR holding_paise IS NULL OR freeze_recommended IS NULL)",
+            [profile_id]).fetchone()[0]
+        if bad_role:
+            raise SystemExit(f"{bad_role} scores rows break the role / pass-2 invariants")
+    bad = con.execute(
+        "SELECT count(*) FROM scores WHERE profile_id = ? AND "
+        "(mule_index IS NULL OR trust_index IS NULL OR final_index IS NULL "
+        " OR band IS NULL OR is_flagged IS NULL OR override_applied IS NULL "
+        " OR final_index < 0 OR final_index > 100)", [profile_id]).fetchone()[0]
+    if bad:
+        raise SystemExit(f"{bad} scores rows have a NULL or out-of-range decision column")
+
+    report(con, profile_id, plan, work)
+    if pass_no == 2:
+        report_roles(con, profile_id)
+        print("\nring_id is NULL for every account: run engine\\rings.py next.")
+    else:
+        print("\nnext: engine\\links.py, then engine\\scoring.py (pass 2).")
+    for t in ("score_pass1", "score_pass2", "score_roles", "rel", "features_p2"):
+        con.execute(f"DROP TABLE IF EXISTS {t}")
+
+    print(f"\nsql seconds  : {sql_seconds:.2f}")
+    print(f"total seconds: {time.perf_counter() - t0:.2f}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Fill `scores` for the active profile (pass 1, or pass 2 with roles).")
@@ -757,118 +872,13 @@ def main() -> None:
                     help=f"DuckDB file to score (default: {DEFAULT_DB})")
     args = ap.parse_args()
 
-    t0 = time.perf_counter()
-
-    for p in (SQL_PATH, PASS2_SQL_PATH):
-        if not p.is_file():
-            raise SystemExit(f"SQL not found: {p}")
     if not args.db.is_file():
         raise SystemExit(f"database not found: {args.db} -- run engine\\ingest.py first")
 
     con = duckdb.connect(str(args.db))
     try:
         con.execute(f"SET memory_limit='{MEMORY_LIMIT}'")
-
-        for t, step in (("tx", "ingest.py"), ("features", "features.py"),
-                        ("scores", "apply_schema.py"), ("layer_links", "apply_schema.py")):
-            if not con.execute(
-                    "SELECT count(*) FROM information_schema.tables "
-                    "WHERE table_schema='main' AND table_name=?", [t]).fetchone()[0]:
-                raise SystemExit(f"table {t} is missing -- run engine\\{step} first")
-
-        profile_id, profile = active_profile(con)
-        feature_cols = {r[0] for r in con.execute("DESCRIBE features").fetchall()}
-        sql, builder, plan = build_sql(profile, feature_cols)
-
-        print(f"database     : {args.db}")
-        print(f"profile      : {profile_id}")
-        print(f"pass         : {args.pass_no}")
-        print("gates        :")
-        for g in profile.get("reliability_gates", []):
-            print(f"    {g['id']:<24} {g['status']:<6} gates {g['gates']}")
-
-        t_sql = time.perf_counter()
-        con.execute(sql)
-
-        # Pass 2 always starts from a fresh pass 1 (above), never from scores
-        # an earlier pass-2 run wrote.
-        work = "score_pass1"
-        role_cols = ""
-        if args.pass_no == 2:
-            builder, plan = run_pass2(con, profile_id, profile)
-            work = "score_roles"
-            role_cols = (", l1_score, l2_score, l3_score, victim_score, role, role_confirmed, "
-                         "candidate_roles, upstream_role_share, downstream_role_share, "
-                         "holding_paise, freeze_recommended")
-        for note in builder.notes:
-            print(f"  NOTE       : {note}")
-
-        # Refill this profile only; other profiles' rows are untouched (Section 9).
-        con.execute("BEGIN")
-        try:
-            if args.pass_no == 2:
-                # Fill the three pass-2 placeholders of `features`.
-                con.execute(
-                    "UPDATE features SET neighbour_risk = r.neighbour_risk, "
-                    "upstream_l1_share = r.upstream_l1_share, "
-                    "upstream_l2_share = r.upstream_l2_share "
-                    "FROM rel r WHERE features.acct_id = r.acct_id")
-            con.execute("DELETE FROM scores WHERE profile_id = ?", [profile_id])
-            con.execute(
-                "INSERT INTO scores (acct_id, profile_id, "
-                + ", ".join(SCORE_COLUMNS) + ", "
-                "mule_index, trust_index, final_index, band, is_flagged, "
-                f"override_applied, param_points, reasons{role_cols}) "
-                "SELECT acct_id, ?, " + ", ".join(SCORE_COLUMNS) + ", "
-                "mule_index, trust_index, final_index, band, is_flagged, "
-                f"override_applied, param_points, reasons{role_cols} FROM {work}",
-                [profile_id])
-            con.execute("COMMIT")
-        except Exception:
-            con.execute("ROLLBACK")
-            raise
-        sql_seconds = time.perf_counter() - t_sql
-
-        n_rows = con.execute(
-            "SELECT count(*) FROM scores WHERE profile_id = ?", [profile_id]).fetchone()[0]
-        n_feat = con.execute("SELECT count(*) FROM features").fetchone()[0]
-        if n_rows != n_feat:
-            raise SystemExit(f"scores has {n_rows} rows for {profile_id} but features has {n_feat}")
-
-        # Every account must have a decision; only pass-2 parameters may be NULL.
-        # A flagged account always has a role and role scores; an unflagged one
-        # never has a mule role.
-        if args.pass_no == 2:
-            bad_role = con.execute(
-                "SELECT count(*) FROM scores WHERE profile_id = ? AND ("
-                " (is_flagged AND (role IS NULL OR role = 'VICTIM' OR l1_score IS NULL"
-                "                  OR l2_score IS NULL OR l3_score IS NULL))"
-                " OR (NOT is_flagged AND (coalesce(role, 'VICTIM') <> 'VICTIM'"
-                "                         OR victim_score IS NULL))"
-                " OR mp7 IS NULL OR t5 IS NULL"
-                " OR holding_paise IS NULL OR freeze_recommended IS NULL)",
-                [profile_id]).fetchone()[0]
-            if bad_role:
-                raise SystemExit(f"{bad_role} scores rows break the role / pass-2 invariants")
-        bad = con.execute(
-            "SELECT count(*) FROM scores WHERE profile_id = ? AND "
-            "(mule_index IS NULL OR trust_index IS NULL OR final_index IS NULL "
-            " OR band IS NULL OR is_flagged IS NULL OR override_applied IS NULL "
-            " OR final_index < 0 OR final_index > 100)", [profile_id]).fetchone()[0]
-        if bad:
-            raise SystemExit(f"{bad} scores rows have a NULL or out-of-range decision column")
-
-        report(con, profile_id, plan, work)
-        if args.pass_no == 2:
-            report_roles(con, profile_id)
-            print("\nring_id is NULL for every account: run engine\\rings.py next.")
-        else:
-            print("\nnext: engine\\links.py, then engine\\scoring.py (pass 2).")
-        for t in ("score_pass1", "score_pass2", "score_roles", "rel", "features_p2"):
-            con.execute(f"DROP TABLE IF EXISTS {t}")
-
-        print(f"\nsql seconds  : {sql_seconds:.2f}")
-        print(f"total seconds: {time.perf_counter() - t0:.2f}")
+        score(con, args.pass_no, str(args.db))
     finally:
         con.close()
 

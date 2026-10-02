@@ -290,3 +290,54 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - `high_risk_mules` = flagged accounts (1073); the UI's own ">= 90" cut is not an engine concept. `bands` is returned beside it.
 - `/entities`: `type` is a label of `scores.role` ("Not flagged" when role is null), `risk` = "<BAND> (<final_index>)", `min_amount` applies to the larger of money in / money out; `bank_stats` `count` / `share` are numbers, not the UI's formatted strings.
 - UI role mapping sends UNCLASSIFIED_MULE to "L1_COLLECTOR" (none on this file) — fix in Step 7.
+
+## 2026-10-02 — Step 6 batch B2: trace, batch trace, cells, network
+
+**Step** — read-only trace endpoints over `engine\victim_trace.py` (API_CONTRACT.md rows B2). No table, column or row written; engine untouched.
+
+**Files** — new `api\routers\trace.py`, `api\services\trace.py`, `api\repositories\trace.py`, `api\schemas\trace.py`; changed `api\main.py`, victims router / service / schema, `audits\check_api.py`.
+
+**Key names** — `services.trace._run` (calls the engine on `db_path()` under `_LOCK`, `SystemExit` -> 503), `engine.get_context` (loaded on the first trace of the process, reused), `_shown` (returned-graph filter), `ProfileUsed`, `FiltersApplied`, `VictimsResponse`, `MAX_BATCH_VICTIMS`, `READ_ONLY_POSTS`.
+
+**Endpoints** — GET `/api/trace/{victim}`, POST `/api/trace/batch`, GET `/api/cells`, `/api/cells/{id}`, `/api/cells/{id}/victims`, `/api/network`.
+- `/victims` and `/detected-victims` now return `{victims: [account numbers], items: [objects]}`.
+- Trace: contract names on `nodes[]` / `links[]`, `total_siphoned_inr`, `recoverable_holding_inr` (= held in freeze-recommended accounts), plus `found, victim, fingerprint, profile, filters, summary, reconcile, per_hop, findings, freeze_candidates, cells`. Money in rupees.
+- `max_hops` is capped at the profile max; `time_window` / `custom_rules` are accepted and listed under `filters.ignored`; `min_amount`, `bank_filter`, `keyword` (narration) and `max_hops` filter only the returned links, and a node stays when a remaining link touches it. Totals, summary, reconcile and fingerprint always describe the whole trace.
+- Unknown account: 200 `{found: false, message}`. Unknown cell: 404. `/network` lists `rings` rows with their cell count.
+
+**Results** — `audits\check_api.py` PASSED, 981 checks, 4.6 s. SBIN10000294: 11 traced accounts + victim root, 11 links, reconcile difference 0, fingerprint 667df0bc... equal to the CLI; link amounts / mode / lag and node IFSC equal SQL in the audit; batch of 5 equals the single traces; all 129 cells' `/victims` equal `reverse_trace_cell`; database size and modified time unchanged, no `.wal`.
+- Timings: first trace 88 ms (loads the context), later traces 24 ms, batch 43 ms, cells 18 ms, cell / cell victims 1-2 ms, network 19 ms.
+
+**Null fields** — nodes: `device_type`, `ip_address` (our device / IP are per transfer, returned on each link); links: `lag_seconds` on the victim's own payment and on fallback transfers, `l1_edge_score` unless the first hop was chosen by it; `by_victim` outside the batch trace.
+
+**Deviations / open items**
+- `nodes[]` has 12 entries for the sample, not 11: the victim is included as the hop-0 root the UI graph needs (contract: `risk_score` = victim_score for VICTIM). The audit checks 11 traced accounts + 1 root.
+- `max_hops` below the profile max hides deeper links in the response only; the engine has no such parameter and always traces to the profile max.
+- B1's "no write routes" check read `app.routes`, which this FastAPI version leaves empty for included routers, so it checked nothing. It now reads the OpenAPI paths and allows only POST `/api/trace/batch`.
+- Not smoke-tested under a real uvicorn process this batch (TestClient only).
+
+## 2026-10-02 — Step 6 batch B3: profiles, in-memory preview, transaction search
+
+**Step** — read-only profile endpoints and a what-if preview (API_CONTRACT.md rows B3), plus two trace fixes. The case file is never written by the API.
+
+**Files** — new `api\routers\profiles.py`, `transactions.py`, `api\services\profiles.py`, `transactions.py`, `api\repositories\preview.py`, `transactions.py`, `api\schemas\profiles.py`, `transactions.py`; changed `api\main.py`, `api\repositories\profiles.py`, trace service / schema, `audits\check_api.py`, `engine\scoring.py`, `engine\links.py`, `engine\sql\features_episode.sql`.
+
+**Key names** — `scoring.score(con, pass_no, label)`, `links.build(con, label)` (the old `main()` bodies; `main()` only opens the file and calls them), `preview.open_memory` (in-memory connection, case file ATTACHed READ_ONLY as `case_db`; `tx` / `accounts` are views, `scores` / `layer_links` / `features` / `scoring_profiles` in-memory tables), `apply_changes`, `ProfileChanges`, `CONDITIONS` (search whitelist), `SEARCH_FIELDS`, `MAX_SEARCH_LIMIT`, `READ_ONLY_POSTS`, `DEFERRED_POSTS`.
+
+**Endpoints** — GET `/api/profiles/active`, `/api/profiles/{id}`; POST `/api/profiles/preview`; GET `/api/transactions/search`; POST `/api/profiles`, `/api/profiles/{id}/activate` -> 501.
+- Profile: per parameter `weight, enabled, scored, gate, gate_status, thresholds` (the stored rule), one-line `description`; plus gates, final rule, windows and the stored `definition`.
+- Preview runs pass 1 -> links -> pass 2 on the in-memory tables and compares with the stored scores: flagged before / after, flags gained / lost and role changes with accounts (`account_limit`, default 200), band and role counts, freeze and link counts, `final_index_changed`, warnings.
+- Previewable changes: parameter `weight` / `enabled`, `flag_threshold`, `trust_discount_factor`, `min_parameters_at_half`. 422 for a negative weight, fewer than 2 scored mule signals, the two-signal rule disabled or below 2, an unknown parameter or field, or scoring a zero-weight (ZP) parameter.
+- Search fields: `min_amount, max_amount, bank, payment_mode, device, foreign_ip, narration_category, from_ts, to_ts, limit` (cap 1000); any other query field -> 422; bound parameters only.
+- Trace: `display_trimmed`, `full_hops`; node `device_type` / `ip_address` = most frequent value on its outgoing links in the trace, null for receive-only nodes.
+
+**Results** — `audits\check_api.py` PASSED, 1098 checks, 11.6 s. Preview with no changes: 0 flags gained / lost, 0 role changes, 0 accounts with a changed final_index. Preview with MP4 weight 0: flagged stays 1073 (0 gained, 0 lost), bands move from 129 high_confidence / 944 suspected to 0 / 1073, largest final_index change 16.9, warning that mule weights sum to 85. Database size and modified time unchanged, no `.wal`. `check_trace.py` PASSED.
+- Preview timing: 1.7-3.1 s (median about 2.1 s; 40 consecutive previews, 0 failures). Search 20-560 ms.
+- Refactor check on a scratch copy: `features.py`, `scoring.py --pass 1`, `links.py`, `scoring.py` rerun with the new code; `scores` (24,873 rows) and `layer_links` (2,954) identical to the stored tables, max final_index difference 0.
+
+**Deviations / open items**
+- Engine fix outside the brief: `features_episode.sql` numbered episodes with a ROWS frame, so two inflows sharing a timestamp could land in different episodes depending on tie order. The build's own audit then aborted ("overlapping_episodes=1"), about 1 preview in 10. Now a RANGE frame; successful runs give the same episodes as before.
+- Rebuilt `features` differ from stored in `timing_regularity` only (6 accounts, 2e-16, float summation order; ZP4 feature, weight 0, not scored). Present before this batch.
+- MP4 weight 0 loses no flags because weights are not rebalanced (stated in `warnings`) and the pass-through / sink override floor keeps the linked accounts above the flag threshold.
+- The preview does not rebuild cells / rings, and cannot preview window or feature-rule changes (those are measured into `features`).
+- The case file itself was not re-scored; the stored scores are the ones written before this batch.
