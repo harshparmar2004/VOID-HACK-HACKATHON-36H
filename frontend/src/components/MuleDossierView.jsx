@@ -259,6 +259,22 @@ export default function MuleDossierView({
     setCurrentPage(1);
   }, [activeFilter, searchTerm, selectedBank, minRisk, sortBy]);
 
+  const hasActiveFilters = Boolean(
+    searchTerm.trim() ||
+    selectedBank !== "ALL" ||
+    minRisk > 0 ||
+    sortBy !== "risk_desc" ||
+    (activeFilter && activeFilter !== "ALL")
+  );
+
+  const resetAllFilters = () => {
+    setSearchTerm("");
+    setSelectedBank("ALL");
+    setMinRisk(0);
+    setSortBy("risk_desc");
+    if (onFilterRole) onFilterRole(null);
+  };
+
   const totalPages = Math.max(1, Math.ceil(filteredMules.length / itemsPerPage));
   const paginatedMules = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -449,25 +465,25 @@ export default function MuleDossierView({
         </div>
       </div>
 
-      {/* 3. Forensic Account Intelligence Console (Two-Tier Unified Control) */}
-      <div className="bg-white/70 backdrop-blur-[18px] border border-[#E8E2D5] rounded-2xl p-3.5 shadow-2xs space-y-2.5">
+      {/* 3. Forensic Account Intelligence Console (Organized Executive Frame) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-sm p-3.5 shadow-2xs space-y-3">
         {/* Tier 1: Search + Role Segmentation */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          {/* Large Search Field (55-60% width on desktop) */}
-          <div className="relative flex-1 lg:max-w-[58%] min-w-0">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
+          {/* Search Field */}
+          <div className="relative flex-1 min-w-0">
             <div className="relative flex items-center">
-              <Search className="w-4 h-4 absolute left-3.5 text-[#9E968D] pointer-events-none" />
+              <Search className="w-3.5 h-3.5 absolute left-3 text-[#9E968D] pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search Account ID, IFSC, Bank Name, or Modus Operandi..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white/90 backdrop-blur-sm border border-[#E8E2D5] rounded-xl pl-10 pr-14 py-2 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 shadow-2xs transition-all"
+                className="w-full bg-white border border-[#D4CEBF] rounded-sm pl-9 pr-14 py-2 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 shadow-2xs transition-all"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm("")}
-                  className="absolute right-3 px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold text-[#9E968D] hover:text-[#2C2623] hover:bg-black/5 rounded cursor-pointer transition-colors"
+                  className="absolute right-2.5 px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold text-[#9E968D] hover:text-[#2C2623] hover:bg-[#FAF6EE] rounded-xs border border-transparent hover:border-[#E8E2D5] cursor-pointer transition-colors"
                 >
                   Clear
                 </button>
@@ -475,9 +491,9 @@ export default function MuleDossierView({
             </div>
           </div>
 
-          {/* Role Segmentation Controls (Segmented Control) */}
+          {/* Role Segmentation Controls */}
           <div className="flex items-center overflow-x-auto no-scrollbar shrink-0">
-            <div className="inline-flex items-center p-1 rounded-xl bg-white/60 backdrop-blur-md border border-[#E8E2D5] shadow-2xs gap-1 w-full sm:w-auto">
+            <div className="inline-flex items-center p-0.5 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] gap-0.5 shadow-2xs w-full sm:w-auto">
               {[
                 { id: "ALL", label: "ALL MULES", count: stats.total },
                 { id: "L1_COLLECTOR", label: "L1 COLLECTOR", count: stats.l1 },
@@ -489,21 +505,21 @@ export default function MuleDossierView({
                   <button
                     key={tab.id}
                     onClick={() => onFilterRole(tab.id === "ALL" ? null : tab.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all duration-200 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                    className={`px-3 py-1.5 rounded-xs text-xs font-mono font-bold transition-all duration-150 cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                       isSelected
-                        ? "bg-[#D96B27] text-white shadow-xs border border-[#C25B1D]"
-                        : "text-[#746D65] hover:text-[#2C2623] hover:bg-white/80 border border-transparent"
+                        ? "bg-[#D96B27] text-white shadow-2xs border border-[#C25B1D]"
+                        : "text-[#746D65] hover:text-[#2C2623] hover:bg-white border border-transparent"
                     }`}
                   >
                     <span>{tab.label}</span>
                     <span
-                      className={`text-[10px] font-mono px-1.5 py-0.2 rounded-md font-bold transition-colors ${
+                      className={`text-[10px] font-mono px-1.5 py-0.2 rounded-xs font-bold transition-colors ${
                         isSelected
                           ? "bg-white/20 text-white"
-                          : "bg-[#EAE4D8] text-[#5C554E]"
+                          : "bg-[#E8E2D5] text-[#5C554E]"
                       }`}
                     >
-                      {tab.count}
+                      {tab.count.toLocaleString("en-IN")}
                     </span>
                   </button>
                 );
@@ -512,14 +528,14 @@ export default function MuleDossierView({
           </div>
         </div>
 
-        {/* Tier 2: Forensic Filter Console & System Telemetry */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-[#E8E2D5]/70 text-xs">
-          {/* Secondary Filters (Bank & Min Risk) */}
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Section Micro-Label */}
-            <div className="flex items-center gap-1.5 pr-2 border-r border-[#E8E2D5]/70 shrink-0">
+        {/* Tier 2: Unified Forensic Filter & Telemetry Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-[#E8E2D5] text-xs">
+          {/* Forensic Controls Group */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Micro-Label Badge */}
+            <div className="inline-flex items-center gap-1.5 pr-2.5 border-r border-[#E8E2D5] shrink-0">
               <Filter className="w-3 h-3 text-[#D96B27]" />
-              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#9E968D] whitespace-nowrap">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9E968D]">
                 Forensic Filters
               </span>
             </div>
@@ -532,7 +548,7 @@ export default function MuleDossierView({
               <select
                 value={selectedBank}
                 onChange={(e) => setSelectedBank(e.target.value)}
-                className="bg-white/90 border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
+                className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
               >
                 <option value="ALL">All Banks ({stats.total.toLocaleString("en-IN")})</option>
                 {bankOptions.map((b) => (
@@ -551,7 +567,7 @@ export default function MuleDossierView({
               <select
                 value={minRisk}
                 onChange={(e) => setMinRisk(Number(e.target.value))}
-                className="bg-white/90 border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
+                className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
               >
                 <option value={0}>Any Risk (0+)</option>
                 <option value={80}>High Confidence (80+)</option>
@@ -559,19 +575,16 @@ export default function MuleDossierView({
                 <option value={95}>Definitive Syndicate Core (95+)</option>
               </select>
             </div>
-          </div>
 
-          {/* Sort Control & Matching Telemetry Indicator */}
-          <div className="flex flex-wrap items-center gap-3">
             {/* Sort Options */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 pl-1 sm:border-l sm:border-[#E8E2D5] sm:pl-3">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
-                Sort By:
+                Sort:
               </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-white/90 border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
+                className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
               >
                 <option value="risk_desc">Risk Index (High to Low)</option>
                 <option value="holding_desc">Holding Balance (High to Low)</option>
@@ -580,14 +593,26 @@ export default function MuleDossierView({
               </select>
             </div>
 
-            {/* Telemetry Indicator */}
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/90 border border-[#E8E2D5] shadow-2xs font-mono shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
-              <span className="text-xs font-bold text-[#2C2623]">{filteredMules.length}</span>
-              <span className="text-[10px] font-bold text-[#746D65] uppercase tracking-wider">
-                Matching Accounts
-              </span>
-            </div>
+            {/* Reset Filters action */}
+            {hasActiveFilters && (
+              <button
+                onClick={resetAllFilters}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-[#D96B27] hover:text-[#C25B1D] bg-[#FFEDD5]/70 hover:bg-[#FFEDD5] border border-[#FDBA74] rounded-xs transition-colors cursor-pointer shadow-2xs"
+                title="Reset all search, bank, risk, and role filters"
+              >
+                <X className="w-3 h-3" />
+                <span>Reset Filters</span>
+              </button>
+            )}
+          </div>
+
+          {/* Right: Matching Accounts Telemetry Badge */}
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] shadow-2xs font-mono shrink-0 ml-auto sm:ml-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
+            <span className="text-xs font-bold text-[#2C2623]">{filteredMules.length.toLocaleString("en-IN")}</span>
+            <span className="text-[10px] font-bold text-[#746D65] uppercase tracking-wider">
+              Matching Accounts
+            </span>
           </div>
         </div>
       </div>
@@ -617,6 +642,15 @@ export default function MuleDossierView({
                     <p className="text-xs text-[#746D65] mt-1">
                       Try clearing your search term or adjusting the role filter above.
                     </p>
+                    {hasActiveFilters && (
+                      <button
+                        onClick={resetAllFilters}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold text-[#D96B27] bg-[#FFEDD5] border border-[#FDBA74] rounded-sm hover:bg-[#FDBA74]/30 cursor-pointer shadow-2xs transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Reset All Filters</span>
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
