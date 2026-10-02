@@ -1,57 +1,38 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   SlidersHorizontal,
-  ShieldCheck,
-  Zap,
-  Filter,
-  RotateCcw,
-  CheckCircle2,
-  AlertTriangle,
-  Building,
-  GitCommit,
-  Clock,
-  Coins,
-  Cpu,
-  Globe,
-  Radio,
-  FileText,
-  TrendingUp,
   Plus,
   Trash2,
   Check,
-  Copy,
-  Terminal,
-  Database,
-  Search,
-  Eye,
-  ArrowRight,
-  Layers,
+  ShieldCheck,
+  Zap,
+  RotateCcw,
   Sparkles,
-  ToggleLeft,
-  ToggleRight,
-  HelpCircle
+  Building,
+  Clock,
+  Coins,
+  CheckCircle2,
+  Layers,
+  ArrowRight,
+  Filter
 } from "lucide-react";
-import { simulateParameters } from "../api";
 
 export default function ForensicParametersView({
   forensicParams = {},
   onSaveParams,
-  activeCase = "PUNB10000001",
-  onNavigateTab,
-  onSelectCase
+  activeCase = "100000000001",
+  onNavigateTab
 }) {
   // PRD Baseline Defaults
-  const prdDefaults = {
-    // Traversal & Filtering Constraints
+  const defaultParams = {
+    // Investigation Boundary Filters
     minAmount: 0,
     maxHops: 4,
     timeWindow: 180,
     bankFilter: "ALL",
     minRisk: 0,
-    narrationKeyword: "",
-    deviceFilter: "ALL",
 
-    // PRD Heuristics Weights (Sum = 100)
+    // Core Heuristic Weights (P1 to P6)
     p1Weight: 30,
     p2Weight: 15,
     p3Weight: 15,
@@ -59,29 +40,33 @@ export default function ForensicParametersView({
     p5Weight: 10,
     p6Weight: 5,
 
-    // PRD P7 Whale Outlier Threshold
-    p7WhaleThreshold: 15000000, // ₹1.5 Cr
+    // Active status for core parameters
+    p1Enabled: true,
+    p2Enabled: true,
+    p3Enabled: true,
+    p4Enabled: true,
+    p5Enabled: true,
+    p6Enabled: true,
 
-    // False Positive Merchant Protection
-    merchantProtectionGuard: true,
-
-    // Dynamic Custom Rules Array
+    // Custom Forensic Parameters (User-Extensible P7, P8, P9...)
     customRules: [
       {
         id: "rule_crypto_p2p",
-        name: "Crypto P2P Narration Detector",
+        name: "P7: Crypto P2P Narration",
         field: "Narration",
         operator: "contains",
         value: "CRYPTO",
+        points: 25,
         action: "FLAG_SUSPICIOUS",
         enabled: true
       },
       {
         id: "rule_foreign_proxy",
-        name: "Foreign Proxy IP Subnet",
+        name: "P8: Foreign Proxy Subnet 194.x",
         field: "IP_Address",
         operator: "starts_with",
         value: "194.",
+        points: 20,
         action: "AUTO_FREEZE",
         enabled: true
       }
@@ -89,1005 +74,868 @@ export default function ForensicParametersView({
   };
 
   const [formState, setFormState] = useState(() => ({
-    ...prdDefaults,
+    ...defaultParams,
     ...(forensicParams || {}),
-    customRules: forensicParams?.customRules || prdDefaults.customRules
+    customRules: forensicParams?.customRules || defaultParams.customRules
   }));
 
-  const [activeTab, setActiveTab] = useState("traversal"); // 'traversal' | 'custom' | 'heuristics' | 'simulation'
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [simulationData, setSimulationData] = useState(null);
-  const [simulating, setSimulating] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // New Rule Form State
+  const [newRuleName, setNewRuleName] = useState("");
+  const [newRuleField, setNewRuleField] = useState("Narration");
+  const [newRuleOperator, setNewRuleOperator] = useState("contains");
+  const [newRuleValue, setNewRuleValue] = useState("");
+  const [newRulePoints, setNewRulePoints] = useState(20);
+  const [newRuleAction, setNewRuleAction] = useState("FLAG_SUSPICIOUS");
 
   useEffect(() => {
-    if (forensicParams) {
+    if (forensicParams && Object.keys(forensicParams).length > 0) {
       setFormState((prev) => ({
         ...prev,
         ...forensicParams,
-        customRules: forensicParams.customRules || prev.customRules || prdDefaults.customRules
+        customRules: forensicParams.customRules || prev.customRules || defaultParams.customRules
       }));
     }
   }, [forensicParams]);
 
-  // Run simulation whenever parameters change or on mount
-  const runLiveSimulation = async (stateToSimulate = formState) => {
-    setSimulating(true);
-    try {
-      const res = await simulateParameters({
-        min_amount: stateToSimulate.minAmount,
-        bank_filter: stateToSimulate.bankFilter,
-        keyword: stateToSimulate.narrationKeyword,
-        device_filter: stateToSimulate.deviceFilter,
-        min_risk: stateToSimulate.minRisk,
-        custom_rules: stateToSimulate.customRules,
-        active_case: activeCase
-      });
-      if (res && res.status === "success") {
-        setSimulationData(res);
-      }
-    } catch (e) {
-      console.warn("Could not simulate parameters:", e);
-    } finally {
-      setSimulating(false);
-    }
-  };
+  // Total Active Parameters Count
+  const activeParamsCount = useMemo(() => {
+    let count = 0;
+    if (formState.p1Enabled) count++;
+    if (formState.p2Enabled) count++;
+    if (formState.p3Enabled) count++;
+    if (formState.p4Enabled) count++;
+    if (formState.p5Enabled) count++;
+    if (formState.p6Enabled) count++;
+    const activeCustom = (formState.customRules || []).filter((r) => r.enabled).length;
+    return count + activeCustom;
+  }, [formState]);
 
-  useEffect(() => {
-    runLiveSimulation(formState);
-  }, []);
+  // Total Points Sum
+  const totalPoints = useMemo(() => {
+    let sum = 0;
+    if (formState.p1Enabled) sum += Number(formState.p1Weight) || 0;
+    if (formState.p2Enabled) sum += Number(formState.p2Weight) || 0;
+    if (formState.p3Enabled) sum += Number(formState.p3Weight) || 0;
+    if (formState.p4Enabled) sum += Number(formState.p4Weight) || 0;
+    if (formState.p5Enabled) sum += Number(formState.p5Weight) || 0;
+    if (formState.p6Enabled) sum += Number(formState.p6Weight) || 0;
+    (formState.customRules || []).forEach((r) => {
+      if (r.enabled) sum += Number(r.points) || 0;
+    });
+    return sum;
+  }, [formState]);
 
-  const formatRupee = (val) => {
-    const num = Number(val) || 0;
-    if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`;
-    if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`;
-    if (num >= 1000) return `₹${(num / 1000).toFixed(0)}K`;
-    if (num > 0) return `₹${num.toLocaleString("en-IN")}`;
-    return "All Amounts (₹0+)";
-  };
-
-  const totalWeight = useMemo(() => {
-    return (
-      (Number(formState.p1Weight) || 0) +
-      (Number(formState.p2Weight) || 0) +
-      (Number(formState.p3Weight) || 0) +
-      (Number(formState.p4Weight) || 0) +
-      (Number(formState.p5Weight) || 0) +
-      (Number(formState.p6Weight) || 0)
-    );
-  }, [
-    formState.p1Weight,
-    formState.p2Weight,
-    formState.p3Weight,
-    formState.p4Weight,
-    formState.p5Weight,
-    formState.p6Weight
-  ]);
-
-  const activeCustomRulesCount = useMemo(() => {
-    return (formState.customRules || []).filter((r) => r.enabled).length;
-  }, [formState.customRules]);
-
-  // Handle Save
+  // Save changes
   const handleSave = (e) => {
     if (e) e.preventDefault();
     if (onSaveParams) {
       onSaveParams(formState);
     }
-    setSavedSuccess(true);
-    runLiveSimulation(formState);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3500);
   };
 
-  // Reset to Baseline
+  // Reset to Defaults
   const handleReset = () => {
-    setFormState(prdDefaults);
+    setFormState(defaultParams);
     if (onSaveParams) {
-      onSaveParams(prdDefaults);
+      onSaveParams(defaultParams);
     }
-    setSavedSuccess(true);
-    runLiveSimulation(prdDefaults);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3500);
   };
 
-  // Custom Rules Operations
-  const handleAddCustomRule = () => {
-    const newRule = {
-      id: `rule_${Date.now()}`,
-      name: `Custom Rule #${(formState.customRules?.length || 0) + 1}`,
+  // Add Custom Parameter Manually
+  const handleAddManualParameter = (e) => {
+    e.preventDefault();
+    if (!newRuleValue.trim()) {
+      alert("Please enter a Target Value for the parameter.");
+      return;
+    }
+
+    const nextIndex = (formState.customRules?.length || 0) + 7;
+    const name = newRuleName.trim() || `P${nextIndex}: ${newRuleField} ${newRuleOperator} "${newRuleValue}"`;
+
+    const newParam = {
+      id: `param_${Date.now()}`,
+      name,
+      field: newRuleField,
+      operator: newRuleOperator,
+      value: newRuleValue.trim(),
+      points: Number(newRulePoints) || 15,
+      action: newRuleAction,
+      enabled: true
+    };
+
+    const updatedRules = [...(formState.customRules || []), newParam];
+    const updatedState = { ...formState, customRules: updatedRules };
+    setFormState(updatedState);
+
+    // Reset Form
+    setNewRuleName("");
+    setNewRuleValue("");
+    setNewRulePoints(20);
+
+    // Auto-save
+    if (onSaveParams) onSaveParams(updatedState);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  // Delete Custom Rule
+  const handleDeleteCustomRule = (index) => {
+    const updated = (formState.customRules || []).filter((_, i) => i !== index);
+    const updatedState = { ...formState, customRules: updated };
+    setFormState(updatedState);
+    if (onSaveParams) onSaveParams(updatedState);
+  };
+
+  // Toggle Custom Rule
+  const handleToggleCustomRule = (index) => {
+    const updated = [...(formState.customRules || [])];
+    updated[index] = { ...updated[index], enabled: !updated[index].enabled };
+    const updatedState = { ...formState, customRules: updated };
+    setFormState(updatedState);
+    if (onSaveParams) onSaveParams(updatedState);
+  };
+
+  // 1-Click Quick Add Presets
+  const quickPresets = [
+    {
+      label: "+ Digital Arrest Threat",
+      name: "Digital Arrest Modus Operandi",
       field: "Narration",
       operator: "contains",
-      value: "",
-      action: "FLAG_SUSPICIOUS",
+      value: "ARREST",
+      points: 30,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      label: "+ Telegram Task Scam",
+      name: "Telegram Task Scam Narration",
+      field: "Narration",
+      operator: "contains",
+      value: "TASK",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      label: "+ Heavy Whale > ₹50L",
+      name: "High Value Outlier > ₹50L",
+      field: "Amount_INR",
+      operator: ">",
+      value: "5000000",
+      points: 20,
+      action: "AUTO_FREEZE"
+    },
+    {
+      label: "+ Midnight Drain (12AM–4AM)",
+      name: "Midnight Dormancy Burst",
+      field: "Narration",
+      operator: "contains",
+      value: "IMPS",
+      points: 15,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      label: "+ Headless Bot Script",
+      name: "Headless Automated Bot",
+      field: "Device_Type",
+      operator: "contains",
+      value: "Linux_Script",
+      points: 20,
+      action: "AUTO_FREEZE"
+    },
+    {
+      label: "+ High-Risk Foreign IP 185.x",
+      name: "Foreign Proxy IP 185.x",
+      field: "IP_Address",
+      operator: "starts_with",
+      value: "185.",
+      points: 25,
+      action: "AUTO_FREEZE"
+    }
+  ];
+
+  const handleApplyPreset = (preset) => {
+    const nextIndex = (formState.customRules?.length || 0) + 7;
+    const newParam = {
+      id: `param_${Date.now()}`,
+      name: `P${nextIndex}: ${preset.name}`,
+      field: preset.field,
+      operator: preset.operator,
+      value: preset.value,
+      points: preset.points,
+      action: preset.action,
       enabled: true
     };
     const updated = {
       ...formState,
-      customRules: [...(formState.customRules || []), newRule]
+      customRules: [...(formState.customRules || []), newParam]
     };
     setFormState(updated);
-    setActiveTab("custom");
-  };
-
-  const handleUpdateRule = (index, field, val) => {
-    const updatedRules = [...(formState.customRules || [])];
-    updatedRules[index] = {
-      ...updatedRules[index],
-      [field]: val
-    };
-    setFormState({
-      ...formState,
-      customRules: updatedRules
-    });
-  };
-
-  const handleDeleteRule = (index) => {
-    const updatedRules = (formState.customRules || []).filter((_, i) => i !== index);
-    setFormState({
-      ...formState,
-      customRules: updatedRules
-    });
-  };
-
-  const handleToggleRule = (index) => {
-    const updatedRules = [...(formState.customRules || [])];
-    updatedRules[index] = {
-      ...updatedRules[index],
-      enabled: !updatedRules[index].enabled
-    };
-    setFormState({
-      ...formState,
-      customRules: updatedRules
-    });
-  };
-
-  // Quick Preset Rule Templates
-  const handleApplyPresetTemplate = (template) => {
-    const newRule = {
-      id: `rule_${Date.now()}`,
-      ...template,
-      enabled: true
-    };
-    setFormState({
-      ...formState,
-      customRules: [...(formState.customRules || []), newRule]
-    });
+    if (onSaveParams) onSaveParams(updated);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
   return (
-    <div className="space-y-5 pb-12 select-none">
-      {/* Clean Top Command Header */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="space-y-1">
+    <div className="space-y-5">
+      {/* 1. Header Bar with Overview & Actions */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md p-4 sm:p-5 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-[#D96B27]" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+                Heuristics & Rule Customization Studio
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-serif font-bold text-[#2C2623] mt-0.5">
+              Forensic Parameters Manager
+            </h1>
+            <p className="text-xs text-[#746D65] mt-1">
+              Easily configure, weight, and manually add new forensic parameters ($P_1$ to $P_{20}+$). All parameters evaluate live across 2,000,000 transactions.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Live Parameter Stats */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm text-xs font-mono">
+              <span className="text-[#746D65]">Active Parameters:</span>
+              <strong className="text-[#D96B27] font-bold">{activeParamsCount}</strong>
+              <span className="text-[#D4CEBF]">|</span>
+              <span className="text-[#746D65]">Total Weight:</span>
+              <strong className="text-[#059669] font-bold">{totalPoints} pts</strong>
+            </div>
+
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] transition-all cursor-pointer shadow-2xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Defaults</span>
+            </button>
+
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Save & Apply Parameters</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Save Confirmation Notification */}
+        {saveSuccess && (
+          <div className="mt-3 p-2.5 bg-[#D1FAE5] border border-[#6EE7B7] rounded-sm text-xs text-[#065F46] flex items-center gap-2 font-medium animate-in fade-in duration-200">
+            <CheckCircle2 className="w-4 h-4 text-[#059669]" />
+            <span>Parameters saved successfully! All graph traces, dossier risk scores, and 60s scanner alerts updated.</span>
+          </div>
+        )}
+      </div>
+
+      {/* 2. 1-Click Fast Presets Strip */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md p-3.5 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#2C2623] font-mono">
+            <Sparkles className="w-3.5 h-3.5 text-[#D96B27]" />
+            <span>1-CLICK QUICK ADD PRESETS:</span>
+          </div>
+          <span className="text-[11px] text-[#9E968D]">Click any preset to instantly add as a new parameter ($P_7, P_8, P_9\dots$)</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {quickPresets.map((preset) => (
+            <button
+              key={preset.label}
+              onClick={() => handleApplyPreset(preset)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#FAF6EE] hover:bg-[#F3EDE2] border border-[#D4CEBF] hover:border-[#D96B27] text-xs font-mono font-semibold text-[#2C2623] transition-all cursor-pointer shadow-2xs"
+            >
+              <Plus className="w-3 h-3 text-[#D96B27]" />
+              <span>{preset.label}</span>
+              <span className="text-[10px] text-[#059669] font-bold">+{preset.points} pts</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. Manually Add New Parameter Box (Simple, Intuitive Form) */}
+      <div className="bg-white border border-[#D96B27]/40 rounded-md p-4 sm:p-5 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between border-b border-[#F0EAE1] pb-2.5">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-            <span className="text-[10px] font-mono tracking-widest uppercase text-[#7C746D] font-semibold">
-              Forensic Intelligence Hub
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5]">
-              PRD P1–P10 Engine
-            </span>
-          </div>
-          <h1 className="text-xl font-serif font-bold text-[#2C2623]">
-            Investigation Parameters & Dynamic Rule Studio
-          </h1>
-          <p className="text-xs text-[#7C746D] max-w-3xl">
-            Configure multi-hop BFS money trail bounds, add custom investigative parameter rules, and adjust 0–100 Mule Risk Index heuristics.
-          </p>
-        </div>
-
-        {/* Global Action Buttons */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={handleAddCustomRule}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAF6EE] hover:bg-[#F3EDE2] border border-[#E8E2D5] text-xs font-semibold text-[#2C2623] transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-[#D96B27]" />
-            <span>Add Custom Rule</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-xs font-mono text-[#7C746D] hover:text-[#2C2623] transition-all cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Baseline</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Save & Apply Parameters</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Confirmation Notification Banner */}
-      {savedSuccess && (
-        <div className="p-3.5 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] flex items-center justify-between text-xs text-[#065F46] animate-in fade-in duration-150">
-          <div className="flex items-center gap-2 font-mono">
-            <CheckCircle2 className="w-4 h-4 text-[#059669] shrink-0" />
-            <span>
-              <strong>Parameters & Custom Rules Enforced:</strong> All active graph money trails, mule dossiers, entity directory queries, and future CSV/Google Sheet ingests are immediately re-filtered.
-            </span>
-          </div>
-          <span className="text-[10px] font-mono font-bold text-[#059669] bg-white px-2 py-0.5 rounded border border-[#A7F3D0]">
-            ACTIVE & ENFORCED
-          </span>
-        </div>
-      )}
-
-      {/* Real-Time Metrics Ribbon */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-        <div className="bg-white border border-[#E8E2D5] rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] font-mono text-[#78716C] mb-1">
-            <span>FILTERED MATCHES</span>
-            <Database className="w-3.5 h-3.5 text-[#D96B27]" />
-          </div>
-          <div className="text-xl font-bold font-mono text-[#1C1917]">
-            {simulationData ? simulationData.total_matching_txns.toLocaleString("en-IN") : "..."}{" "}
-            <span className="text-[11px] font-normal text-[#78716C]">Txns</span>
-          </div>
-          <div className="text-[10px] text-[#A8A29E] font-mono mt-0.5">
-            Vol: {simulationData ? `₹${(simulationData.total_matching_volume / 100000).toFixed(2)} Lakh` : "..."}
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] font-mono text-[#78716C] mb-1">
-            <span>ACTIVE CUSTOM RULES</span>
-            <Zap className="w-3.5 h-3.5 text-[#D96B27]" />
-          </div>
-          <div className="text-xl font-bold font-mono text-[#1C1917]">
-            {activeCustomRulesCount}{" "}
-            <span className="text-[11px] font-normal text-[#78716C]">
-              / {formState.customRules?.length || 0} Enabled
-            </span>
-          </div>
-          <div className="text-[10px] text-[#A8A29E] font-mono mt-0.5">
-            User-defined parameters
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] font-mono text-[#78716C] mb-1">
-            <span>MULTI-HOP BOUNDS</span>
-            <GitCommit className="w-3.5 h-3.5 text-[#D96B27]" />
-          </div>
-          <div className="text-xl font-bold font-mono text-[#1C1917]">
-            {formState.maxHops} Hops{" "}
-            <span className="text-[11px] font-normal text-[#78716C]">
-              / {formState.timeWindow}m
-            </span>
-          </div>
-          <div className="text-[10px] text-[#A8A29E] font-mono mt-0.5">
-            Min Floor: {formatRupee(formState.minAmount)}
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] font-mono text-[#78716C] mb-1">
-            <span>PRD HEURISTIC WEIGHT</span>
-            <TrendingUp className="w-3.5 h-3.5 text-[#D96B27]" />
-          </div>
-          <div className="text-xl font-bold font-mono text-[#1C1917]">
-            {totalWeight}{" "}
-            <span className={`text-[11px] font-normal ${totalWeight === 100 ? "text-[#059669]" : "text-[#D97706]"}`}>
-              / 100 {totalWeight === 100 ? "✓ Optimal" : "(!)"}
-            </span>
-          </div>
-          <div className="text-[10px] text-[#A8A29E] font-mono mt-0.5">
-            Merchant Guard: {formState.merchantProtectionGuard ? "Protected" : "Disabled"}
-          </div>
-        </div>
-      </div>
-
-      {/* Modern Segmented Navigation Tabs */}
-      <div className="flex items-center gap-1.5 p-1 bg-[#F3EDE2] border border-[#E8E2D5] rounded-xl font-mono text-xs">
-        <button
-          type="button"
-          onClick={() => setActiveTab("traversal")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
-            activeTab === "traversal"
-              ? "bg-white text-[#1C1917] shadow-xs"
-              : "text-[#78716C] hover:text-[#1C1917]"
-          }`}
-        >
-          <Filter className="w-3.5 h-3.5 text-[#D96B27]" />
-          <span>[1] Investigation & Traversal Bounds</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("custom")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
-            activeTab === "custom"
-              ? "bg-white text-[#1C1917] shadow-xs"
-              : "text-[#78716C] hover:text-[#1C1917]"
-          }`}
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5 text-[#D96B27]" />
-          <span>[2] Custom Parameter Rules</span>
-          <span className="text-[10px] bg-[#D96B27] text-white px-1.5 py-0.2 rounded font-mono">
-            {formState.customRules?.length || 0}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("heuristics")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
-            activeTab === "heuristics"
-              ? "bg-white text-[#1C1917] shadow-xs"
-              : "text-[#78716C] hover:text-[#1C1917]"
-          }`}
-        >
-          <Cpu className="w-3.5 h-3.5 text-[#D96B27]" />
-          <span>[3] PRD Heuristics Engine (P1–P10)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("simulation");
-            runLiveSimulation(formState);
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
-            activeTab === "simulation"
-              ? "bg-white text-[#1C1917] shadow-xs"
-              : "text-[#78716C] hover:text-[#1C1917]"
-          }`}
-        >
-          <Terminal className="w-3.5 h-3.5 text-[#D96B27]" />
-          <span>[4] Live Query Simulation & Impact</span>
-          {simulating && <span className="animate-spin text-xs">⟳</span>}
-        </button>
-      </div>
-
-      {/* TAB CONTENT 1: Core Traversal & Bounds */}
-      {activeTab === "traversal" && (
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-6">
-          <div className="border-b border-[#F0EBE1] pb-3 flex items-center justify-between">
+            <div className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D96B27] flex items-center justify-center text-[#D96B27]">
+              <Plus className="w-3.5 h-3.5" />
+            </div>
             <div>
-              <h2 className="text-sm font-bold text-[#1C1917] font-mono uppercase tracking-wider">
-                Multi-Hop Graph Traversal Constraints
+              <h2 className="text-sm font-serif font-bold text-[#2C2623]">
+                Add New Forensic Parameter Manually
               </h2>
-              <p className="text-xs text-[#78716C]">
-                Controls the depth, velocity cutoff, and threshold criteria during Breadth-First Search (BFS) money trail construction.
+              <p className="text-[11px] text-[#746D65]">
+                Define a custom condition on any dataset column. Evaluated in real-time in DuckDB.
               </p>
             </div>
-            <span className="text-[10px] font-mono text-[#D96B27] bg-[#FAF6EE] px-2.5 py-1 rounded border border-[#E8E2D5]">
-              Real-Time Vectorized Traversal
-            </span>
+          </div>
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-xs bg-[#E6F7F0] text-[#059669]">
+            Instant SQL Compilation
+          </span>
+        </div>
+
+        <form onSubmit={handleAddManualParameter} className="space-y-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {/* 1. Parameter Name */}
+            <div className="lg:col-span-2">
+              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                Parameter Name / Description
+              </label>
+              <input
+                type="text"
+                placeholder='e.g. "Crypto P2P Exit", "Rapid RTGS Midnight Drain"'
+                value={newRuleName}
+                onChange={(e) => setNewRuleName(e.target.value)}
+                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none transition-colors"
+              />
+            </div>
+
+            {/* 2. Target Column */}
+            <div>
+              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                Dataset Field
+              </label>
+              <select
+                value={newRuleField}
+                onChange={(e) => setNewRuleField(e.target.value)}
+                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none transition-colors"
+              >
+                <option value="Narration">Narration (Remarks)</option>
+                <option value="Amount_INR">Amount_INR (Amount)</option>
+                <option value="IP_Address">IP_Address (IP / VPN)</option>
+                <option value="Device_Type">Device_Type (Bot / OS)</option>
+                <option value="Receiver_IFSC">Receiver_IFSC (Bank)</option>
+                <option value="Sender_IFSC">Sender_IFSC (Bank)</option>
+                <option value="Payment_Mode">Payment_Mode (UPI/IMPS)</option>
+              </select>
+            </div>
+
+            {/* 3. Operator */}
+            <div>
+              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                Condition
+              </label>
+              <select
+                value={newRuleOperator}
+                onChange={(e) => setNewRuleOperator(e.target.value)}
+                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none transition-colors"
+              >
+                {newRuleField === "Amount_INR" ? (
+                  <>
+                    <option value=">">&gt; (Greater than)</option>
+                    <option value=">=">&gt;= (Greater or equal)</option>
+                    <option value="<">&lt; (Less than)</option>
+                    <option value="==">== (Exact amount)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="contains">contains (Sub-string)</option>
+                    <option value="starts_with">starts_with (Prefix)</option>
+                    <option value="equals">equals (Exact match)</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* 4. Target Value */}
+            <div>
+              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                Target Value
+              </label>
+              <input
+                type="text"
+                placeholder={newRuleField === "Amount_INR" ? "e.g. 5000000" : 'e.g. "CRYPTO" or "194."'}
+                value={newRuleValue}
+                onChange={(e) => setNewRuleValue(e.target.value)}
+                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs font-mono font-bold text-[#D96B27] focus:outline-none transition-colors"
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* Min Transaction Amount Filter */}
-            <div className="space-y-2 lg:col-span-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-semibold text-[#1C1917]">MINIMUM TRANSACTION AMOUNT FILTER (INR)</span>
-                <span className="font-bold text-[#D96B27]">{formatRupee(formState.minAmount)}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-4">
+              {/* Risk Points Slider/Input */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[#2C2623]">Risk Points Added:</span>
+                <select
+                  value={newRulePoints}
+                  onChange={(e) => setNewRulePoints(Number(e.target.value))}
+                  className="h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs font-mono font-bold text-[#D96B27] focus:outline-none"
+                >
+                  <option value={5}>+5 pts (Minor anomaly)</option>
+                  <option value={10}>+10 pts (Suspicious pattern)</option>
+                  <option value={15}>+15 pts (Strong indicator)</option>
+                  <option value={20}>+20 pts (High risk anomaly)</option>
+                  <option value={25}>+25 pts (Critical syndicate marker)</option>
+                  <option value={30}>+30 pts (Definite fraud marker)</option>
+                </select>
               </div>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-xs font-mono text-[#A8A29E]">₹</span>
+
+              {/* Action */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[#2C2623]">Investigative Action:</span>
+                <select
+                  value={newRuleAction}
+                  onChange={(e) => setNewRuleAction(e.target.value)}
+                  className="h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs font-semibold text-[#2C2623] focus:outline-none"
+                >
+                  <option value="FLAG_SUSPICIOUS">Flag Suspected Mule (+Risk)</option>
+                  <option value="AUTO_FREEZE">Priority Sec 91 Freeze Lien</option>
+                  <option value="FILTER_MATCH">Filter Graph Trail Only</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="flex items-center gap-2 px-5 py-2 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Add Parameter to Engine</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 4. Complete Active Forensic Parameters List (P1 to P6 + Custom P7, P8, P9...) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
+        <div className="p-3.5 sm:p-4 bg-[#FAF6EE] border-b border-[#E8E2D5] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#D96B27]" />
+            <h2 className="text-sm font-serif font-bold text-[#2C2623]">
+              Active Forensic Parameters & Heuristic Matrix
+            </h2>
+          </div>
+          <span className="text-[11px] font-mono font-bold text-[#746D65]">
+            Adjust weight points or toggle rules on/off in real-time
+          </span>
+        </div>
+
+        <div className="divide-y divide-[#EFEAE1]">
+          {/* Core P1 Parameter */}
+          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
+            <div className="flex items-start gap-3">
+              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                P1
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Pass-Through Velocity (3–15m Drain)</h3>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
+                </div>
+                <p className="text-[11px] text-[#746D65] mt-0.5">
+                  Detects $\ge 85\%$ of incoming funds drained to downstream accounts within 15 minutes.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
                 <input
                   type="number"
                   min="0"
-                  step="5000"
-                  value={formState.minAmount}
-                  onChange={(e) => setFormState({ ...formState, minAmount: Number(e.target.value) || 0 })}
-                  placeholder="0 (Include all transactions)"
-                  className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl pl-7 pr-3 py-2 text-xs font-mono text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
+                  max="50"
+                  value={formState.p1Weight}
+                  onChange={(e) => setFormState({ ...formState, p1Weight: Number(e.target.value) || 0 })}
+                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                 />
+                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
               </div>
-              {/* Presets */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {[
-                  { label: "All Amounts (₹0)", val: 0 },
-                  { label: "₹50,000", val: 50000 },
-                  { label: "₹1,00,000", val: 100000 },
-                  { label: "₹10,00,000", val: 1000000 },
-                  { label: "₹1 Crore+", val: 10000000 },
-                  { label: "₹2–3 Cr Whale", val: 20000000 }
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => setFormState({ ...formState, minAmount: preset.val })}
-                    className={`text-[10px] font-mono px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                      Number(formState.minAmount) === preset.val
-                        ? "bg-[#D96B27] text-white border-[#D96B27] font-semibold"
-                        : "bg-[#FAF6EE] text-[#78716C] border-[#E8E2D5] hover:bg-[#F3EDE2]"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Max Hop Depth */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-semibold text-[#1C1917]">MAX GRAPH TRAVERSAL DEPTH</span>
-                <span className="font-bold text-[#D96B27]">{formState.maxHops} Hops</span>
-              </div>
-              <div className="grid grid-cols-5 gap-1.5">
-                {[1, 2, 3, 4, 5].map((hop) => (
-                  <button
-                    key={hop}
-                    type="button"
-                    onClick={() => setFormState({ ...formState, maxHops: hop })}
-                    className={`py-2 text-xs font-mono rounded-xl border text-center font-bold transition-all cursor-pointer ${
-                      Number(formState.maxHops) === hop
-                        ? "bg-[#1C1917] text-white border-[#1C1917]"
-                        : "bg-[#FAF6EE] text-[#78716C] border-[#E8E2D5] hover:bg-[#F3EDE2]"
-                    }`}
-                  >
-                    {hop}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-[#A8A29E] font-mono">
-                L1 (Collector) → L2 (Distributors) → L3 (Cash-outs)
-              </p>
-            </div>
-
-            {/* Velocity Dispersion Window */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-semibold text-[#1C1917]">VELOCITY DISPERSION WINDOW</span>
-                <span className="font-bold text-[#D96B27]">{formState.timeWindow} Mins</span>
-              </div>
-              <select
-                value={formState.timeWindow}
-                onChange={(e) => setFormState({ ...formState, timeWindow: Number(e.target.value) })}
-                className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-mono text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
+              <button
+                type="button"
+                onClick={() => setFormState({ ...formState, p1Enabled: !formState.p1Enabled })}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                  formState.p1Enabled
+                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                }`}
               >
-                <option value={15}>15 Mins (Rapid Automated Burst)</option>
-                <option value={30}>30 Mins (High-Speed Slicing)</option>
-                <option value={60}>60 Mins (Standard Tactical Scan)</option>
-                <option value={180}>180 Mins (3h Standard Investigation)</option>
-                <option value={720}>720 Mins (12h Multi-Shift Window)</option>
-                <option value={1440}>1440 Mins (24h Full Day Cycle)</option>
-              </select>
-            </div>
-
-            {/* Bank / IFSC Routing */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-semibold text-[#1C1917]">BANK / IFSC ROUTING</span>
-                <span className="font-bold text-[#D96B27]">{formState.bankFilter}</span>
-              </div>
-              <select
-                value={formState.bankFilter}
-                onChange={(e) => setFormState({ ...formState, bankFilter: e.target.value })}
-                className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-mono text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
-              >
-                <option value="ALL">All Banks (Multi-Bank Aggregation)</option>
-                <option value="PYTM">Paytm Payments Bank (PYTM)</option>
-                <option value="IPOS">India Post Payments Bank (IPOS)</option>
-                <option value="AXIS">Axis Bank (AXIS)</option>
-                <option value="SBIN">State Bank of India (SBIN)</option>
-                <option value="PUNB">Punjab National Bank (PUNB)</option>
-                <option value="HDFC">HDFC Bank (HDFC)</option>
-                <option value="ICIC">ICICI Bank (ICIC)</option>
-                <option value="KKBK">Kotak Mahindra Bank (KKBK)</option>
-              </select>
-            </div>
-
-            {/* Minimum Mule Risk Index */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-semibold text-[#1C1917]">MIN MULE RISK INDEX</span>
-                <span className="font-bold text-[#D96B27]">{formState.minRisk}+ / 100</span>
-              </div>
-              <select
-                value={formState.minRisk}
-                onChange={(e) => setFormState({ ...formState, minRisk: Number(e.target.value) })}
-                className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-mono text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
-              >
-                <option value={0}>0+ (All Transacting Accounts)</option>
-                <option value={35}>35+ (Suspected Mules & Up)</option>
-                <option value={65}>65+ (High-Confidence Mules Only)</option>
-                <option value={85}>85+ (Critical High-Risk Syndicate)</option>
-                <option value={95}>95+ (Definite Terminal Cash-Out Nodes)</option>
-              </select>
+                {formState.p1Enabled ? "ACTIVE" : "DISABLED"}
+              </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* TAB CONTENT 2: Dynamic Custom Parameter Rules Builder */}
-      {activeTab === "custom" && (
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-6">
-          <div className="border-b border-[#F0EBE1] pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-[#1C1917] font-mono uppercase tracking-wider">
-                  Custom Forensic Parameter Rules Builder
-                </h2>
-                <span className="text-[10px] bg-[#ECFDF5] text-[#059669] px-2 py-0.5 rounded font-mono font-bold border border-[#A7F3D0]">
-                  User Extensible
-                </span>
+          {/* Core P2 Parameter */}
+          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
+            <div className="flex items-start gap-3">
+              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                P2
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Fan-In Centrality (L1 Intake Convergence)</h3>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
+                </div>
+                <p className="text-[11px] text-[#746D65] mt-0.5">
+                  Detects $\ge 5$ distinct victim senders converging into a single account in short bursts.
+                </p>
               </div>
-              <p className="text-xs text-[#78716C]">
-                Add any number of custom parameter rules. These rules are compiled into DuckDB SQL clauses and evaluated during multi-hop graph tracing and fraud scanning.
-              </p>
             </div>
 
-            <button
-              type="button"
-              onClick={handleAddCustomRule}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-mono font-bold shadow-xs cursor-pointer self-start sm:self-auto"
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={formState.p2Weight}
+                  onChange={(e) => setFormState({ ...formState, p2Weight: Number(e.target.value) || 0 })}
+                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                />
+                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormState({ ...formState, p2Enabled: !formState.p2Enabled })}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                  formState.p2Enabled
+                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                }`}
+              >
+                {formState.p2Enabled ? "ACTIVE" : "DISABLED"}
+              </button>
+            </div>
+          </div>
+
+          {/* Core P3 Parameter */}
+          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
+            <div className="flex items-start gap-3">
+              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                P3
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Fan-Out Smurfing Split (L2 Layering)</h3>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
+                </div>
+                <p className="text-[11px] text-[#746D65] mt-0.5">
+                  Slices incoming funds and disperses them across 3 to 50 downstream mules ($\ge 70\%$ outflow).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={formState.p3Weight}
+                  onChange={(e) => setFormState({ ...formState, p3Weight: Number(e.target.value) || 0 })}
+                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                />
+                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormState({ ...formState, p3Enabled: !formState.p3Enabled })}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                  formState.p3Enabled
+                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                }`}
+              >
+                {formState.p3Enabled ? "ACTIVE" : "DISABLED"}
+              </button>
+            </div>
+          </div>
+
+          {/* Core P4 Parameter */}
+          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
+            <div className="flex items-start gap-3">
+              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                P4
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Digital Footprint & Proxy Anomalies</h3>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
+                </div>
+                <p className="text-[11px] text-[#746D65] mt-0.5">
+                  Foreign VPN/Proxy IPs (185/194 CIDR), headless script devices, and scam narrations.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={formState.p4Weight}
+                  onChange={(e) => setFormState({ ...formState, p4Weight: Number(e.target.value) || 0 })}
+                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                />
+                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormState({ ...formState, p4Enabled: !formState.p4Enabled })}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                  formState.p4Enabled
+                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                }`}
+              >
+                {formState.p4Enabled ? "ACTIVE" : "DISABLED"}
+              </button>
+            </div>
+          </div>
+
+          {/* Core P5 Parameter */}
+          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
+            <div className="flex items-start gap-3">
+              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                P5
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Shared Infrastructure Cluster</h3>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
+                </div>
+                <p className="text-[11px] text-[#746D65] mt-0.5">
+                  Detects shared device fingerprints or proxy subnets clustered across multiple mule accounts.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={formState.p5Weight}
+                  onChange={(e) => setFormState({ ...formState, p5Weight: Number(e.target.value) || 0 })}
+                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                />
+                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormState({ ...formState, p5Enabled: !formState.p5Enabled })}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                  formState.p5Enabled
+                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                }`}
+              >
+                {formState.p5Enabled ? "ACTIVE" : "DISABLED"}
+              </button>
+            </div>
+          </div>
+
+          {/* Core P6 Parameter */}
+          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
+            <div className="flex items-start gap-3">
+              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                P6
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Behavioral Burst Hold Time</h3>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
+                </div>
+                <p className="text-[11px] text-[#746D65] mt-0.5">
+                  High-frequency burst outbound transactions immediately following receipt of stolen funds.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={formState.p6Weight}
+                  onChange={(e) => setFormState({ ...formState, p6Weight: Number(e.target.value) || 0 })}
+                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                />
+                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormState({ ...formState, p6Enabled: !formState.p6Enabled })}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                  formState.p6Enabled
+                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                }`}
+              >
+                {formState.p6Enabled ? "ACTIVE" : "DISABLED"}
+              </button>
+            </div>
+          </div>
+
+          {/* CUSTOM USER-ADDED PARAMETERS (P7, P8, P9... P20+) */}
+          {(formState.customRules || []).map((rule, idx) => (
+            <div
+              key={rule.id || idx}
+              className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 bg-[#FAF6EE]/30 hover:bg-[#FAF6EE] transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Add Parameter Rule</span>
-            </button>
-          </div>
+              <div className="flex items-start gap-3">
+                <span className="w-7 h-7 rounded-sm bg-[#D96B27]/10 border border-[#D96B27] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                  P{idx + 7}
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-[#2C2623] font-serif">{rule.name}</h3>
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#E0E7FF] text-[#4338CA]">
+                      CUSTOM RULE
+                    </span>
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#FEF3C7] text-[#D97706]">
+                      {rule.action}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] font-mono text-[#746D65] mt-1">
+                    <span>Field: <strong className="text-[#2C2623]">{rule.field}</strong></span>
+                    <span>•</span>
+                    <span>Condition: <strong className="text-[#2C2623]">{rule.operator}</strong></span>
+                    <span>•</span>
+                    <span>Value: <strong className="text-[#D96B27]">"{rule.value}"</strong></span>
+                  </div>
+                </div>
+              </div>
 
-          {/* Quick-Add Rule Templates */}
-          <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-3 space-y-2">
-            <div className="text-[10px] font-mono font-bold text-[#78716C] uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#D96B27]" />
-              <span>1-Click Forensic Parameter Presets:</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                {
-                  label: "Crypto P2P Narration",
-                  name: "Crypto P2P Narration",
-                  field: "Narration",
-                  operator: "contains",
-                  value: "CRYPTO",
-                  action: "FLAG_SUSPICIOUS"
-                },
-                {
-                  label: "Digital Arrest Threat",
-                  name: "Digital Arrest Narration",
-                  field: "Narration",
-                  operator: "contains",
-                  value: "ARREST",
-                  action: "AUTO_FREEZE"
-                },
-                {
-                  label: "Micro-Smurfing Split (≤ ₹20K)",
-                  name: "Micro-Smurfing Outflow",
-                  field: "Amount_INR",
-                  operator: "<=",
-                  value: "20000",
-                  action: "FLAG_SUSPICIOUS"
-                },
-                {
-                  label: "Foreign Proxy IP (185.*)",
-                  name: "Foreign Proxy Subnet 185",
-                  field: "IP_Address",
-                  operator: "starts_with",
-                  value: "185.",
-                  action: "AUTO_FREEZE"
-                },
-                {
-                  label: "Headless Linux Script",
-                  name: "Automated Linux Bot",
-                  field: "Device_Type",
-                  operator: "contains",
-                  value: "Linux_Script",
-                  action: "AUTO_FREEZE"
-                },
-                {
-                  label: "Paytm Hop Siphon",
-                  name: "Paytm Outflow Routing",
-                  field: "Receiver_IFSC",
-                  operator: "starts_with",
-                  value: "PYTM",
-                  action: "FILTER_MATCH"
-                }
-              ].map((tmpl) => (
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#746D65] font-mono">Points:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={rule.points || 20}
+                    onChange={(e) => {
+                      const updated = [...(formState.customRules || [])];
+                      updated[idx] = { ...updated[idx], points: Number(e.target.value) || 0 };
+                      setFormState({ ...formState, customRules: updated });
+                    }}
+                    className="w-14 h-7 text-center bg-white border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                  />
+                  <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                </div>
+
                 <button
-                  key={tmpl.label}
                   type="button"
-                  onClick={() => handleApplyPresetTemplate(tmpl)}
-                  className="text-[10px] font-mono px-2 py-1 rounded-lg bg-white hover:bg-[#F3EDE2] text-[#1C1917] border border-[#E8E2D5] transition-all cursor-pointer"
+                  onClick={() => handleToggleCustomRule(idx)}
+                  className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                    rule.enabled
+                      ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                      : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                  }`}
                 >
-                  + {tmpl.label}
+                  {rule.enabled ? "ACTIVE" : "DISABLED"}
                 </button>
-              ))}
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCustomRule(idx)}
+                  className="p-1 rounded-sm text-[#DC2626] hover:bg-[#FEE2E2] transition-colors cursor-pointer"
+                  title="Delete parameter"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-          </div>
-
-          {/* Interactive Rules Table */}
-          <div className="border border-[#E8E2D5] rounded-xl overflow-hidden shadow-2xs">
-            <table className="w-full text-left text-xs font-mono">
-              <thead className="bg-[#F8F4EC] text-[#78716C] border-b border-[#E8E2D5]">
-                <tr>
-                  <th className="py-2.5 px-3 w-12 text-center">Status</th>
-                  <th className="py-2.5 px-3">Rule Name</th>
-                  <th className="py-2.5 px-3">Target Field</th>
-                  <th className="py-2.5 px-3">Operator</th>
-                  <th className="py-2.5 px-3">Match Value</th>
-                  <th className="py-2.5 px-3">Forensic Action</th>
-                  <th className="py-2.5 px-3 w-16 text-center">Delete</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F0EBE1] bg-white">
-                {(formState.customRules || []).map((rule, idx) => (
-                  <tr key={rule.id || idx} className={rule.enabled ? "bg-white" : "bg-[#FAF8F5] opacity-60"}>
-                    {/* Status Toggle */}
-                    <td className="py-2 px-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRule(idx)}
-                        className="cursor-pointer"
-                      >
-                        {rule.enabled ? (
-                          <div className="w-8 h-4 bg-[#10B981] rounded-full relative transition-all">
-                            <span className="w-3 h-3 bg-white rounded-full absolute right-0.5 top-0.5" />
-                          </div>
-                        ) : (
-                          <div className="w-8 h-4 bg-[#D6D3D1] rounded-full relative transition-all">
-                            <span className="w-3 h-3 bg-white rounded-full absolute left-0.5 top-0.5" />
-                          </div>
-                        )}
-                      </button>
-                    </td>
-
-                    {/* Rule Name */}
-                    <td className="py-2 px-3">
-                      <input
-                        type="text"
-                        value={rule.name}
-                        onChange={(e) => handleUpdateRule(idx, "name", e.target.value)}
-                        placeholder="Rule Identifier"
-                        className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs font-semibold text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
-                      />
-                    </td>
-
-                    {/* Target Field */}
-                    <td className="py-2 px-3">
-                      <select
-                        value={rule.field}
-                        onChange={(e) => handleUpdateRule(idx, "field", e.target.value)}
-                        className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
-                      >
-                        <option value="Amount_INR">Amount_INR (Amount)</option>
-                        <option value="Receiver_IFSC">Receiver_IFSC (Bank)</option>
-                        <option value="Sender_IFSC">Sender_IFSC (Bank)</option>
-                        <option value="Narration">Narration (Remarks)</option>
-                        <option value="IP_Address">IP_Address (IP / Subnet)</option>
-                        <option value="Device_Type">Device_Type (Emulator/Bot)</option>
-                        <option value="Payment_Mode">Payment_Mode (UPI/IMPS)</option>
-                      </select>
-                    </td>
-
-                    {/* Operator */}
-                    <td className="py-2 px-3">
-                      <select
-                        value={rule.operator}
-                        onChange={(e) => handleUpdateRule(idx, "operator", e.target.value)}
-                        className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
-                      >
-                        {rule.field === "Amount_INR" ? (
-                          <>
-                            <option value=">">&gt; (Greater than)</option>
-                            <option value=">=">&gt;= (Greater or equal)</option>
-                            <option value="<">&lt; (Less than)</option>
-                            <option value="<=">&lt;= (Less or equal)</option>
-                            <option value="==">== (Exact match)</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="contains">contains (Sub-string)</option>
-                            <option value="starts_with">starts_with (Prefix)</option>
-                            <option value="equals">equals (Exact match)</option>
-                          </>
-                        )}
-                      </select>
-                    </td>
-
-                    {/* Value */}
-                    <td className="py-2 px-3">
-                      <input
-                        type="text"
-                        value={rule.value}
-                        onChange={(e) => handleUpdateRule(idx, "value", e.target.value)}
-                        placeholder="e.g. CRYPTO or 50000"
-                        className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs font-mono font-bold text-[#D96B27] focus:outline-none focus:border-[#D96B27]"
-                      />
-                    </td>
-
-                    {/* Action */}
-                    <td className="py-2 px-3">
-                      <select
-                        value={rule.action}
-                        onChange={(e) => handleUpdateRule(idx, "action", e.target.value)}
-                        className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs text-[#1C1917] focus:outline-none focus:border-[#D96B27]"
-                      >
-                        <option value="FILTER_MATCH">Filter Match Only</option>
-                        <option value="FLAG_SUSPICIOUS">Flag Suspected Mule (+25 pts)</option>
-                        <option value="AUTO_FREEZE">Priority Sec 91 Lien Freeze</option>
-                      </select>
-                    </td>
-
-                    {/* Delete */}
-                    <td className="py-2 px-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRule(idx)}
-                        className="p-1 rounded-lg text-[#DC2626] hover:bg-[#FEE2E2] transition-colors cursor-pointer"
-                        title="Delete parameter rule"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-
-                {(formState.customRules || []).length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-xs text-[#A8A29E]">
-                      No custom rules added yet. Click <strong>"+ Add Parameter Rule"</strong> or select a 1-click template above.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          ))}
         </div>
-      )}
+      </div>
 
-      {/* TAB CONTENT 3: PRD Heuristics Engine (P1 to P10) */}
-      {activeTab === "heuristics" && (
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-6">
-          <div className="border-b border-[#F0EBE1] pb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-[#1C1917] font-mono uppercase tracking-wider">
-                PRD 0–100 Mule Risk Index Heuristic Matrix (P1–P10)
-              </h2>
-              <p className="text-xs text-[#78716C]">
-                Adjust mathematical weights for pass-through velocity, fan-in centrality, and smurfing detection as documented in the core PRD.
-              </p>
-            </div>
-            <span className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded border ${
-              totalWeight === 100
-                ? "bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]"
-                : "bg-[#FEF3C7] text-[#D97706] border-[#FDE68A]"
-            }`}>
-              Weight Sum: {totalWeight} / 100
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* P1 */}
-            <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-bold text-[#1C1917]">P1: Pass-Through Velocity</span>
-                <span className="text-[#D96B27] font-bold">{formState.p1Weight} pts</span>
-              </div>
-              <p className="text-[11px] text-[#78716C]">Forwarded ≥ 85% within 3–15 minutes.</p>
-              <input
-                type="range"
-                min="0"
-                max="50"
-                value={formState.p1Weight}
-                onChange={(e) => setFormState({ ...formState, p1Weight: Number(e.target.value) || 0 })}
-                className="w-full accent-[#D96B27] h-1.5 bg-[#E8E2D5] rounded-lg cursor-pointer"
-              />
-            </div>
-
-            {/* P2 */}
-            <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-bold text-[#1C1917]">P2: Fan-In Centrality</span>
-                <span className="text-[#D96B27] font-bold">{formState.p2Weight} pts</span>
-              </div>
-              <p className="text-[11px] text-[#78716C]">Burst of distinct victim senders into account.</p>
-              <input
-                type="range"
-                min="0"
-                max="40"
-                value={formState.p2Weight}
-                onChange={(e) => setFormState({ ...formState, p2Weight: Number(e.target.value) || 0 })}
-                className="w-full accent-[#D96B27] h-1.5 bg-[#E8E2D5] rounded-lg cursor-pointer"
-              />
-            </div>
-
-            {/* P3 */}
-            <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-bold text-[#1C1917]">P3: Fan-Out Smurfing Split</span>
-                <span className="text-[#D96B27] font-bold">{formState.p3Weight} pts</span>
-              </div>
-              <p className="text-[11px] text-[#78716C]">Rapid slicing into 3–50 downstream accounts.</p>
-              <input
-                type="range"
-                min="0"
-                max="40"
-                value={formState.p3Weight}
-                onChange={(e) => setFormState({ ...formState, p3Weight: Number(e.target.value) || 0 })}
-                className="w-full accent-[#D96B27] h-1.5 bg-[#E8E2D5] rounded-lg cursor-pointer"
-              />
-            </div>
-
-            {/* P4 */}
-            <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-bold text-[#1C1917]">P4: Cash-Out & Anomaly Markers</span>
-                <span className="text-[#D96B27] font-bold">{formState.p4Weight} pts</span>
-              </div>
-              <p className="text-[11px] text-[#78716C]">Foreign proxy IPs (185/194), headless bots, crypto P2P.</p>
-              <input
-                type="range"
-                min="0"
-                max="40"
-                value={formState.p4Weight}
-                onChange={(e) => setFormState({ ...formState, p4Weight: Number(e.target.value) || 0 })}
-                className="w-full accent-[#D96B27] h-1.5 bg-[#E8E2D5] rounded-lg cursor-pointer"
-              />
-            </div>
-
-            {/* P5 & P6 */}
-            <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-bold text-[#1C1917]">P5: Shared Cluster Anomaly</span>
-                <span className="text-[#D96B27] font-bold">{formState.p5Weight} pts</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="20"
-                value={formState.p5Weight}
-                onChange={(e) => setFormState({ ...formState, p5Weight: Number(e.target.value) || 0 })}
-                className="w-full accent-[#D96B27] h-1.5 bg-[#E8E2D5] rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-bold text-[#1C1917]">P6: Dormancy Awakening</span>
-                <span className="text-[#D96B27] font-bold">{formState.p6Weight} pts</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="20"
-                value={formState.p6Weight}
-                onChange={(e) => setFormState({ ...formState, p6Weight: Number(e.target.value) || 0 })}
-                className="w-full accent-[#D96B27] h-1.5 bg-[#E8E2D5] rounded-lg cursor-pointer"
-              />
-            </div>
-          </div>
-
-          {/* Two-Signal Merchant Protection Guard */}
-          <div className="p-4 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#059669]" />
-                <span className="text-xs font-mono font-bold text-[#1C1917]">
-                  Two-Signal False-Positive Merchant Guard (PRD Phase 2)
-                </span>
-              </div>
-              <p className="text-[11px] text-[#78716C] mt-0.5">
-                Suppresses false-positive freezing requisitions on legitimate high-volume merchants with zero cash-out anomalies and zero rapid outbound dissipation.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setFormState({ ...formState, merchantProtectionGuard: !formState.merchantProtectionGuard })}
-              className="cursor-pointer shrink-0"
+      {/* 5. Core Investigation Boundary Sliders (At the Bottom) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md p-4 sm:p-5 shadow-2xs space-y-3">
+        <h3 className="text-xs font-serif font-bold text-[#2C2623] uppercase tracking-wider font-mono">
+          Investigation Boundary & Graph Traversal Limits
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
+          {/* Min Amount */}
+          <div className="space-y-1.5">
+            <span className="font-semibold text-[#746D65]">MIN TRANSACTION AMOUNT</span>
+            <select
+              value={formState.minAmount}
+              onChange={(e) => setFormState({ ...formState, minAmount: Number(e.target.value) })}
+              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
             >
-              {formState.merchantProtectionGuard ? (
-                <div className="w-10 h-5 bg-[#10B981] rounded-full relative transition-all">
-                  <span className="w-4 h-4 bg-white rounded-full absolute right-0.5 top-0.5" />
-                </div>
-              ) : (
-                <div className="w-10 h-5 bg-[#D6D3D1] rounded-full relative transition-all">
-                  <span className="w-4 h-4 bg-white rounded-full absolute left-0.5 top-0.5" />
-                </div>
-              )}
-            </button>
+              <option value={0}>All Amounts (₹0+)</option>
+              <option value={50000}>₹50,000+ (Smurfing Cutoff)</option>
+              <option value={100000}>₹1 Lakh+ (Significant Loss)</option>
+              <option value={5000000}>₹50 Lakh+ (Whales Only)</option>
+              <option value={10000000}>₹1 Crore+ (Severe Outliers)</option>
+            </select>
           </div>
-        </div>
-      )}
 
-      {/* TAB CONTENT 4: Live Query Simulation & Impact Tester */}
-      {activeTab === "simulation" && (
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-5">
-          <div className="border-b border-[#F0EBE1] pb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-[#1C1917] font-mono uppercase tracking-wider">
-                Live Query Simulation & DuckDB Execution Engine
-              </h2>
-              <p className="text-xs text-[#78716C]">
-                Inspect the dynamically compiled SQL WHERE clause and preview real matching transactions from DuckDB.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => runLiveSimulation(formState)}
-              disabled={simulating}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] text-xs font-mono font-semibold transition-all cursor-pointer shadow-2xs"
+          {/* Max Hops */}
+          <div className="space-y-1.5">
+            <span className="font-semibold text-[#746D65]">MAX HOP DEPTH</span>
+            <select
+              value={formState.maxHops}
+              onChange={(e) => setFormState({ ...formState, maxHops: Number(e.target.value) })}
+              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
             >
-              <span>{simulating ? "Evaluating..." : "Re-Run Query Simulation"}</span>
-            </button>
+              <option value={1}>1 Hop (Victim ➔ L1 Collector)</option>
+              <option value={2}>2 Hops (Up to L2 Distributors)</option>
+              <option value={3}>3 Hops (Up to L3 Cashouts)</option>
+              <option value={4}>4 Hops (Full Syndicate Trail)</option>
+              <option value={5}>5 Hops (Deep Exhaustive Network)</option>
+            </select>
           </div>
 
-          {/* Compiled SQL Query Display */}
-          <div className="bg-[#FAF6EE] text-[#2C2623] rounded-xl p-3.5 font-mono text-xs space-y-1.5 overflow-x-auto border border-[#E8E2D5]">
-            <div className="flex items-center justify-between text-[#7C746D] text-[10px]">
-              <span className="flex items-center gap-1.5 font-bold">
-                <Terminal className="w-3.5 h-3.5 text-[#D96B27]" />
-                COMPILED DUCKDB SQL FILTER CLAUSE
-              </span>
-              <span>Latency: {simulationData ? `${simulationData.latency_ms} ms` : "..."}</span>
-            </div>
-            <code className="text-[#2C2623] font-bold text-[11px] block">
-              SELECT * FROM transactions WHERE{" "}
-              <span className="text-[#D96B27]">
-                {simulationData ? simulationData.generated_where_clause : "1=1"}
-              </span>
-            </code>
+          {/* Time Window */}
+          <div className="space-y-1.5">
+            <span className="font-semibold text-[#746D65]">VELOCITY WINDOW</span>
+            <select
+              value={formState.timeWindow}
+              onChange={(e) => setFormState({ ...formState, timeWindow: Number(e.target.value) })}
+              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
+            >
+              <option value={15}>15 Minutes (Rapid Drain)</option>
+              <option value={30}>30 Minutes (Fast Slicing)</option>
+              <option value={60}>60 Minutes (1 Hour Standard)</option>
+              <option value={180}>180 Minutes (3 Hour Investigation)</option>
+              <option value={1440}>1440 Minutes (24 Hour Full Cycle)</option>
+            </select>
           </div>
 
-          {/* Preview of Sample Matches */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="font-bold text-[#1C1917]">
-                SAMPLE MATCHING TRANSACTIONS ({simulationData?.sample_txns?.length || 0} shown)
-              </span>
-              <span className="text-[#78716C]">
-                Total Matches: {simulationData ? simulationData.total_matching_txns : 0}
-              </span>
-            </div>
-
-            <div className="border border-[#E8E2D5] rounded-xl overflow-hidden shadow-2xs">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-[#F8F4EC] text-[#78716C] border-b border-[#E8E2D5]">
-                  <tr>
-                    <th className="py-2 px-3">Txn ID</th>
-                    <th className="py-2 px-3">Sender Account</th>
-                    <th className="py-2 px-3">Receiver Account</th>
-                    <th className="py-2 px-3 text-right">Amount (INR)</th>
-                    <th className="py-2 px-3">Timestamp</th>
-                    <th className="py-2 px-3">Narration</th>
-                    <th className="py-2 px-3">Device / IP</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0EBE1] bg-white">
-                  {simulationData?.sample_txns?.map((txn) => (
-                    <tr key={txn.txn_id} className="hover:bg-[#FAF8F5]">
-                      <td className="py-2 px-3 font-bold text-[#1C1917]">{txn.txn_id}</td>
-                      <td className="py-2 px-3 text-[#78716C]">{txn.sender}</td>
-                      <td className="py-2 px-3 font-semibold text-[#D96B27]">{txn.receiver}</td>
-                      <td className="py-2 px-3 text-right font-bold text-[#1C1917]">
-                        ₹{Number(txn.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-2 px-3 text-[#78716C] text-[11px]">{txn.timestamp}</td>
-                      <td className="py-2 px-3 text-[11px] text-[#A8A29E] max-w-[200px] truncate" title={txn.narration}>
-                        {txn.narration}
-                      </td>
-                      <td className="py-2 px-3 text-[10px] text-[#78716C]">
-                        {txn.device} <span className="text-[#A8A29E]">({txn.ip})</span>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {(!simulationData?.sample_txns || simulationData.sample_txns.length === 0) && (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-xs text-[#A8A29E]">
-                        No transactions match the specified parameters. Try relaxing your filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          {/* Bank Route */}
+          <div className="space-y-1.5">
+            <span className="font-semibold text-[#746D65]">BANK / IFSC PREFIX</span>
+            <select
+              value={formState.bankFilter}
+              onChange={(e) => setFormState({ ...formState, bankFilter: e.target.value })}
+              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
+            >
+              <option value="ALL">All Banks</option>
+              <option value="SBIN">State Bank of India (SBIN)</option>
+              <option value="HDFC">HDFC Bank (HDFC)</option>
+              <option value="ICIC">ICICI Bank (ICIC)</option>
+              <option value="UTIB">Axis Bank (UTIB)</option>
+              <option value="PUNB">Punjab National Bank (PUNB)</option>
+              <option value="UBIN">Union Bank of India (UBIN)</option>
+              <option value="BARB">Bank of Baroda (BARB)</option>
+              <option value="KKBK">Kotak Mahindra Bank (KKBK)</option>
+              <option value="PYTM">Paytm Payments Bank (PYTM)</option>
+              <option value="IPOS">India Post Payments Bank (IPOS)</option>
+            </select>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
