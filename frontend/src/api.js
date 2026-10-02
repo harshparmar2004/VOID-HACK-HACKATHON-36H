@@ -108,6 +108,22 @@ export async function executeEmergencyFreeze(accountIds) {
   return res.json();
 }
 
+export async function fetchFrozenAccounts() {
+  const res = await fetch(`${API_BASE}/scanner/frozen-accounts`);
+  if (!res.ok) throw new Error("Failed to fetch frozen accounts registry");
+  return res.json();
+}
+
+export async function unfreezeAccount(accountId) {
+  const res = await fetch(`${API_BASE}/scanner/unfreeze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_id: accountId })
+  });
+  if (!res.ok) throw new Error("Failed to unfreeze account");
+  return res.json();
+}
+
 export async function ingestFromUrl(url) {
   const res = await fetch(`${API_BASE}/ingest-url`, {
     method: "POST",

@@ -36,6 +36,18 @@ class FraudScanner:
                     p5_score DOUBLE,
                     p6_score DOUBLE
                 );
+                CREATE TABLE IF NOT EXISTS frozen_accounts (
+                    account_id VARCHAR PRIMARY KEY,
+                    ifsc VARCHAR,
+                    bank_name VARCHAR,
+                    role VARCHAR,
+                    risk_index DOUBLE,
+                    lien_amount DOUBLE,
+                    freeze_timestamp VARCHAR,
+                    statutory_act VARCHAR,
+                    fir_number VARCHAR,
+                    status VARCHAR
+                );
             """)
         except Exception:
             pass
@@ -374,6 +386,47 @@ class FraudScanner:
         banks_affected = len(set(str(t[1])[:4] for t in targets if t[1]))
         frozen_account_ids = [str(t[0]) for t in targets]
 
+        now_ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        BANK_NAMES_MAP = {
+            "SBIN": "State Bank of India",
+            "HDFC": "HDFC Bank Ltd",
+            "ICIC": "ICICI Bank Ltd",
+            "UTIB": "Axis Bank Ltd",
+            "PUNB": "Punjab National Bank",
+            "BARB": "Bank of Baroda",
+            "UBIN": "Union Bank of India",
+            "KKBK": "Kotak Mahindra Bank",
+            "YESB": "Yes Bank Ltd",
+            "IDFB": "IDFC FIRST Bank",
+            "INDB": "IndusInd Bank",
+            "PYTM": "Paytm Payments Bank",
+            "AIRP": "Airtel Payments Bank",
+            "IPOS": "India Post Payments Bank"
+        }
+        for t in targets:
+            acc_id = str(t[0])
+            ifsc_val = str(t[1]) if t[1] else "BANK0000001"
+            b_code = ifsc_val[:4].upper()
+            b_name = BANK_NAMES_MAP.get(b_code, f"{b_code} Bank")
+            role_val = str(t[2]) if t[2] else "SUSPECT_BENEFICIARY"
+            risk_val = float(t[3] or 85.0)
+            lien_amt = float(t[4] or 0.0)
+            try:
+                self.con.execute("""
+                    INSERT INTO frozen_accounts (account_id, ifsc, bank_name, role, risk_index, lien_amount, freeze_timestamp, statutory_act, fir_number, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'Section 91 Cr.P.C. / Section 94 BNSS', 'FIR-0142/2026/CYBER-INDORE', 'ACTIVE_LIEN')
+                    ON CONFLICT (account_id) DO UPDATE SET
+                        ifsc = excluded.ifsc,
+                        bank_name = excluded.bank_name,
+                        role = excluded.role,
+                        risk_index = excluded.risk_index,
+                        lien_amount = excluded.lien_amount,
+                        freeze_timestamp = excluded.freeze_timestamp,
+                        status = 'ACTIVE_LIEN';
+                """, [acc_id, ifsc_val, b_name, role_val, risk_val, lien_amt, now_ts])
+            except Exception as e:
+                print(f"[!] Error recording frozen account {acc_id}:", e)
+
         return {
             "status": "success",
             "accounts_frozen_count": len(targets) if targets else len(cleaned_accounts),
@@ -381,7 +434,47 @@ class FraudScanner:
             "banks_notified_count": max(banks_affected, 1),
             "total_lien_marked_inr": round(total_frozen, 2),
             "statutory_act": "Section 91 Cr.P.C. / Section 94 BNSS",
-            "dispatch_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "dispatch_timestamp": now_ts,
             "integrity_signature": "SHA256_RECONCILED_CHOPPED",
             "message": f"Statutory debit freeze & proportional lien successfully placed across {len(targets) if targets else len(cleaned_accounts)} target beneficiary account(s)."
         }
+
+    def get_frozen_accounts(self) -> List[Dict[str, Any]]:
+        """
+        Retrieves all currently frozen accounts from persistent DuckDB ledger.
+        """
+        try:
+            rows = self.con.execute("""
+                SELECT 
+                    account_id,
+                    ifsc,
+                    bank_name,
+                    role,
+                    risk_index,
+                    lien_amount,
+                    freeze_timestamp,
+                    statutory_act,
+                    fir_number,
+                    status
+                FROM frozen_accounts
+                ORDER BY freeze_timestamp DESC;
+            """).fetchall()
+            cols = [d[0] for d in self.con.description]
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception as e:
+            print("[!] Error querying frozen_accounts:", e)
+            return []
+
+    def unfreeze_account(self, account_id: str) -> Dict[str, Any]:
+        """
+        Revokes the statutory freeze lien on an account.
+        """
+        try:
+            self.con.execute("DELETE FROM frozen_accounts WHERE account_id = ?;", [str(account_id).strip()])
+            return {
+                "status": "success",
+                "account_id": account_id,
+                "message": f"Statutory debit freeze lien revoked for Account {account_id}."
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}

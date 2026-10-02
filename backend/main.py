@@ -451,13 +451,21 @@ def get_bank_notices(victim_account: str, fir_number: str = "FIR-0142/2026/CYBER
     if not trace.get("nodes"):
         raise HTTPException(status_code=404, detail="No trace trail found for this account.")
     notices = legal.generate_bank_freeze_notices(victim_account, fir_number, trace)
+    
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    frozen_list = scanner.get_frozen_accounts()
+    
     return {
         "victim_account": victim_account,
         "fir_number": fir_number,
         "total_notices": len(notices),
         "total_funds_siphoned": trace["total_siphoned_inr"],
         "total_funds_targeted": sum(n["total_freeze_amount"] for n in notices),
-        "notices": notices
+        "notices": notices,
+        "frozen_accounts": frozen_list,
+        "freeze_candidates": trace.get("freeze_candidates", [])
     }
 
 @app.get("/api/legal/case-diary/{victim_account}")
@@ -612,6 +620,27 @@ def execute_emergency_freeze(payload: EmergencyFreezePayload):
         scanner = FraudScanner(engine.con)
     accounts = payload.account_ids or payload.target_accounts or []
     return scanner.execute_emergency_freeze(accounts)
+
+class UnfreezePayload(BaseModel):
+    account_id: str
+
+@app.get("/api/scanner/frozen-accounts")
+def get_frozen_accounts_list():
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.get_frozen_accounts()
+
+@app.post("/api/scanner/unfreeze")
+def unfreeze_account_endpoint(payload: UnfreezePayload):
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.unfreeze_account(payload.account_id)
 
 # ==============================================================================
 # SETTINGS & LLM/JEV API INTEGRATION ENDPOINTS
