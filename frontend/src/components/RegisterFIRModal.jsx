@@ -357,23 +357,6 @@ export default function RegisterFIRModal({ isOpen, onClose, onRegisterCase }) {
             </div>
           </div>
 
-          {/* Golden Hour Alert Callout */}
-          <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-md p-4 flex items-start gap-3 shadow-2xs">
-            <div className="w-8 h-8 rounded-md bg-[#FFF4EC] border border-[#FDBA74] flex items-center justify-center shrink-0 mt-0.5">
-              <Zap className="w-4 h-4 text-[#D96B27]" />
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-bold text-[#2C2623] flex items-center gap-2">
-                <span>Automated 4-Layer Forensic Dispatch</span>
-                <span className="px-1.5 py-0.2 rounded-xs bg-[#D96B27]/10 text-[#D96B27] text-[10px] font-mono font-bold uppercase">
-                  Golden Hour Active
-                </span>
-              </div>
-              <p className="text-[#746D65] text-[11px] leading-relaxed">
-                Submitting this intake form runs instant DuckDB vector tracing across the full dataset: discovers Layer 1 (Collector), correlates Layer 2 (50 Distributor Mules), identifies Layer 3 &amp; 4 (Terminal Cash-outs), and issues statutory Section 91 freeze notices.
-              </p>
-            </div>
-          </div>
 
           {/* Action Footer */}
           <div className="pt-4 border-t border-[#E8E2D5] flex items-center justify-end gap-3">
