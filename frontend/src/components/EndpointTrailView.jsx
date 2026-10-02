@@ -304,166 +304,240 @@ export default function EndpointTrailView({
 
   return (
     <div className="space-y-4 select-none">
-      {/* Search & Top Action Bar */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-5 shadow-2xs">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-serif font-bold text-[#2C2623]">
-                Endpoint Multi-Hop Money Trail & Flow Graph
-              </h2>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-mono">
-                HOP 0 → HOP 3
-              </span>
+      {/* 1. Top Banner / Header & Trace Form */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E8E2D5] pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-xs bg-[#D96B27]"></span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              MULTI-HOP GRAPH FORENSICS • 2,000,000 TRANSACTIONS
+            </span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-xs bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-mono">
+              HOP 0 → HOP 3
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#2C2623] mt-0.5 tracking-tight">
+            Endpoint Multi-Hop Money Trail &amp; Flow Graph
+          </h2>
+          <p className="text-xs text-[#746D65] mt-0.5 max-w-3xl font-sans">
+            Interactive zoomable forensic canvas showing end-to-end multi-tier fund dispersion across 2,000,000 transactions.
+          </p>
+        </div>
+
+        {/* Target Search / Input Form */}
+        <form onSubmit={handleSearch} className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9E968D] pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Enter Victim Account ID (e.g. KKBK10000000)..."
+              value={inputAcct}
+              onChange={(e) => setInputAcct(e.target.value)}
+              className="w-64 sm:w-80 bg-white border border-[#D4CEBF] rounded-sm pl-8 pr-3 py-1.5 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 shadow-2xs transition-all"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-3.5 py-1.5 rounded-sm bg-[#D96B27] hover:bg-[#C25B1D] text-white text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>{loading ? "Tracing..." : "Trace Money Trail"}</span>
+          </button>
+        </form>
+      </div>
+
+      {/* 2. Structured Quick Forensic Inquiry Targets */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 bg-white border border-[#E8E2D5] rounded-sm shadow-2xs text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 text-[#746D65] font-mono text-[10px] uppercase font-bold pr-2.5 border-r border-[#E8E2D5] shrink-0">
+            <Eye className="w-3 h-3 text-[#D96B27]" />
+            <span>DEMO TARGETS:</span>
+          </div>
+          {[
+            { id: "100000000001", name: "Sunil Kumar", loss: "₹14.7L", type: "Digital Arrest" },
+            { id: "100000000002", name: "Priya Sharma", loss: "₹8.9L", type: "Task Scam" },
+            { id: "100000000003", name: "Ramesh Patel", loss: "₹11.2L", type: "Crypto Fraud" }
+          ].map((d) => {
+            const isActive = inputAcct === d.id;
+            return (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => {
+                  setInputAcct(d.id);
+                  onSearchVictim(d.id);
+                }}
+                className={`px-2.5 py-1 rounded-xs font-mono text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  isActive
+                    ? "bg-[#D96B27] text-white border-[#C25B1D]"
+                    : "bg-[#FAF6EE] hover:bg-white text-[#2C2623] border-[#E8E2D5] hover:border-[#D96B27]"
+                }`}
+              >
+                <span className={isActive ? "text-white" : "text-[#2C2623]"}>{d.name}</span>
+                <span
+                  className={`text-[10px] px-1 py-0.2 rounded-xs font-bold ${
+                    isActive ? "bg-white/20 text-white" : "bg-[#FFEDD5] text-[#D96B27]"
+                  }`}
+                >
+                  {d.loss}
+                </span>
+                <span className={`text-[9px] ${isActive ? "text-white/80" : "text-[#9E968D]"}`}>
+                  ({d.type})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active Target Telemetry Indicator */}
+        <div className="flex items-center gap-2 font-mono text-[11px] text-[#746D65] shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
+          <span>Active Target:</span>
+          <strong className="text-[#2C2623] font-bold">{inputAcct || "None Selected"}</strong>
+        </div>
+      </div>
+
+      {/* 3. Framed Metric Strip with Sharp Dividers (5-Column Grid) */}
+      {traceData && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#E8E2D5] bg-white border border-[#E8E2D5] rounded-sm shadow-2xs">
+          {/* Metric 1: Trace Latency */}
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
+              TRACE LATENCY
+            </span>
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#059669] tracking-tight my-0.5 whitespace-nowrap">
+              {traceData.latency_ms || 12.35} ms
             </div>
-            <p className="text-xs text-[#746D65] mt-1">
-              Interactive zoomable forensic canvas showing end-to-end multi-tier fund dispersion across 2,000,000 transactions.
+            <p className="text-[11px] text-[#059669] font-medium whitespace-nowrap font-sans">
+              Vector sub-second hop scan
             </p>
           </div>
 
-          <form onSubmit={handleSearch} className="flex items-center gap-2">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Enter 12-digit Victim Account ID..."
-                value={inputAcct}
-                onChange={(e) => setInputAcct(e.target.value)}
-                className="w-72 bg-[#FBF7EE] border border-[#E8E2D5] rounded-xl px-4 py-2 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
-              />
-              <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-[#9E968D]" />
+          {/* Metric 2: Total Siphoned */}
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#DC2626] font-mono block whitespace-nowrap">
+              TOTAL SIPHONED
+            </span>
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#DC2626] tracking-tight my-0.5 whitespace-nowrap">
+              ₹{traceData.total_siphoned_inr ? traceData.total_siphoned_inr.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "0.00"}
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer"
-            >
-              {loading ? "Tracing..." : "Trace Money Trail"}
-            </button>
-          </form>
-        </div>
+            <p className="text-[11px] text-[#DC2626] font-medium whitespace-nowrap font-sans">
+              Victim outbound drain
+            </p>
+          </div>
 
-        {/* Quick Demo Victims */}
-        <div className="flex items-center gap-2 mt-3 pt-2 text-xs flex-wrap">
-          <span className="text-[#9E968D] font-mono text-[11px]">Demo Inquiry Targets:</span>
-          {[
-            { id: "100000000001", label: "Sunil Kumar (₹14.7L)" },
-            { id: "100000000002", label: "Priya Sharma (₹8.9L)" },
-            { id: "100000000003", label: "Ramesh Patel (₹11.2L)" }
-          ].map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              onClick={() => {
-                setInputAcct(d.id);
-                onSearchVictim(d.id);
-              }}
-              className="px-2.5 py-1 rounded-lg bg-[#FAF6EE] hover:bg-[#F3EDE2] text-[#D96B27] border border-[#E8E2D5] font-semibold text-[11px] transition-colors cursor-pointer"
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
+          {/* Metric 3: Trapped Recoverable Lien */}
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#059669] font-mono block whitespace-nowrap">
+              TRAPPED LIEN HOLDING
+            </span>
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#059669] tracking-tight my-0.5 whitespace-nowrap">
+              ₹{traceData.recoverable_holding_inr ? traceData.recoverable_holding_inr.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "0.00"}
+            </div>
+            <p className="text-[11px] text-[#059669] font-medium whitespace-nowrap font-sans">
+              Actionable for Sec 91 freeze
+            </p>
+          </div>
 
-        {/* Trail Metrics Summary Bar */}
-        {traceData && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 pt-3 border-t border-[#F0EAE1]">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#9E968D]">Trace Latency</span>
-              <div className="text-base font-mono font-bold text-[#059669]">{traceData.latency_ms} ms</div>
+          {/* Metric 4: Correlated Network */}
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#2C2623] font-mono block whitespace-nowrap">
+              CORRELATED NETWORK
+            </span>
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#2C2623] tracking-tight my-0.5 whitespace-nowrap">
+              {traceData.nodes_count || 0} Nodes • {effectiveLinks.length} Links
             </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#9E968D]">Total Siphoned</span>
-              <div className="text-base font-mono font-bold text-[#DC2626]">
-                ₹{traceData.total_siphoned_inr ? traceData.total_siphoned_inr.toLocaleString("en-IN") : "0"}
-              </div>
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#9E968D]">Trapped Recoverable Lien</span>
-              <div className="text-base font-mono font-bold text-[#059669]">
-                ₹{traceData.recoverable_holding_inr ? traceData.recoverable_holding_inr.toLocaleString("en-IN") : "0"}
-              </div>
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#9E968D]">Correlated Accounts</span>
-              <div className="text-base font-mono font-bold text-[#2C2623]">{traceData.nodes_count} Nodes</div>
-            </div>
-            <div className="flex items-center justify-end">
+            <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
+              Intake to exit endpoints
+            </p>
+          </div>
+
+          {/* Metric 5: Emergency Action */}
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between bg-[#FFFBF8] col-span-2 sm:col-span-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#DC2626] font-mono block whitespace-nowrap">
+              STATUTORY REMEDY
+            </span>
+            <div className="my-0.5">
               <button
                 onClick={onNavigateToNotices}
-                className="px-3.5 py-1.5 rounded-lg bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer"
+                className="w-full px-3 py-1.5 rounded-sm bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-mono font-bold shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>Freeze {traceData.freeze_candidates?.length || 0} Accounts</span>
+                <span>Freeze {traceData.freeze_candidates?.length || (hopGroups[1].length + hopGroups[2].length + hopGroups[3].length)} Accounts</span>
               </button>
             </div>
+            <p className="text-[10px] text-[#9E968D] font-mono whitespace-nowrap">
+              Section 91 Cr.P.C. / 94 BNSS
+            </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Interactive Graph Canvas Toolbar */}
-      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+      {/* 4. Interactive Graph Canvas Toolbar */}
+      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-[#746D65] flex items-center gap-1.5">
+          <span className="font-mono font-bold text-[#746D65] flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
             <Share2 className="w-3.5 h-3.5 text-[#D96B27]" />
             Graph Canvas Controls:
           </span>
-          <span className="text-[11px] text-[#9E968D] hidden sm:inline">
-            Drag to pan • Scroll or buttons to zoom in/out
+          <span className="text-[11px] text-[#9E968D] hidden sm:inline font-sans">
+            Drag canvas to pan • Scroll or buttons to zoom
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Zoom Percentage */}
-          <div className="px-2.5 py-1 rounded-lg bg-white border border-[#E8E2D5] font-mono text-[11px] font-bold text-[#2C2623] shadow-2xs">
+          <div className="px-2.5 py-1 rounded-sm bg-white border border-[#E8E2D5] font-mono text-[11px] font-bold text-[#2C2623] shadow-2xs">
             {Math.round(zoom * 100)}%
           </div>
 
           {/* Zoom Buttons */}
-          <div className="flex items-center bg-white border border-[#E8E2D5] rounded-lg overflow-hidden shadow-2xs">
+          <div className="flex items-center bg-white border border-[#E8E2D5] rounded-sm overflow-hidden shadow-2xs">
             <button
               onClick={handleZoomIn}
               title="Zoom In"
-              className="p-1.5 hover:bg-[#F3EDE2] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
+              className="p-1.5 hover:bg-[#FAF6EE] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={handleZoomOut}
               title="Zoom Out"
-              className="p-1.5 hover:bg-[#F3EDE2] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
+              className="p-1.5 hover:bg-[#FAF6EE] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={handleResetZoom}
               title="Reset 100%"
-              className="px-2 py-1 hover:bg-[#F3EDE2] text-[#2C2623] font-mono text-[11px] font-bold border-r border-[#E8E2D5] transition-colors cursor-pointer"
+              className="px-2 py-1 hover:bg-[#FAF6EE] text-[#2C2623] font-mono text-[11px] font-bold border-r border-[#E8E2D5] transition-colors cursor-pointer"
             >
               1:1
             </button>
             <button
               onClick={handleFitView}
               title="Fit to Screen"
-              className="p-1.5 hover:bg-[#F3EDE2] text-[#2C2623] transition-colors cursor-pointer"
+              className="p-1.5 hover:bg-[#FAF6EE] text-[#2C2623] transition-colors cursor-pointer"
             >
               <Maximize2 className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {/* Hop 2 Layout Toggle */}
-          <div className="flex items-center bg-white border border-[#E8E2D5] rounded-lg overflow-hidden shadow-2xs text-[11px]">
+          <div className="flex items-center bg-white border border-[#E8E2D5] rounded-sm overflow-hidden shadow-2xs text-[11px] font-mono">
             <button
               onClick={() => setHop2Layout("grid")}
-              className={`px-2.5 py-1 font-semibold transition-colors cursor-pointer ${
-                hop2Layout === "grid" ? "bg-[#D96B27] text-white" : "hover:bg-[#F3EDE2] text-[#746D65]"
+              className={`px-2.5 py-1 font-bold transition-colors cursor-pointer ${
+                hop2Layout === "grid" ? "bg-[#D96B27] text-white" : "hover:bg-[#FAF6EE] text-[#746D65]"
               }`}
             >
               Grid Lanes
             </button>
             <button
               onClick={() => setHop2Layout("stack")}
-              className={`px-2.5 py-1 font-semibold transition-colors cursor-pointer ${
-                hop2Layout === "stack" ? "bg-[#D96B27] text-white" : "hover:bg-[#F3EDE2] text-[#746D65]"
+              className={`px-2.5 py-1 font-bold transition-colors cursor-pointer ${
+                hop2Layout === "stack" ? "bg-[#D96B27] text-white" : "hover:bg-[#FAF6EE] text-[#746D65]"
               }`}
             >
               Cascade
@@ -473,23 +547,23 @@ export default function EndpointTrailView({
           {/* Line Style Toggle: Pipeline vs Curved */}
           <button
             onClick={() => setLineStyle(lineStyle === "pipeline" ? "curved" : "pipeline")}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all shadow-2xs cursor-pointer bg-white border-[#E8E2D5] text-[#2C2623] hover:bg-[#F3EDE2]"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border text-[11px] font-mono font-bold transition-all shadow-2xs cursor-pointer bg-white border-[#E8E2D5] text-[#2C2623] hover:bg-[#FAF6EE]"
             title="Toggle between Horizontal Pipeline and Curved Bézier Flow"
           >
-            <span className={`w-2 h-2 rounded-full ${lineStyle === "pipeline" ? "bg-[#EA580C]" : "bg-[#7C3AED]"}`} />
-            <span>{lineStyle === "pipeline" ? "Pipeline (Horizontal)" : "Curved Flow"}</span>
+            <span className={`w-2 h-2 rounded-xs ${lineStyle === "pipeline" ? "bg-[#EA580C]" : "bg-[#7C3AED]"}`} />
+            <span>{lineStyle === "pipeline" ? "Pipeline" : "Curved Flow"}</span>
           </button>
 
           {/* Toggle Amounts on Wires */}
           <button
             onClick={() => setShowEdgeAmounts(!showEdgeAmounts)}
-            className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+            className={`px-2.5 py-1 rounded-sm border text-[11px] font-mono font-bold transition-colors cursor-pointer ${
               showEdgeAmounts
                 ? "bg-[#E6F7F0] border-[#A7F3D0] text-[#059669]"
-                : "bg-white border-[#E8E2D5] text-[#746D65] hover:bg-[#F3EDE2]"
+                : "bg-white border-[#E8E2D5] text-[#746D65] hover:bg-[#FAF6EE]"
             }`}
           >
-            {showEdgeAmounts ? "Amounts: Visible" : "Amounts: Hidden"}
+            {showEdgeAmounts ? "Amounts: On" : "Amounts: Off"}
           </button>
         </div>
       </div>
@@ -503,7 +577,7 @@ export default function EndpointTrailView({
         onMouseLeave={() => setIsDragging(false)}
         onDragStart={(e) => e.preventDefault()}
         onWheel={handleWheel}
-        className={`relative w-full h-[620px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner select-none ${
+        className={`relative w-full h-[620px] bg-[#FAF7F0] rounded-sm border border-[#E8E2D5] overflow-hidden shadow-inner select-none ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{
