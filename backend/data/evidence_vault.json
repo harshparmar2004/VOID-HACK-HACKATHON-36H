@@ -1,0 +1,80 @@
+[
+  {
+    "id": "CUST-001",
+    "artifactName": "transactions_2m.parquet",
+    "category": "Core Banking Transaction Export",
+    "sha256": "4120E35341A3010F306D903C64F90E3C0B23C3B1C202B0373C727AC3ACFB45DD",
+    "filePath": "E:\\VOID-HACK-HACKATHON-36H-main\\backend\\data\\transactions_2m.parquet",
+    "timestamp": "2026-10-01 21:15:00 IST",
+    "ingestedBy": "IO Inspector Rajesh Sharma (Cyber Branch)",
+    "recordsCount": "2,000,000 Transactions",
+    "fileSize": "71.15 MB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 Bharatiya Sakshya Adhiniyam (BSA), 2023"
+  },
+  {
+    "id": "CUST-002",
+    "artifactName": "cyber_crime_sample.csv",
+    "category": "Police Complainant Bank Statements",
+    "sha256": "F6F3AEF0E17B1CFC338195C8D140C79782068E035EA25223B80304422E859313",
+    "filePath": "E:\\VOID-HACK-HACKATHON-36H-main\\backend\\data\\cyber_crime_sample.csv",
+    "timestamp": "2026-10-01 21:28:12 IST",
+    "ingestedBy": "Nodal Cell Liaison Sub-Inspector V. Kulkarni",
+    "recordsCount": "9 Verified FIR Transactions",
+    "fileSize": "1.5 KB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 65B Indian Evidence Act / Sec. 63 BSA"
+  },
+  {
+    "id": "CUST-003",
+    "artifactName": "ground_truth_mules.json",
+    "category": "I4C / 1930 Mule Directory Cross-Reference",
+    "sha256": "474A22664BB77F8A206CEC0D079B7A9AF6C2BCB972B2731DDB8B9F2DEEF42733",
+    "filePath": "E:\\VOID-HACK-HACKATHON-36H-main\\backend\\data\\ground_truth_mules.json",
+    "timestamp": "2026-10-01 21:35:45 IST",
+    "ingestedBy": "Forensic Analyst Ankit Mehta (Indore Cyber Cell)",
+    "recordsCount": "1,470 Identified Mules",
+    "fileSize": "117.4 KB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 BSA, 2023"
+  },
+  {
+    "id": "CUST-004",
+    "artifactName": "npci_upi_bank_statement.csv",
+    "category": "NPCI Central Switch Logs",
+    "sha256": "A1FC082673B0D1D89823C412DC7CEF80885088D943C92B1A8E5F7A9B3C5D7E1F",
+    "filePath": null,
+    "timestamp": "2026-10-01 21:42:10 IST",
+    "ingestedBy": "IO Inspector Rajesh Sharma (Cyber Branch)",
+    "recordsCount": "24,368 Banking Entities",
+    "fileSize": "7.3 KB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 BSA, 2023"
+  },
+  {
+    "id": "CUST-005",
+    "artifactName": "whatsapp_chat_export.txt",
+    "category": "Digital Arrest Fraud Transcript",
+    "sha256": "257005884D2C482A99B123C4188180C46012EADE67B92A4C5D7E1F9A8B3C5D7E",
+    "filePath": null,
+    "timestamp": "2026-10-01 22:05:00 IST",
+    "ingestedBy": "Sub-Inspector S. Chouhan",
+    "recordsCount": "12 Chat Threads",
+    "fileSize": "0.7 KB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 BSA, 2023"
+  },
+  {
+    "id": "CUST-006",
+    "artifactName": "sbi_support_apk_metadata.json",
+    "category": "Headless Emulation & Trojan Signature",
+    "sha256": "650CC151597D2CC398A1B2C49192F72F99E765FF67A81B2C4D5E7F9A1B3C5D7E",
+    "filePath": null,
+    "timestamp": "2026-10-01 22:18:30 IST",
+    "ingestedBy": "Digital Forensic Examiner T. Joshi",
+    "recordsCount": "2,564 Emulated User Agents",
+    "fileSize": "0.6 KB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 BSA, 2023"
+  }
+]

@@ -141,3 +141,21 @@ export async function fetchEntities(limit = 500, bankFilter = null, minAmount = 
   if (!res.ok) throw new Error("Failed to fetch entity directory");
   return res.json();
 }
+
+export async function fetchVaultArtifacts() {
+  const res = await fetch(`${API_BASE}/vault/artifacts`);
+  if (!res.ok) throw new Error("Failed to fetch evidence vault artifacts");
+  return res.json();
+}
+
+export async function verifyVaultChain() {
+  const res = await fetch(`${API_BASE}/vault/verify`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to verify evidence chain integrity");
+  return res.json();
+}
+
+export async function fetchVaultCertificate(artifactId) {
+  const res = await fetch(`${API_BASE}/vault/certificate/${encodeURIComponent(artifactId)}`);
+  if (!res.ok) throw new Error("Failed to generate Section 63 BSA certificate");
+  return res.json();
+}

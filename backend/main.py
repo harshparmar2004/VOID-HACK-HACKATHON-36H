@@ -21,6 +21,7 @@ from graph_engine import GraphEngine
 from legal_generator import LegalGenerator
 from fraud_scanner import FraudScanner
 from hami_hopping_engine import HAMIHoppingEngine
+from vault_engine import EvidenceVaultEngine
 
 app = FastAPI(
     title="Operation Abhedya-Chakra Core Forensics API",
@@ -48,6 +49,7 @@ graph = None
 scanner = None
 hami_engine = None
 legal = LegalGenerator()
+vault_engine = EvidenceVaultEngine(DATA_DIR)
 is_initialized = False
 
 def initialize_core():
@@ -120,6 +122,18 @@ def upload_bank_statement(file: UploadFile = File(...)):
         hami_engine = HAMIHoppingEngine(engine.con)
         victims = engine.detect_victims(limit=5)
         
+        # Cryptographic Chain-of-Custody Logging (Sec. 63 BSA / Sec. 65B IEA)
+        try:
+            vault_engine.record_artifact(
+                file_path=file_path,
+                artifact_name=file.filename,
+                category="Bank Statement / Ledger Transaction Export",
+                ingested_by="IO Inspector Rajesh Sharma (Cyber Branch)",
+                records_count=res.get("total_records", 0)
+            )
+        except Exception as ve:
+            print(f"[-] Vault logging error: {ve}")
+
         return {
             "status": "success",
             "file_name": file.filename,
@@ -176,6 +190,18 @@ def ingest_from_url(payload: IngestUrlPayload):
         hami_engine = HAMIHoppingEngine(engine.con)
         victims = engine.detect_victims(limit=5)
         
+        # Cryptographic Chain-of-Custody Logging (Sec. 63 BSA / Sec. 65B IEA)
+        try:
+            vault_engine.record_artifact(
+                file_path=file_path,
+                artifact_name="Online Cyber Crime Dataset",
+                category="Google Sheets / Cloud Web Ledger",
+                ingested_by="IO Inspector Rajesh Sharma (Cyber Branch)",
+                records_count=res.get("total_records", 0)
+            )
+        except Exception as ve:
+            print(f"[-] Vault logging error: {ve}")
+
         return {
             "status": "success",
             "file_name": "Online Cyber Crime Dataset",
@@ -192,6 +218,38 @@ def ingest_from_url(payload: IngestUrlPayload):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+
+# ==========================================
+# EVIDENCE VAULT & SEC 63 BSA COMPLIANCE APIS
+# ==========================================
+
+@app.get("/api/vault/artifacts")
+def get_vault_artifacts():
+    """
+    Returns the cryptographic digital evidence chain-of-custody ledger.
+    Every artifact is SHA-256 hashed and timestamped under Sec. 63 BSA / Sec. 65B IEA.
+    """
+    return vault_engine.get_artifacts()
+
+@app.post("/api/vault/verify")
+def verify_vault_chain():
+    """
+    Performs on-demand cryptographic re-audit of all evidence files on disk.
+    Verifies zero-tampering across all stored forensic datasets.
+    """
+    return vault_engine.verify_chain()
+
+@app.get("/api/vault/certificate/{artifact_id}")
+def get_bsa_certificate(artifact_id: str):
+    """
+    Generates a statutory Certificate under Section 63 Bharatiya Sakshya Adhiniyam, 2023.
+    Ready for printing and judicial submission.
+    """
+    res = vault_engine.generate_bsa_certificate(artifact_id)
+    if "error" in res:
+        raise HTTPException(status_code=404, detail=res["error"])
+    return res
 
 
 @app.get("/api/detected-victims")
