@@ -53,12 +53,13 @@ def initialize_core():
     if not is_initialized:
         print("[*] Initializing Abhedya-Chakra Forensics Core...")
         cyber_crime_csv = os.path.join(DATA_DIR, "cyber_crime_sample.csv")
-        target_dataset = cyber_crime_csv if os.path.exists(cyber_crime_csv) else DEFAULT_PARQUET
-        engine.load_dataset(target_dataset)
-        scorer = MuleScorer(engine.con)
-        scorer.compute_all_scores()
-        graph = GraphEngine(engine.con)
-        scanner = FraudScanner(engine.con)
+        target_dataset = DEFAULT_PARQUET if os.path.exists(DEFAULT_PARQUET) else (cyber_crime_csv if os.path.exists(cyber_crime_csv) else None)
+        if target_dataset:
+            engine.load_dataset(target_dataset)
+            scorer = MuleScorer(engine.con)
+            scorer.compute_all_scores()
+            graph = GraphEngine(engine.con)
+            scanner = FraudScanner(engine.con)
         is_initialized = True
         print(f"[+] Core Forensics Engine initialized with {os.path.basename(target_dataset)} ({engine.total_records} records)!")
 
@@ -561,6 +562,15 @@ def run_jury_blind_evaluation():
 
 class EmergencyFreezePayload(BaseModel):
     account_ids: List[str]
+
+@app.get("/api/scanner/summary")
+def get_scanner_summary():
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.run_60s_benchmark()
 
 @app.post("/api/scanner/run-60s-benchmark")
 def run_60s_fraud_benchmark():
