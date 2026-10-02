@@ -5,16 +5,14 @@ import {
   Trash2,
   Check,
   ShieldCheck,
-  Zap,
   RotateCcw,
   Sparkles,
-  Building,
-  Clock,
-  Coins,
   CheckCircle2,
   Layers,
-  ArrowRight,
-  Filter
+  Search,
+  Filter,
+  Sliders,
+  Settings2
 } from "lucide-react";
 
 export default function ForensicParametersView({
@@ -52,7 +50,7 @@ export default function ForensicParametersView({
     customRules: [
       {
         id: "rule_crypto_p2p",
-        name: "P7: Crypto P2P Narration",
+        name: "Crypto P2P Narration",
         field: "Narration",
         operator: "contains",
         value: "CRYPTO",
@@ -62,7 +60,7 @@ export default function ForensicParametersView({
       },
       {
         id: "rule_foreign_proxy",
-        name: "P8: Foreign Proxy Subnet 194.x",
+        name: "Foreign Proxy Subnet 194.x",
         field: "IP_Address",
         operator: "starts_with",
         value: "194.",
@@ -79,6 +77,7 @@ export default function ForensicParametersView({
     customRules: forensicParams?.customRules || defaultParams.customRules
   }));
 
+  const [filterCategory, setFilterCategory] = useState("ALL"); // 'ALL' | 'CORE' | 'CUSTOM'
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // New Rule Form State
@@ -204,7 +203,7 @@ export default function ForensicParametersView({
   // 1-Click Quick Add Presets
   const quickPresets = [
     {
-      label: "+ Digital Arrest Threat",
+      title: "Digital Arrest Threat",
       name: "Digital Arrest Modus Operandi",
       field: "Narration",
       operator: "contains",
@@ -213,7 +212,7 @@ export default function ForensicParametersView({
       action: "FLAG_SUSPICIOUS"
     },
     {
-      label: "+ Telegram Task Scam",
+      title: "Telegram Task Scam",
       name: "Telegram Task Scam Narration",
       field: "Narration",
       operator: "contains",
@@ -222,7 +221,7 @@ export default function ForensicParametersView({
       action: "FLAG_SUSPICIOUS"
     },
     {
-      label: "+ Heavy Whale > ₹50L",
+      title: "Heavy Whale > ₹50L",
       name: "High Value Outlier > ₹50L",
       field: "Amount_INR",
       operator: ">",
@@ -231,7 +230,7 @@ export default function ForensicParametersView({
       action: "AUTO_FREEZE"
     },
     {
-      label: "+ Midnight Drain (12AM–4AM)",
+      title: "Midnight Drain (12AM–4AM)",
       name: "Midnight Dormancy Burst",
       field: "Narration",
       operator: "contains",
@@ -240,7 +239,7 @@ export default function ForensicParametersView({
       action: "FLAG_SUSPICIOUS"
     },
     {
-      label: "+ Headless Bot Script",
+      title: "Headless Bot Script",
       name: "Headless Automated Bot",
       field: "Device_Type",
       operator: "contains",
@@ -249,7 +248,7 @@ export default function ForensicParametersView({
       action: "AUTO_FREEZE"
     },
     {
-      label: "+ High-Risk Foreign IP 185.x",
+      title: "Foreign IP 185.x",
       name: "Foreign Proxy IP 185.x",
       field: "IP_Address",
       operator: "starts_with",
@@ -283,7 +282,7 @@ export default function ForensicParametersView({
 
   return (
     <div className="space-y-5">
-      {/* 1. Header Bar with Overview & Actions */}
+      {/* 1. Header Bar with Overview & Controls */}
       <div className="bg-white border border-[#E8E2D5] rounded-md p-4 sm:p-5 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -297,11 +296,11 @@ export default function ForensicParametersView({
               Forensic Parameters Manager
             </h1>
             <p className="text-xs text-[#746D65] mt-1">
-              Easily configure, weight, and manually add new forensic parameters ($P_1$ to $P_{20}+$). All parameters evaluate live across 2,000,000 transactions.
+              Configure detection heuristics, risk point weights, and custom parameters across 2,000,000 transactions.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {/* Live Parameter Stats */}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm text-xs font-mono">
               <span className="text-[#746D65]">Active Parameters:</span>
@@ -313,7 +312,7 @@ export default function ForensicParametersView({
 
             <button
               onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] transition-all cursor-pointer shadow-2xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] transition-all cursor-pointer shadow-2xs"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset Defaults</span>
@@ -321,7 +320,7 @@ export default function ForensicParametersView({
 
             <button
               onClick={handleSave}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
               <span>Save & Apply Parameters</span>
@@ -338,603 +337,663 @@ export default function ForensicParametersView({
         )}
       </div>
 
-      {/* 2. 1-Click Fast Presets Strip */}
-      <div className="bg-white border border-[#E8E2D5] rounded-md p-3.5 shadow-2xs space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-[#2C2623] font-mono">
-            <Sparkles className="w-3.5 h-3.5 text-[#D96B27]" />
-            <span>1-CLICK QUICK ADD PRESETS:</span>
-          </div>
-          <span className="text-[11px] text-[#9E968D]">Click any preset to instantly add as a new parameter ($P_7, P_8, P_9\dots$)</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {quickPresets.map((preset) => (
-            <button
-              key={preset.label}
-              onClick={() => handleApplyPreset(preset)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#FAF6EE] hover:bg-[#F3EDE2] border border-[#D4CEBF] hover:border-[#D96B27] text-xs font-mono font-semibold text-[#2C2623] transition-all cursor-pointer shadow-2xs"
-            >
-              <Plus className="w-3 h-3 text-[#D96B27]" />
-              <span>{preset.label}</span>
-              <span className="text-[10px] text-[#059669] font-bold">+{preset.points} pts</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 3. Manually Add New Parameter Box (Simple, Intuitive Form) */}
-      <div className="bg-white border border-[#D96B27]/40 rounded-md p-4 sm:p-5 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between border-b border-[#F0EAE1] pb-2.5">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D96B27] flex items-center justify-center text-[#D96B27]">
-              <Plus className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-serif font-bold text-[#2C2623]">
-                Add New Forensic Parameter Manually
-              </h2>
-              <p className="text-[11px] text-[#746D65]">
-                Define a custom condition on any dataset column. Evaluated in real-time in DuckDB.
-              </p>
-            </div>
-          </div>
-          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-xs bg-[#E6F7F0] text-[#059669]">
-            Instant SQL Compilation
-          </span>
-        </div>
-
-        <form onSubmit={handleAddManualParameter} className="space-y-3 pt-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {/* 1. Parameter Name */}
-            <div className="lg:col-span-2">
-              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
-                Parameter Name / Description
-              </label>
-              <input
-                type="text"
-                placeholder='e.g. "Crypto P2P Exit", "Rapid RTGS Midnight Drain"'
-                value={newRuleName}
-                onChange={(e) => setNewRuleName(e.target.value)}
-                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none transition-colors"
-              />
-            </div>
-
-            {/* 2. Target Column */}
-            <div>
-              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
-                Dataset Field
-              </label>
-              <select
-                value={newRuleField}
-                onChange={(e) => setNewRuleField(e.target.value)}
-                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none transition-colors"
-              >
-                <option value="Narration">Narration (Remarks)</option>
-                <option value="Amount_INR">Amount_INR (Amount)</option>
-                <option value="IP_Address">IP_Address (IP / VPN)</option>
-                <option value="Device_Type">Device_Type (Bot / OS)</option>
-                <option value="Receiver_IFSC">Receiver_IFSC (Bank)</option>
-                <option value="Sender_IFSC">Sender_IFSC (Bank)</option>
-                <option value="Payment_Mode">Payment_Mode (UPI/IMPS)</option>
-              </select>
-            </div>
-
-            {/* 3. Operator */}
-            <div>
-              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
-                Condition
-              </label>
-              <select
-                value={newRuleOperator}
-                onChange={(e) => setNewRuleOperator(e.target.value)}
-                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none transition-colors"
-              >
-                {newRuleField === "Amount_INR" ? (
-                  <>
-                    <option value=">">&gt; (Greater than)</option>
-                    <option value=">=">&gt;= (Greater or equal)</option>
-                    <option value="<">&lt; (Less than)</option>
-                    <option value="==">== (Exact amount)</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="contains">contains (Sub-string)</option>
-                    <option value="starts_with">starts_with (Prefix)</option>
-                    <option value="equals">equals (Exact match)</option>
-                  </>
-                )}
-              </select>
-            </div>
-
-            {/* 4. Target Value */}
-            <div>
-              <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
-                Target Value
-              </label>
-              <input
-                type="text"
-                placeholder={newRuleField === "Amount_INR" ? "e.g. 5000000" : 'e.g. "CRYPTO" or "194."'}
-                value={newRuleValue}
-                onChange={(e) => setNewRuleValue(e.target.value)}
-                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs font-mono font-bold text-[#D96B27] focus:outline-none transition-colors"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-4">
-              {/* Risk Points Slider/Input */}
+      {/* 2. Main Studio Grid: Left = Add & Limits | Right = Parameters Matrix */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        
+        {/* ======================================================== */}
+        {/* LEFT COLUMN: PARAMETER BUILDER & BOUNDARIES (5 COLS)     */}
+        {/* ======================================================== */}
+        <div className="lg:col-span-5 space-y-4">
+          
+          {/* Card A: Add Parameter Form (Manual + 1-Click Presets) */}
+          <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
+            <div className="bg-[#FAF6EE] border-b border-[#E8E2D5] p-3.5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[#2C2623]">Risk Points Added:</span>
-                <select
-                  value={newRulePoints}
-                  onChange={(e) => setNewRulePoints(Number(e.target.value))}
-                  className="h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs font-mono font-bold text-[#D96B27] focus:outline-none"
-                >
-                  <option value={5}>+5 pts (Minor anomaly)</option>
-                  <option value={10}>+10 pts (Suspicious pattern)</option>
-                  <option value={15}>+15 pts (Strong indicator)</option>
-                  <option value={20}>+20 pts (High risk anomaly)</option>
-                  <option value={25}>+25 pts (Critical syndicate marker)</option>
-                  <option value={30}>+30 pts (Definite fraud marker)</option>
-                </select>
-              </div>
-
-              {/* Action */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[#2C2623]">Investigative Action:</span>
-                <select
-                  value={newRuleAction}
-                  onChange={(e) => setNewRuleAction(e.target.value)}
-                  className="h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs font-semibold text-[#2C2623] focus:outline-none"
-                >
-                  <option value="FLAG_SUSPICIOUS">Flag Suspected Mule (+Risk)</option>
-                  <option value="AUTO_FREEZE">Priority Sec 91 Freeze Lien</option>
-                  <option value="FILTER_MATCH">Filter Graph Trail Only</option>
-                </select>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-5 py-2 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Add Parameter to Engine</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* 4. Complete Active Forensic Parameters List (P1 to P6 + Custom P7, P8, P9...) */}
-      <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
-        <div className="p-3.5 sm:p-4 bg-[#FAF6EE] border-b border-[#E8E2D5] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#D96B27]" />
-            <h2 className="text-sm font-serif font-bold text-[#2C2623]">
-              Active Forensic Parameters & Heuristic Matrix
-            </h2>
-          </div>
-          <span className="text-[11px] font-mono font-bold text-[#746D65]">
-            Adjust weight points or toggle rules on/off in real-time
-          </span>
-        </div>
-
-        <div className="divide-y divide-[#EFEAE1]">
-          {/* Core P1 Parameter */}
-          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
-            <div className="flex items-start gap-3">
-              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
-                P1
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Pass-Through Velocity (3–15m Drain)</h3>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
+                <div className="w-6 h-6 rounded-sm bg-white border border-[#D4CEBF] flex items-center justify-center text-[#D96B27]">
+                  <Plus className="w-3.5 h-3.5" />
                 </div>
-                <p className="text-[11px] text-[#746D65] mt-0.5">
-                  Detects $\ge 85\%$ of incoming funds drained to downstream accounts within 15 minutes.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="50"
-                  value={formState.p1Weight}
-                  onChange={(e) => setFormState({ ...formState, p1Weight: Number(e.target.value) || 0 })}
-                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
-                />
-                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormState({ ...formState, p1Enabled: !formState.p1Enabled })}
-                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
-                  formState.p1Enabled
-                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
-                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
-                }`}
-              >
-                {formState.p1Enabled ? "ACTIVE" : "DISABLED"}
-              </button>
-            </div>
-          </div>
-
-          {/* Core P2 Parameter */}
-          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
-            <div className="flex items-start gap-3">
-              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
-                P2
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Fan-In Centrality (L1 Intake Convergence)</h3>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
-                </div>
-                <p className="text-[11px] text-[#746D65] mt-0.5">
-                  Detects $\ge 5$ distinct victim senders converging into a single account in short bursts.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="50"
-                  value={formState.p2Weight}
-                  onChange={(e) => setFormState({ ...formState, p2Weight: Number(e.target.value) || 0 })}
-                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
-                />
-                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormState({ ...formState, p2Enabled: !formState.p2Enabled })}
-                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
-                  formState.p2Enabled
-                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
-                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
-                }`}
-              >
-                {formState.p2Enabled ? "ACTIVE" : "DISABLED"}
-              </button>
-            </div>
-          </div>
-
-          {/* Core P3 Parameter */}
-          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
-            <div className="flex items-start gap-3">
-              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
-                P3
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Fan-Out Smurfing Split (L2 Layering)</h3>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
-                </div>
-                <p className="text-[11px] text-[#746D65] mt-0.5">
-                  Slices incoming funds and disperses them across 3 to 50 downstream mules ($\ge 70\%$ outflow).
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="50"
-                  value={formState.p3Weight}
-                  onChange={(e) => setFormState({ ...formState, p3Weight: Number(e.target.value) || 0 })}
-                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
-                />
-                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormState({ ...formState, p3Enabled: !formState.p3Enabled })}
-                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
-                  formState.p3Enabled
-                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
-                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
-                }`}
-              >
-                {formState.p3Enabled ? "ACTIVE" : "DISABLED"}
-              </button>
-            </div>
-          </div>
-
-          {/* Core P4 Parameter */}
-          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
-            <div className="flex items-start gap-3">
-              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
-                P4
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Digital Footprint & Proxy Anomalies</h3>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
-                </div>
-                <p className="text-[11px] text-[#746D65] mt-0.5">
-                  Foreign VPN/Proxy IPs (185/194 CIDR), headless script devices, and scam narrations.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="50"
-                  value={formState.p4Weight}
-                  onChange={(e) => setFormState({ ...formState, p4Weight: Number(e.target.value) || 0 })}
-                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
-                />
-                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormState({ ...formState, p4Enabled: !formState.p4Enabled })}
-                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
-                  formState.p4Enabled
-                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
-                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
-                }`}
-              >
-                {formState.p4Enabled ? "ACTIVE" : "DISABLED"}
-              </button>
-            </div>
-          </div>
-
-          {/* Core P5 Parameter */}
-          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
-            <div className="flex items-start gap-3">
-              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
-                P5
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Shared Infrastructure Cluster</h3>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
-                </div>
-                <p className="text-[11px] text-[#746D65] mt-0.5">
-                  Detects shared device fingerprints or proxy subnets clustered across multiple mule accounts.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="50"
-                  value={formState.p5Weight}
-                  onChange={(e) => setFormState({ ...formState, p5Weight: Number(e.target.value) || 0 })}
-                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
-                />
-                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormState({ ...formState, p5Enabled: !formState.p5Enabled })}
-                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
-                  formState.p5Enabled
-                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
-                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
-                }`}
-              >
-                {formState.p5Enabled ? "ACTIVE" : "DISABLED"}
-              </button>
-            </div>
-          </div>
-
-          {/* Core P6 Parameter */}
-          <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/50 transition-colors">
-            <div className="flex items-start gap-3">
-              <span className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
-                P6
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-[#2C2623] font-serif">Behavioral Burst Hold Time</h3>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
-                </div>
-                <p className="text-[11px] text-[#746D65] mt-0.5">
-                  High-frequency burst outbound transactions immediately following receipt of stolen funds.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="50"
-                  value={formState.p6Weight}
-                  onChange={(e) => setFormState({ ...formState, p6Weight: Number(e.target.value) || 0 })}
-                  className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
-                />
-                <span className="text-[11px] text-[#746D65] font-mono">pts</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormState({ ...formState, p6Enabled: !formState.p6Enabled })}
-                className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
-                  formState.p6Enabled
-                    ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
-                    : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
-                }`}
-              >
-                {formState.p6Enabled ? "ACTIVE" : "DISABLED"}
-              </button>
-            </div>
-          </div>
-
-          {/* CUSTOM USER-ADDED PARAMETERS (P7, P8, P9... P20+) */}
-          {(formState.customRules || []).map((rule, idx) => (
-            <div
-              key={rule.id || idx}
-              className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 bg-[#FAF6EE]/30 hover:bg-[#FAF6EE] transition-colors"
-            >
-              <div className="flex items-start gap-3">
-                <span className="w-7 h-7 rounded-sm bg-[#D96B27]/10 border border-[#D96B27] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
-                  P{idx + 7}
-                </span>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-bold text-[#2C2623] font-serif">{rule.name}</h3>
-                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#E0E7FF] text-[#4338CA]">
-                      CUSTOM RULE
-                    </span>
-                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#FEF3C7] text-[#D97706]">
-                      {rule.action}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] font-mono text-[#746D65] mt-1">
-                    <span>Field: <strong className="text-[#2C2623]">{rule.field}</strong></span>
-                    <span>•</span>
-                    <span>Condition: <strong className="text-[#2C2623]">{rule.operator}</strong></span>
-                    <span>•</span>
-                    <span>Value: <strong className="text-[#D96B27]">"{rule.value}"</strong></span>
-                  </div>
+                  <h2 className="text-xs font-serif font-bold text-[#2C2623] uppercase tracking-wider font-mono">
+                    Add Forensic Parameter
+                  </h2>
+                  <p className="text-[11px] text-[#746D65]">
+                    Manual condition builder or 1-click preset
+                  </p>
                 </div>
               </div>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm bg-[#EAE4D8] text-[#746D65]">
+                P7–P20+
+              </span>
+            </div>
 
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-[#746D65] font-mono">Points:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="50"
-                    value={rule.points || 20}
-                    onChange={(e) => {
-                      const updated = [...(formState.customRules || [])];
-                      updated[idx] = { ...updated[idx], points: Number(e.target.value) || 0 };
-                      setFormState({ ...formState, customRules: updated });
-                    }}
-                    className="w-14 h-7 text-center bg-white border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
-                  />
-                  <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+            {/* Quick Presets Sub-Bar */}
+            <div className="p-3 bg-[#FDFBF7] border-b border-[#F0EAE1] space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-mono font-bold text-[#746D65]">
+                <div className="flex items-center gap-1 text-[#D96B27]">
+                  <Sparkles className="w-3 h-3" />
+                  <span>1-CLICK QUICK PRESETS:</span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleToggleCustomRule(idx)}
-                  className={`text-[10px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
-                    rule.enabled
-                      ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
-                      : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
-                  }`}
-                >
-                  {rule.enabled ? "ACTIVE" : "DISABLED"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleDeleteCustomRule(idx)}
-                  className="p-1 rounded-sm text-[#DC2626] hover:bg-[#FEE2E2] transition-colors cursor-pointer"
-                  title="Delete parameter"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <span className="text-[10px] text-[#9E968D]">Instant Add</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {quickPresets.map((preset) => (
+                  <button
+                    key={preset.title}
+                    type="button"
+                    onClick={() => handleApplyPreset(preset)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-sm bg-white hover:bg-[#FAF6EE] border border-[#D4CEBF] hover:border-[#D96B27] text-[11px] font-mono text-[#2C2623] transition-all cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3 h-3 text-[#D96B27]" />
+                    <span>{preset.title}</span>
+                    <span className="text-[9px] text-[#059669] font-bold">+{preset.points}</span>
+                  </button>
+                ))}
               </div>
             </div>
-          ))}
+
+            {/* Manual Form */}
+            <form onSubmit={handleAddManualParameter} className="p-3.5 sm:p-4 space-y-3 text-xs">
+              <div>
+                <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                  Parameter Name / Description
+                </label>
+                <input
+                  type="text"
+                  placeholder='e.g. "Crypto P2P Exit", "RTGS Midnight Drain"'
+                  value={newRuleName}
+                  onChange={(e) => setNewRuleName(e.target.value)}
+                  className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none transition-colors"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                    Dataset Field
+                  </label>
+                  <select
+                    value={newRuleField}
+                    onChange={(e) => setNewRuleField(e.target.value)}
+                    className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none transition-colors cursor-pointer"
+                  >
+                    <option value="Narration">Narration (Remarks)</option>
+                    <option value="Amount_INR">Amount_INR (Amount)</option>
+                    <option value="IP_Address">IP_Address (IP / VPN)</option>
+                    <option value="Device_Type">Device_Type (Bot / OS)</option>
+                    <option value="Receiver_IFSC">Receiver_IFSC (Bank)</option>
+                    <option value="Sender_IFSC">Sender_IFSC (Bank)</option>
+                    <option value="Payment_Mode">Payment_Mode (UPI/IMPS)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                    Condition
+                  </label>
+                  <select
+                    value={newRuleOperator}
+                    onChange={(e) => setNewRuleOperator(e.target.value)}
+                    className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none transition-colors cursor-pointer"
+                  >
+                    {newRuleField === "Amount_INR" ? (
+                      <>
+                        <option value=">">&gt; (Greater than)</option>
+                        <option value=">=">&gt;= (Greater or equal)</option>
+                        <option value="<">&lt; (Less than)</option>
+                        <option value="==">== (Exact amount)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="contains">contains (Sub-string)</option>
+                        <option value="starts_with">starts_with (Prefix)</option>
+                        <option value="equals">equals (Exact match)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                  Target Value to Match
+                </label>
+                <input
+                  type="text"
+                  placeholder={newRuleField === "Amount_INR" ? "e.g. 5000000" : 'e.g. "CRYPTO", "TASK", "194."'}
+                  value={newRuleValue}
+                  onChange={(e) => setNewRuleValue(e.target.value)}
+                  className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs font-mono font-bold text-[#D96B27] focus:outline-none transition-colors"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                    Risk Points
+                  </label>
+                  <select
+                    value={newRulePoints}
+                    onChange={(e) => setNewRulePoints(Number(e.target.value))}
+                    className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs font-mono font-bold text-[#D96B27] focus:outline-none cursor-pointer"
+                  >
+                    <option value={5}>+5 pts (Minor)</option>
+                    <option value={10}>+10 pts (Suspicious)</option>
+                    <option value={15}>+15 pts (Moderate)</option>
+                    <option value={20}>+20 pts (High Risk)</option>
+                    <option value={25}>+25 pts (Critical)</option>
+                    <option value={30}>+30 pts (Severe)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
+                    Action
+                  </label>
+                  <select
+                    value={newRuleAction}
+                    onChange={(e) => setNewRuleAction(e.target.value)}
+                    className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs font-semibold text-[#2C2623] focus:outline-none cursor-pointer"
+                  >
+                    <option value="FLAG_SUSPICIOUS">Flag Suspected Mule</option>
+                    <option value="AUTO_FREEZE">Priority Lien Freeze</option>
+                    <option value="FILTER_MATCH">Filter Trail Only</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 h-9 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer mt-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Parameter to Engine</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Card B: Investigation Boundary Limits */}
+          <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
+            <div className="bg-[#FAF6EE] border-b border-[#E8E2D5] p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-[#D96B27]" />
+                <h3 className="text-xs font-serif font-bold text-[#2C2623] uppercase tracking-wider font-mono">
+                  Investigation Limits
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono text-[#746D65]">Graph & Velocity</span>
+            </div>
+
+            <div className="p-3.5 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-[#746D65] uppercase">Min Amount</span>
+                <select
+                  value={formState.minAmount}
+                  onChange={(e) => setFormState({ ...formState, minAmount: Number(e.target.value) })}
+                  className="w-full h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs text-[#2C2623] focus:outline-none cursor-pointer"
+                >
+                  <option value={0}>All Amounts (₹0+)</option>
+                  <option value={50000}>₹50K+ (Smurfing)</option>
+                  <option value={100000}>₹1 Lakh+</option>
+                  <option value={5000000}>₹50 Lakh+ (Whales)</option>
+                  <option value={10000000}>₹1 Crore+</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-[#746D65] uppercase">Max Hop Depth</span>
+                <select
+                  value={formState.maxHops}
+                  onChange={(e) => setFormState({ ...formState, maxHops: Number(e.target.value) })}
+                  className="w-full h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs text-[#2C2623] focus:outline-none cursor-pointer"
+                >
+                  <option value={1}>1 Hop (Collector)</option>
+                  <option value={2}>2 Hops (Distributors)</option>
+                  <option value={3}>3 Hops (Cashouts)</option>
+                  <option value={4}>4 Hops (Full Trail)</option>
+                  <option value={5}>5 Hops (Deep Network)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-[#746D65] uppercase">Velocity Window</span>
+                <select
+                  value={formState.timeWindow}
+                  onChange={(e) => setFormState({ ...formState, timeWindow: Number(e.target.value) })}
+                  className="w-full h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs text-[#2C2623] focus:outline-none cursor-pointer"
+                >
+                  <option value={15}>15 Mins (Rapid Drain)</option>
+                  <option value={30}>30 Mins (Fast Slicing)</option>
+                  <option value={60}>60 Mins (1 Hour)</option>
+                  <option value={180}>180 Mins (3 Hours)</option>
+                  <option value={1440}>1440 Mins (24 Hours)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-[#746D65] uppercase">Bank / IFSC</span>
+                <select
+                  value={formState.bankFilter}
+                  onChange={(e) => setFormState({ ...formState, bankFilter: e.target.value })}
+                  className="w-full h-8 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2 text-xs text-[#2C2623] focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">All Banks</option>
+                  <option value="SBIN">State Bank (SBIN)</option>
+                  <option value="HDFC">HDFC Bank</option>
+                  <option value="ICIC">ICICI Bank</option>
+                  <option value="UTIB">Axis Bank</option>
+                  <option value="PUNB">Punjab National</option>
+                  <option value="UBIN">Union Bank</option>
+                  <option value="BARB">Bank of Baroda</option>
+                  <option value="KKBK">Kotak Mahindra</option>
+                  <option value="PYTM">Paytm Payments</option>
+                  <option value="IPOS">India Post</option>
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* 5. Core Investigation Boundary Sliders (At the Bottom) */}
-      <div className="bg-white border border-[#E8E2D5] rounded-md p-4 sm:p-5 shadow-2xs space-y-3">
-        <h3 className="text-xs font-serif font-bold text-[#2C2623] uppercase tracking-wider font-mono">
-          Investigation Boundary & Graph Traversal Limits
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
-          {/* Min Amount */}
-          <div className="space-y-1.5">
-            <span className="font-semibold text-[#746D65]">MIN TRANSACTION AMOUNT</span>
-            <select
-              value={formState.minAmount}
-              onChange={(e) => setFormState({ ...formState, minAmount: Number(e.target.value) })}
-              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
-            >
-              <option value={0}>All Amounts (₹0+)</option>
-              <option value={50000}>₹50,000+ (Smurfing Cutoff)</option>
-              <option value={100000}>₹1 Lakh+ (Significant Loss)</option>
-              <option value={5000000}>₹50 Lakh+ (Whales Only)</option>
-              <option value={10000000}>₹1 Crore+ (Severe Outliers)</option>
-            </select>
+        {/* ======================================================== */}
+        {/* RIGHT COLUMN: ACTIVE PARAMETERS MATRIX (7 COLS)          */}
+        {/* ======================================================== */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
+            {/* Table Header with Filter Pills */}
+            <div className="p-3.5 bg-[#FAF6EE] border-b border-[#E8E2D5] flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#D96B27]" />
+                <h2 className="text-sm font-serif font-bold text-[#2C2623]">
+                  Active Parameters & Heuristic Matrix
+                </h2>
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1 bg-white border border-[#E8E2D5] rounded-sm p-0.5 text-[11px] font-mono">
+                {[
+                  { id: "ALL", label: `All (${activeParamsCount})` },
+                  { id: "CORE", label: "Core (6)" },
+                  { id: "CUSTOM", label: `Custom (${formState.customRules?.length || 0})` }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setFilterCategory(tab.id)}
+                    className={`px-2 py-0.5 rounded-xs font-semibold cursor-pointer transition-colors ${
+                      filterCategory === tab.id
+                        ? "bg-[#D96B27] text-white"
+                        : "text-[#746D65] hover:text-[#2C2623]"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Parameters List Rows */}
+            <div className="divide-y divide-[#EFEAE1]">
+              
+              {/* CORE PARAMETER P1 */}
+              {(filterCategory === "ALL" || filterCategory === "CORE") && (
+                <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/40 transition-colors">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                      P1
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-bold text-[#2C2623] font-serif">Pass-Through Velocity (3–15m Drain)</h3>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE</span>
+                      </div>
+                      <p className="text-[11px] text-[#746D65] mt-0.5">
+                        Forwarding &ge; 85% of stolen funds to downstream accounts within 15 minutes.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={formState.p1Weight}
+                        onChange={(e) => setFormState({ ...formState, p1Weight: Number(e.target.value) || 0 })}
+                        className="w-12 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                      />
+                      <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormState({ ...formState, p1Enabled: !formState.p1Enabled })}
+                      className={`text-[9px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                        formState.p1Enabled
+                          ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                          : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                      }`}
+                    >
+                      {formState.p1Enabled ? "ACTIVE" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CORE PARAMETER P2 */}
+              {(filterCategory === "ALL" || filterCategory === "CORE") && (
+                <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/40 transition-colors">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                      P2
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-bold text-[#2C2623] font-serif">Fan-In Centrality (L1 Intake)</h3>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE</span>
+                      </div>
+                      <p className="text-[11px] text-[#746D65] mt-0.5">
+                        Multiple victim senders (&ge; 5) converging into a single account in short bursts.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={formState.p2Weight}
+                        onChange={(e) => setFormState({ ...formState, p2Weight: Number(e.target.value) || 0 })}
+                        className="w-12 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                      />
+                      <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormState({ ...formState, p2Enabled: !formState.p2Enabled })}
+                      className={`text-[9px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                        formState.p2Enabled
+                          ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                          : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                      }`}
+                    >
+                      {formState.p2Enabled ? "ACTIVE" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CORE PARAMETER P3 */}
+              {(filterCategory === "ALL" || filterCategory === "CORE") && (
+                <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/40 transition-colors">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                      P3
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-bold text-[#2C2623] font-serif">Fan-Out Smurfing Split (L2 Layering)</h3>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE</span>
+                      </div>
+                      <p className="text-[11px] text-[#746D65] mt-0.5">
+                        Slicing inflow into 3–50 downstream accounts (&ge; 70% outflow).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={formState.p3Weight}
+                        onChange={(e) => setFormState({ ...formState, p3Weight: Number(e.target.value) || 0 })}
+                        className="w-12 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                      />
+                      <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormState({ ...formState, p3Enabled: !formState.p3Enabled })}
+                      className={`text-[9px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                        formState.p3Enabled
+                          ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                          : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                      }`}
+                    >
+                      {formState.p3Enabled ? "ACTIVE" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CORE PARAMETER P4 */}
+              {(filterCategory === "ALL" || filterCategory === "CORE") && (
+                <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/40 transition-colors">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                      P4
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-bold text-[#2C2623] font-serif">Digital Footprint & Proxy Anomalies</h3>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE</span>
+                      </div>
+                      <p className="text-[11px] text-[#746D65] mt-0.5">
+                        Foreign VPN/Proxy IPs (185/194 CIDR) and automated headless scripts.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={formState.p4Weight}
+                        onChange={(e) => setFormState({ ...formState, p4Weight: Number(e.target.value) || 0 })}
+                        className="w-12 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                      />
+                      <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormState({ ...formState, p4Enabled: !formState.p4Enabled })}
+                      className={`text-[9px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                        formState.p4Enabled
+                          ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                          : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                      }`}
+                    >
+                      {formState.p4Enabled ? "ACTIVE" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CORE PARAMETER P5 */}
+              {(filterCategory === "ALL" || filterCategory === "CORE") && (
+                <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/40 transition-colors">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                      P5
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-bold text-[#2C2623] font-serif">Shared Infrastructure Cluster</h3>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE</span>
+                      </div>
+                      <p className="text-[11px] text-[#746D65] mt-0.5">
+                        Shared device fingerprints or proxy subnets across multiple accounts.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={formState.p5Weight}
+                        onChange={(e) => setFormState({ ...formState, p5Weight: Number(e.target.value) || 0 })}
+                        className="w-12 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                      />
+                      <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormState({ ...formState, p5Enabled: !formState.p5Enabled })}
+                      className={`text-[9px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                        formState.p5Enabled
+                          ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                          : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                      }`}
+                    >
+                      {formState.p5Enabled ? "ACTIVE" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CORE PARAMETER P6 */}
+              {(filterCategory === "ALL" || filterCategory === "CORE") && (
+                <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/40 transition-colors">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-6 h-6 rounded-sm bg-[#FAF6EE] border border-[#D4CEBF] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                      P6
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-bold text-[#2C2623] font-serif">Behavioral Burst Hold Time</h3>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE</span>
+                      </div>
+                      <p className="text-[11px] text-[#746D65] mt-0.5">
+                        Burst outgoing transactions occurring immediately upon receiving stolen funds.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={formState.p6Weight}
+                        onChange={(e) => setFormState({ ...formState, p6Weight: Number(e.target.value) || 0 })}
+                        className="w-12 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                      />
+                      <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormState({ ...formState, p6Enabled: !formState.p6Enabled })}
+                      className={`text-[9px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                        formState.p6Enabled
+                          ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                          : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                      }`}
+                    >
+                      {formState.p6Enabled ? "ACTIVE" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CUSTOM PARAMETERS (P7, P8, P9... P20+) */}
+              {(filterCategory === "ALL" || filterCategory === "CUSTOM") &&
+                (formState.customRules || []).map((rule, idx) => (
+                  <div
+                    key={rule.id || idx}
+                    className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 bg-[#FAF6EE]/20 hover:bg-[#FAF6EE]/60 transition-colors"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-6 h-6 rounded-sm bg-[#D96B27]/10 border border-[#D96B27] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
+                        P{idx + 7}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-xs font-bold text-[#2C2623] font-serif">{rule.name}</h3>
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#E0E7FF] text-[#4338CA]">
+                            CUSTOM
+                          </span>
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#FEF3C7] text-[#D97706]">
+                            {rule.action}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#746D65] mt-0.5">
+                          <span>{rule.field}</span>
+                          <span>{rule.operator}</span>
+                          <strong className="text-[#D96B27]">"{rule.value}"</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="50"
+                          value={rule.points || 20}
+                          onChange={(e) => {
+                            const updated = [...(formState.customRules || [])];
+                            updated[idx] = { ...updated[idx], points: Number(e.target.value) || 0 };
+                            setFormState({ ...formState, customRules: updated });
+                          }}
+                          className="w-12 h-7 text-center bg-white border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
+                        />
+                        <span className="text-[11px] text-[#746D65] font-mono">pts</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCustomRule(idx)}
+                        className={`text-[9px] font-mono font-bold px-2 py-1 rounded-sm border cursor-pointer ${
+                          rule.enabled
+                            ? "bg-[#D1FAE5] text-[#065F46] border-[#6EE7B7]"
+                            : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]"
+                        }`}
+                      >
+                        {rule.enabled ? "ACTIVE" : "OFF"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomRule(idx)}
+                        className="p-1 rounded-sm text-[#DC2626] hover:bg-[#FEE2E2] transition-colors cursor-pointer"
+                        title="Delete parameter"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+              {/* Empty state for custom filter */}
+              {filterCategory === "CUSTOM" && (formState.customRules || []).length === 0 && (
+                <div className="p-8 text-center text-xs text-[#746D65] font-mono">
+                  No custom parameters created yet. Use the form on the left or select a 1-click preset.
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Guardrail Info Banner */}
+            <div className="p-3 bg-[#FAF6EE] border-t border-[#E8E2D5] flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-[11px] text-[#059669] font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>Two-Signal Merchant Protection Active: suppresses false-positives for genuine vendors</span>
+              </div>
+              <span className="font-mono text-[11px] font-bold text-[#2C2623]">
+                Total: {totalPoints} pts
+              </span>
+            </div>
           </div>
 
-          {/* Max Hops */}
-          <div className="space-y-1.5">
-            <span className="font-semibold text-[#746D65]">MAX HOP DEPTH</span>
-            <select
-              value={formState.maxHops}
-              onChange={(e) => setFormState({ ...formState, maxHops: Number(e.target.value) })}
-              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
-            >
-              <option value={1}>1 Hop (Victim ➔ L1 Collector)</option>
-              <option value={2}>2 Hops (Up to L2 Distributors)</option>
-              <option value={3}>3 Hops (Up to L3 Cashouts)</option>
-              <option value={4}>4 Hops (Full Syndicate Trail)</option>
-              <option value={5}>5 Hops (Deep Exhaustive Network)</option>
-            </select>
-          </div>
-
-          {/* Time Window */}
-          <div className="space-y-1.5">
-            <span className="font-semibold text-[#746D65]">VELOCITY WINDOW</span>
-            <select
-              value={formState.timeWindow}
-              onChange={(e) => setFormState({ ...formState, timeWindow: Number(e.target.value) })}
-              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
-            >
-              <option value={15}>15 Minutes (Rapid Drain)</option>
-              <option value={30}>30 Minutes (Fast Slicing)</option>
-              <option value={60}>60 Minutes (1 Hour Standard)</option>
-              <option value={180}>180 Minutes (3 Hour Investigation)</option>
-              <option value={1440}>1440 Minutes (24 Hour Full Cycle)</option>
-            </select>
-          </div>
-
-          {/* Bank Route */}
-          <div className="space-y-1.5">
-            <span className="font-semibold text-[#746D65]">BANK / IFSC PREFIX</span>
-            <select
-              value={formState.bankFilter}
-              onChange={(e) => setFormState({ ...formState, bankFilter: e.target.value })}
-              className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-2.5 text-xs text-[#2C2623] focus:outline-none"
-            >
-              <option value="ALL">All Banks</option>
-              <option value="SBIN">State Bank of India (SBIN)</option>
-              <option value="HDFC">HDFC Bank (HDFC)</option>
-              <option value="ICIC">ICICI Bank (ICIC)</option>
-              <option value="UTIB">Axis Bank (UTIB)</option>
-              <option value="PUNB">Punjab National Bank (PUNB)</option>
-              <option value="UBIN">Union Bank of India (UBIN)</option>
-              <option value="BARB">Bank of Baroda (BARB)</option>
-              <option value="KKBK">Kotak Mahindra Bank (KKBK)</option>
-              <option value="PYTM">Paytm Payments Bank (PYTM)</option>
-              <option value="IPOS">India Post Payments Bank (IPOS)</option>
-            </select>
-          </div>
         </div>
+
       </div>
     </div>
   );
