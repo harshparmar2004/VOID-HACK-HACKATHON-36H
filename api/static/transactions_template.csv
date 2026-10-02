@@ -1,0 +1,2 @@
+Transaction_ID,Sender_Account,Receiver_Account,Sender_IFSC,Receiver_IFSC,Amount,Timestamp,Payment_Mode,Narration,IP_Address,Device_Type
+EXAMPLE-0001,SBIN00000001,HDFC00000002,SBIN0000001,HDFC0000002,1500.00,2026-01-01 10:00:00,UPI,UPI/Example/Replace this row#1,203.0.113.10,Android

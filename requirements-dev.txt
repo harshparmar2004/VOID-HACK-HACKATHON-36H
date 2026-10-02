@@ -1,0 +1,2 @@
+# matplotlib and networkx were requested but PyPI timed out (see reports\venv_packages.md).
+# Add exact versions here after a successful install.

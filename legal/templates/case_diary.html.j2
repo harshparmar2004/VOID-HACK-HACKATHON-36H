@@ -1,0 +1,124 @@
+{# Case diary. Reads `ev` (legal\evidence.py), `narrative` (validated and
+   substituted by legal\diary.py) and `layers` (accounts grouped by the role
+   read from scores). No account, amount, time or legal section is typed here. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Case diary {{ ev.case_id }}</title>
+<style>
+{% include "_print_css.j2" %}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="draft">{{ ev.legal.draft_label }}</div>
+  {% if not ev.legal.confirmed_with_mentors %}
+  <div class="warn">Legal references on this page are defaults and have not yet been confirmed.</div>
+  {% endif %}
+  {% if ev.trace.low_confidence or ev.trace.truncated %}
+  <div class="warn">
+    {% if ev.trace.low_confidence %}The first transfer of this trace was followed on low confidence. {% endif %}
+    {% if ev.trace.truncated %}This trace was cut short at the account limit. {% endif %}
+    Review before signing.
+  </div>
+  {% endif %}
+
+  <div class="meta">
+    <div>
+      Case id: <strong>{{ ev.case_id }}</strong><br>
+      FIR number: {% if ev.fir_number %}<strong>{{ ev.fir_number }}</strong>{% else %}____________________{% endif %}
+    </div>
+    <div>Generated at: {{ ev.generated_at }}</div>
+  </div>
+
+  <h1>Case diary</h1>
+  <p>{{ ev.legal.case_diary }}.</p>
+
+  <h2>1. Total siphoned</h2>
+  <table>
+    <tbody>
+      <tr><th>Complainant's account</th><td>{{ ev.victim.acct_no }} (IFSC {{ ev.victim.ifsc }})</td></tr>
+      <tr><th>Total siphoned</th><td class="num"><strong>{{ ev.totals.paid_paise | rupees }}</strong></td></tr>
+      <tr><th>Kept by accounts that passed the money on</th><td class="num">{{ ev.totals.commissions_kept_paise | rupees }}</td></tr>
+      <tr><th>Held at the accounts where the trace ends</th><td class="num">{{ ev.totals.holding_at_end_paise | rupees }}</td></tr>
+      <tr><th>Left on transfers the trace did not follow</th><td class="num">{{ ev.totals.untraced_paise | rupees }}</td></tr>
+      <tr><th>Held in accounts recommended for freezing</th><td class="num">{{ ev.totals.freeze_holding_total_paise | rupees }}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>2. Chronological account</h2>
+  <p>{{ narrative.summary }}</p>
+  <ul class="entries">
+    {% for e in narrative.entries %}
+    <li><span class="ts">{{ e.ts }}</span> &mdash; {{ e.text }}</li>
+    {% endfor %}
+  </ul>
+
+  <h2>3. Layer-wise accounts</h2>
+  {% for layer in layers %}
+  <h3>Layer: {{ layer.role }} ({{ layer.accounts | length }} account(s))</h3>
+  <table>
+    <thead>
+      <tr><th>Date and time</th><th>Transaction ID</th><th>From account</th><th>To account</th>
+          <th class="num">Amount credited</th><th class="num">Of which complainant's money</th></tr>
+    </thead>
+    <tbody>
+      {% for t in layer.receipts %}
+      <tr><td>{{ t.ts }}</td><td>{{ t.tx_id }}</td><td>{{ t.from }}</td><td>{{ t.to }}</td>
+          <td class="num">{{ t.amount_paise | rupees }}</td><td class="num">{{ t.tainted_paise | rupees }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <table>
+    <thead>
+      <tr><th>Account number</th><th>IFSC</th><th class="num">Received</th><th class="num">Passed on</th>
+          <th class="num">Left untraced</th><th class="num">Still held</th></tr>
+    </thead>
+    <tbody>
+      {% for a in layer.accounts %}
+      <tr><td>{{ a.acct_no }}</td><td>{{ a.ifsc }}</td>
+          <td class="num">{{ a.tainted_in_paise | rupees }}</td><td class="num">{{ a.tainted_out_paise | rupees }}</td>
+          <td class="num">{{ a.untraced_out_paise | rupees }}</td><td class="num">{{ a.holding_paise | rupees }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+
+  <h2>4. Accounts recommended for freezing</h2>
+  {% if ev.freeze_candidates %}
+  <table>
+    <thead>
+      <tr><th>#</th><th>Account number</th><th>IFSC</th><th>Layer</th><th class="num">Amount to be frozen</th></tr>
+    </thead>
+    <tbody>
+      {% for c in ev.freeze_candidates %}
+      <tr><td>{{ loop.index }}</td><td>{{ c.acct_no }}</td><td>{{ c.ifsc }}</td><td>{{ c.role or "no role assigned" }}</td>
+          <td class="num">{{ c.holding_paise | rupees }}</td></tr>
+      {% endfor %}
+      <tr><th colspan="4">Total</th><th class="num">{{ ev.totals.freeze_holding_total_paise | rupees }}</th></tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p>No account that holds the complainant's money is recommended for freezing.</p>
+  {% endif %}
+
+  <div class="sign">
+    <div></div><span>Signature</span>
+    <div></div><span>Name and rank</span>
+    <div></div><span>Police station / unit</span>
+    <div></div><span>Date</span>
+  </div>
+
+  <div class="foot">
+    <table>
+      <tr><th>Case id</th><td>{{ ev.case_id }}</td><th>Generated at</th><td>{{ ev.generated_at }}</td></tr>
+      <tr><th>Profile id</th><td>{{ ev.profile_id }}</td><th>Generator</th><td>{{ ev.generator }}</td></tr>
+      <tr><th>Dataset SHA-256</th><td colspan="3" class="mono">{{ ev.dataset.sha256 }}</td></tr>
+      <tr><th>Trace fingerprint</th><td colspan="3" class="mono">{{ ev.fingerprint }}</td></tr>
+    </table>
+    <strong>{{ ev.legal.draft_label }}</strong>
+  </div>
+</div>
+</body>
+</html>

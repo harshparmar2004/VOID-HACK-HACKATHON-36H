@@ -1,0 +1,369 @@
+{
+  "section": "C",
+  "written_at": "2026-10-02T08:12:23",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 25.608,
+  "checks": [
+    {
+      "id": "C1",
+      "result": "src format ok 2000000/2000000, dst 2000000/2000000; prefix=IFSC prefix src 2000000/2000000 dst 2000000/2000000",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Keep ^[A-Z]{4}[0-9]{8}$ and prefix=IFSC-prefix as ingest rules.",
+      "extra": {}
+    },
+    {
+      "id": "C2",
+      "result": "whitespace variants in rows=0, non-upper=0, case/trim collisions across distinct strings=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Do not case-fold or trim accounts; reject whitespace.",
+      "extra": {}
+    },
+    {
+      "id": "C3",
+      "result": "accounts with >1 IFSC as sender=0, as receiver=0, across both sides=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "If an account maps to multiple IFSC, keep a conflict flag; do not min() silently without logging.",
+      "extra": {}
+    },
+    {
+      "id": "C4",
+      "result": "self-transfers (sender=receiver)=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Self-transfers are not expected; quarantine if they appear.",
+      "extra": {}
+    },
+    {
+      "id": "C5",
+      "result": "distinct accounts=24873 (expect ~25000); senders=24488, receivers=24573, both=24188, send-only=300, recv-only=385",
+      "count": 24873,
+      "examples": [
+        {
+          "send_only": 300,
+          "recv_only": 385,
+          "both": 24188
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Send-only \u2248 victims/sources; recv-only \u2248 sinks. Use as features, not rejects.",
+      "extra": {}
+    },
+    {
+      "id": "C6",
+      "result": "same-bank hamming-1 account pairs=45168 (compared 24873 accounts grouped by prefix)",
+      "count": 45168,
+      "examples": [
+        {
+          "a": "IPOS10024128",
+          "b": "IPOS10024188",
+          "bank": "IPOS"
+        },
+        {
+          "a": "IPOS10024128",
+          "b": "IPOS10024198",
+          "bank": "IPOS"
+        },
+        {
+          "a": "IPOS10014829",
+          "b": "IPOS10014809",
+          "bank": "IPOS"
+        },
+        {
+          "a": "IPOS10013416",
+          "b": "IPOS10013486",
+          "bank": "IPOS"
+        },
+        {
+          "a": "IPOS10013416",
+          "b": "IPOS10013426",
+          "bank": "IPOS"
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Do not treat single-digit neighbours as typos; generator numbers are dense per bank.",
+      "extra": {}
+    },
+    {
+      "id": "C7",
+      "result": "10 bank prefixes. payments-bank headless rate=0.001462 vs others=0.001270 (ratio=1.1515102341756407). See C7 figures.",
+      "count": 10,
+      "examples": [
+        {
+          "bank": "IPOS",
+          "n_tx": 203751,
+          "n_accts": 2488,
+          "n_headless": 386,
+          "n_foreign": 386,
+          "headless_rate": 0.001894
+        },
+        {
+          "bank": "AXIS",
+          "n_tx": 203700,
+          "n_accts": 2488,
+          "n_headless": 231,
+          "n_foreign": 231,
+          "headless_rate": 0.001134
+        },
+        {
+          "bank": "KKBK",
+          "n_tx": 202908,
+          "n_accts": 2481,
+          "n_headless": 269,
+          "n_foreign": 269,
+          "headless_rate": 0.001326
+        },
+        {
+          "bank": "SBIN",
+          "n_tx": 202694,
+          "n_accts": 2500,
+          "n_headless": 331,
+          "n_foreign": 331,
+          "headless_rate": 0.001633
+        },
+        {
+          "bank": "PUNB",
+          "n_tx": 202330,
+          "n_accts": 2466,
+          "n_headless": 235,
+          "n_foreign": 235,
+          "headless_rate": 0.001161
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Bank prefix may be a weak L3 correlate (payments banks). Do not use prefix alone as a mule label.",
+      "extra": {
+        "by_bank": [
+          {
+            "bank": "IPOS",
+            "n_tx": 203751,
+            "n_accts": 2488,
+            "n_headless": 386,
+            "n_foreign": 386,
+            "headless_rate": 0.001894
+          },
+          {
+            "bank": "AXIS",
+            "n_tx": 203700,
+            "n_accts": 2488,
+            "n_headless": 231,
+            "n_foreign": 231,
+            "headless_rate": 0.001134
+          },
+          {
+            "bank": "KKBK",
+            "n_tx": 202908,
+            "n_accts": 2481,
+            "n_headless": 269,
+            "n_foreign": 269,
+            "headless_rate": 0.001326
+          },
+          {
+            "bank": "SBIN",
+            "n_tx": 202694,
+            "n_accts": 2500,
+            "n_headless": 331,
+            "n_foreign": 331,
+            "headless_rate": 0.001633
+          },
+          {
+            "bank": "PUNB",
+            "n_tx": 202330,
+            "n_accts": 2466,
+            "n_headless": 235,
+            "n_foreign": 235,
+            "headless_rate": 0.001161
+          },
+          {
+            "bank": "HDFC",
+            "n_tx": 201616,
+            "n_accts": 2453,
+            "n_headless": 209,
+            "n_foreign": 209,
+            "headless_rate": 0.001037
+          },
+          {
+            "bank": "ICIC",
+            "n_tx": 198168,
+            "n_accts": 2430,
+            "n_headless": 264,
+            "n_foreign": 264,
+            "headless_rate": 0.001332
+          },
+          {
+            "bank": "PYTM",
+            "n_tx": 196112,
+            "n_accts": 2411,
+            "n_headless": 232,
+            "n_foreign": 232,
+            "headless_rate": 0.001183
+          },
+          {
+            "bank": "BARB",
+            "n_tx": 194998,
+            "n_accts": 2396,
+            "n_headless": 247,
+            "n_foreign": 247,
+            "headless_rate": 0.001267
+          },
+          {
+            "bank": "AIRP",
+            "n_tx": 193723,
+            "n_accts": 2375,
+            "n_headless": 250,
+            "n_foreign": 250,
+            "headless_rate": 0.001291
+          }
+        ],
+        "pay_rate": 0.0014622986391188472,
+        "other_rate": 0.0012698963463105457
+      }
+    },
+    {
+      "id": "C8",
+      "result": "headless vs normal 8-digit ranges disjoint=False: [{'is_headless': False, 'n': 1997346, 'dmin': 10000000, 'dp50': 10013228, 'dmax': 10024999}, {'is_headless': True, 'n': 2654, 'dmin': 10000303, 'dp50': 10000452, 'dmax': 10001099}]",
+      "count": 0,
+      "examples": [
+        {
+          "is_headless": false,
+          "n": 1997346,
+          "dmin": 10000000,
+          "dp50": 10013228,
+          "dmax": 10024999
+        },
+        {
+          "is_headless": true,
+          "n": 2654,
+          "dmin": 10000303,
+          "dp50": 10000452,
+          "dmax": 10001099
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Do NOT score on the 8-digit account-number range (leakage risk). Overlap means no shortcut here.",
+      "extra": {}
+    },
+    {
+      "id": "C9",
+      "result": "tx-involvements per account: min=1 p50=169 p90=186 p99=201 max=221; exactly 1=350 / 24873",
+      "count": 350,
+      "examples": [
+        {
+          "acct": "KKBK10013350",
+          "n": 221
+        },
+        {
+          "acct": "AIRP10021987",
+          "n": 219
+        },
+        {
+          "acct": "ICIC10021594",
+          "n": 218
+        },
+        {
+          "acct": "KKBK10011427",
+          "n": 217
+        },
+        {
+          "acct": "ICIC10003161",
+          "n": 216
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Cap merchant-like hubs in graph features; keep a tx_count feature. Top-20 listed in extra.",
+      "extra": {
+        "top20": [
+          {
+            "acct": "KKBK10013350",
+            "n": 221
+          },
+          {
+            "acct": "AIRP10021987",
+            "n": 219
+          },
+          {
+            "acct": "ICIC10021594",
+            "n": 218
+          },
+          {
+            "acct": "KKBK10011427",
+            "n": 217
+          },
+          {
+            "acct": "ICIC10003161",
+            "n": 216
+          },
+          {
+            "acct": "AIRP10009506",
+            "n": 215
+          },
+          {
+            "acct": "HDFC10005362",
+            "n": 215
+          },
+          {
+            "acct": "AIRP10004353",
+            "n": 214
+          },
+          {
+            "acct": "AXIS10024771",
+            "n": 214
+          },
+          {
+            "acct": "HDFC10021719",
+            "n": 214
+          },
+          {
+            "acct": "HDFC10006611",
+            "n": 214
+          },
+          {
+            "acct": "BARB10006725",
+            "n": 214
+          },
+          {
+            "acct": "IPOS10006833",
+            "n": 213
+          },
+          {
+            "acct": "PUNB10015394",
+            "n": 213
+          },
+          {
+            "acct": "IPOS10005535",
+            "n": 213
+          },
+          {
+            "acct": "KKBK10014801",
+            "n": 213
+          },
+          {
+            "acct": "AXIS10013687",
+            "n": 213
+          },
+          {
+            "acct": "HDFC10018101",
+            "n": 212
+          },
+          {
+            "acct": "IPOS10009980",
+            "n": 212
+          },
+          {
+            "acct": "SBIN10003951",
+            "n": 212
+          }
+        ],
+        "exact_1": 350,
+        "max": 221
+      }
+    }
+  ],
+  "extra": {}
+}

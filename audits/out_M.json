@@ -1,0 +1,367 @@
+{
+  "section": "M",
+  "written_at": "2026-10-02T08:13:01",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 2.02,
+  "checks": [
+    {
+      "id": "M1",
+      "result": "leakage-word hits: ",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "If labels leak into narration, ignore them for scoring (guardrail 9). Report only.",
+      "extra": {
+        "words": [
+          {
+            "kw": "mule",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "victim",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "fraud",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "layer",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "l1",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "l2",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "l3",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "test",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "fake",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "injected",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "ground",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "truth",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          },
+          {
+            "kw": "label",
+            "narration": 0,
+            "tx_id": 0,
+            "mode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "M2",
+      "result": "account-digit range disjoint=False [{'is_headless': True, 'dmin': 10000303, 'dp50': 10000452, 'dmax': 10001099, 'n': 2654}, {'is_headless': False, 'dmin': 10000000, 'dp50': 10013232, 'dmax': 10024999, 'n': 1997346}]; tx_id range disjoint=False [{'is_headless': True, 'imin': 100279986, 'ip50': 557589065, 'imax': 999633739}, {'is_headless': False, 'imin': 100000589, 'ip50': 551032495, 'imax': 999999237}]; headless rate by bank=[{'bank': 'IPOS', 'p_head': 0.001894469229598873, 'p_for': 0.001894469229598873, 'n': 203751}, {'bank': 'SBIN', 'p_head': 0.0016330034436145126, 'p_for': 0.0016330034436145126, 'n': 202694}, {'bank': 'ICIC', 'p_head': 0.0013322029792902992, 'p_for': 0.0013322029792902992, 'n': 198168}, {'bank': 'KKBK', 'p_head': 0.0013257239734263805, 'p_for': 0.0013257239734263805, 'n': 202908}, {'bank': 'AIRP', 'p_head': 0.0012905024184015322, 'p_for': 0.0012905024184015322, 'n': 193723}, {'bank': 'BARB', 'p_head': 0.0012666796582529052, 'p_for': 0.0012666796582529052, 'n': 194998}, {'bank': 'PYTM', 'p_head': 0.0011829974708329933, 'p_for': 0.0011829974708329933, 'n': 196112}, {'bank': 'PUNB', 'p_head': 0.0011614688874610785, 'p_for': 0.0011614688874610785, 'n': 202330}, {'bank': 'AXIS', 'p_head': 0.001134020618556701, 'p_for': 0.001134020618556701, 'n': 203700}, {'bank': 'HDFC', 'p_head': 0.0010366240774541703, 'p_for': 0.0010366240774541703, 'n': 201616}]",
+      "count": 0,
+      "examples": [
+        {
+          "bank": "IPOS",
+          "p_head": 0.001894469229598873,
+          "p_for": 0.001894469229598873,
+          "n": 203751
+        },
+        {
+          "bank": "SBIN",
+          "p_head": 0.0016330034436145126,
+          "p_for": 0.0016330034436145126,
+          "n": 202694
+        },
+        {
+          "bank": "ICIC",
+          "p_head": 0.0013322029792902992,
+          "p_for": 0.0013322029792902992,
+          "n": 198168
+        },
+        {
+          "bank": "KKBK",
+          "p_head": 0.0013257239734263805,
+          "p_for": 0.0013257239734263805,
+          "n": 202908
+        },
+        {
+          "bank": "AIRP",
+          "p_head": 0.0012905024184015322,
+          "p_for": 0.0012905024184015322,
+          "n": 193723
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "LEAKAGE: do NOT score on account-number ranges, tx_id ranges, or bank prefix as a mule label.",
+      "extra": {
+        "acct_range": [
+          {
+            "is_headless": true,
+            "dmin": 10000303,
+            "dp50": 10000452,
+            "dmax": 10001099,
+            "n": 2654
+          },
+          {
+            "is_headless": false,
+            "dmin": 10000000,
+            "dp50": 10013232,
+            "dmax": 10024999,
+            "n": 1997346
+          }
+        ],
+        "id_range": [
+          {
+            "is_headless": true,
+            "imin": 100279986,
+            "ip50": 557589065,
+            "imax": 999633739
+          },
+          {
+            "is_headless": false,
+            "imin": 100000589,
+            "ip50": 551032495,
+            "imax": 999999237
+          }
+        ],
+        "by_bank": [
+          {
+            "bank": "IPOS",
+            "p_head": 0.001894469229598873,
+            "p_for": 0.001894469229598873,
+            "n": 203751
+          },
+          {
+            "bank": "SBIN",
+            "p_head": 0.0016330034436145126,
+            "p_for": 0.0016330034436145126,
+            "n": 202694
+          },
+          {
+            "bank": "ICIC",
+            "p_head": 0.0013322029792902992,
+            "p_for": 0.0013322029792902992,
+            "n": 198168
+          },
+          {
+            "bank": "KKBK",
+            "p_head": 0.0013257239734263805,
+            "p_for": 0.0013257239734263805,
+            "n": 202908
+          },
+          {
+            "bank": "AIRP",
+            "p_head": 0.0012905024184015322,
+            "p_for": 0.0012905024184015322,
+            "n": 193723
+          },
+          {
+            "bank": "BARB",
+            "p_head": 0.0012666796582529052,
+            "p_for": 0.0012666796582529052,
+            "n": 194998
+          },
+          {
+            "bank": "PYTM",
+            "p_head": 0.0011829974708329933,
+            "p_for": 0.0011829974708329933,
+            "n": 196112
+          },
+          {
+            "bank": "PUNB",
+            "p_head": 0.0011614688874610785,
+            "p_for": 0.0011614688874610785,
+            "n": 202330
+          },
+          {
+            "bank": "AXIS",
+            "p_head": 0.001134020618556701,
+            "p_for": 0.001134020618556701,
+            "n": 203700
+          },
+          {
+            "bank": "HDFC",
+            "p_head": 0.0010366240774541703,
+            "p_for": 0.0010366240774541703,
+            "n": 201616
+          }
+        ]
+      }
+    },
+    {
+      "id": "M3",
+      "result": "phone-device max relative deviation from even thirds=0.000536 counts=[('Android', 665425), ('Windows_Browser', 666004), ('iOS', 665917)]; hourly max relative deviation from flat=0.0069",
+      "count": 0.000536,
+      "examples": [
+        {
+          "device": "Android",
+          "n": 665425
+        },
+        {
+          "device": "Windows_Browser",
+          "n": 666004
+        },
+        {
+          "device": "iOS",
+          "n": 665917
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Near-even Android/iOS/Windows_Browser split is a generator artefact. Do not treat device thirds as organic.",
+      "extra": {
+        "hours": [
+          {
+            "h": 0,
+            "n": 83462
+          },
+          {
+            "h": 1,
+            "n": 83522
+          },
+          {
+            "h": 2,
+            "n": 83286
+          },
+          {
+            "h": 3,
+            "n": 83110
+          },
+          {
+            "h": 4,
+            "n": 83025
+          },
+          {
+            "h": 5,
+            "n": 83365
+          },
+          {
+            "h": 6,
+            "n": 83367
+          },
+          {
+            "h": 7,
+            "n": 83409
+          },
+          {
+            "h": 8,
+            "n": 83244
+          },
+          {
+            "h": 9,
+            "n": 83396
+          },
+          {
+            "h": 10,
+            "n": 83255
+          },
+          {
+            "h": 11,
+            "n": 83331
+          },
+          {
+            "h": 12,
+            "n": 83430
+          },
+          {
+            "h": 13,
+            "n": 83654
+          },
+          {
+            "h": 14,
+            "n": 83182
+          },
+          {
+            "h": 15,
+            "n": 83268
+          },
+          {
+            "h": 16,
+            "n": 83164
+          },
+          {
+            "h": 17,
+            "n": 83123
+          },
+          {
+            "h": 18,
+            "n": 83104
+          },
+          {
+            "h": 19,
+            "n": 83242
+          },
+          {
+            "h": 20,
+            "n": 83360
+          },
+          {
+            "h": 21,
+            "n": 83502
+          },
+          {
+            "h": 22,
+            "n": 83906
+          },
+          {
+            "h": 23,
+            "n": 83293
+          }
+        ],
+        "devices": [
+          {
+            "device": "Android",
+            "n": 665425
+          },
+          {
+            "device": "Windows_Browser",
+            "n": 666004
+          },
+          {
+            "device": "iOS",
+            "n": 665917
+          }
+        ]
+      }
+    }
+  ],
+  "extra": {}
+}

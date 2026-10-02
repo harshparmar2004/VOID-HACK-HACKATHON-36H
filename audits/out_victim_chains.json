@@ -1,0 +1,963 @@
+{
+  "sql": {
+    "acct": "\nCREATE TABLE acct AS\nWITH s AS (\n  SELECT src_acct AS acct,\n         count(*) AS n_out,\n         sum(amount) AS out_amt,\n         min(ts) AS first_out,\n         max(ts) AS last_out\n  FROM t GROUP BY 1\n), r AS (\n  SELECT dst_acct AS acct,\n         count(*) AS n_in,\n         sum(amount) AS in_amt,\n         min(ts) AS first_in,\n         max(ts) AS last_in\n  FROM t GROUP BY 1\n)\nSELECT\n  coalesce(s.acct, r.acct) AS acct,\n  coalesce(s.n_out, 0) AS n_out,\n  coalesce(r.n_in, 0) AS n_in,\n  coalesce(s.n_out, 0) + coalesce(r.n_in, 0) AS n_tx,\n  coalesce(s.out_amt, 0) AS out_amt,\n  coalesce(r.in_amt, 0) AS in_amt,\n  least(coalesce(s.first_out, r.first_in), coalesce(r.first_in, s.first_out)) AS first_ts,\n  greatest(coalesce(s.last_out, r.last_in), coalesce(r.last_in, s.last_out)) AS last_ts,\n  datediff('day',\n           least(coalesce(s.first_out, r.first_in), coalesce(r.first_in, s.first_out)),\n           greatest(coalesce(s.last_out, r.last_in), coalesce(r.last_in, s.last_out)))\n    + 1 AS days_active\nFROM s FULL JOIN r ON s.acct = r.acct\n",
+    "victims": "\nCREATE TABLE victims AS\nSELECT acct FROM acct WHERE n_out > 0 AND n_in = 0\n",
+    "sinks": "\nCREATE TABLE sinks AS\nSELECT acct FROM acct WHERE n_in > 0 AND n_out = 0\n",
+    "l3_rows": "\nCREATE TABLE l3_rows AS\nSELECT\n  file_row_number AS tx_key,\n  tx_id,\n  src_acct,\n  dst_acct,\n  amount,\n  ts,\n  narration,\n  device,\n  split_part(narration, '/', 2) AS narr_cat\nFROM t\nWHERE is_headless\n  AND is_foreign\n  AND split_part(narration, '/', 2) IN ('P2A', 'WALLET_LOAD')\n",
+    "l3_senders": "\nCREATE TABLE l3_senders AS\nSELECT src_acct AS acct, count(*) AS n_l3, sum(amount) AS l3_amt\nFROM l3_rows\nGROUP BY 1\n",
+    "vpay": "\nCREATE TABLE vpay AS\nSELECT\n  t.file_row_number AS tx_key,\n  t.tx_id,\n  t.src_acct AS victim,\n  t.dst_acct AS hop1,\n  t.amount,\n  t.amount_paise,\n  t.ts,\n  t.mode,\n  t.device,\n  t.narration,\n  t.is_headless,\n  t.is_foreign\nFROM t\nJOIN victims v ON t.src_acct = v.acct\n",
+    "hop1_fanin": "\nCREATE TABLE hop1_fanin AS\nSELECT\n  hop1,\n  count(*) AS n_vpay,\n  count(DISTINCT victim) AS n_victims,\n  sum(amount) AS in_from_victims,\n  min(ts) AS first_v,\n  max(ts) AS last_v\nFROM vpay\nGROUP BY 1\n",
+    "h2_edge": "\nCREATE TABLE h2_edge AS\nSELECT\n  v.tx_key AS in_tx_key,\n  v.tx_id AS in_tx_id,\n  v.victim,\n  v.hop1 AS from_acct,\n  v.amount AS in_amt,\n  v.ts AS in_ts,\n  t.file_row_number AS out_tx_key,\n  t.tx_id AS out_tx_id,\n  t.dst_acct AS to_acct,\n  t.amount AS out_amt,\n  t.ts AS out_ts,\n  t.mode,\n  t.narration,\n  t.device,\n  t.is_headless,\n  t.is_foreign,\n  datediff('second', v.ts, t.ts) AS lag_sec\nFROM vpay v\nJOIN t\n  ON t.src_acct = v.hop1\n AND t.ts >= v.ts\n AND t.ts <= v.ts + INTERVAL 60 MINUTE\n",
+    "h2_agg": "\nCREATE TABLE h2_agg AS\nSELECT\n  in_tx_key,\n  any_value(victim) AS victim,\n  any_value(from_acct) AS hop1,\n  any_value(in_amt) AS in_amt,\n  any_value(in_ts) AS in_ts,\n  count(*) AS n_out,\n  count(DISTINCT to_acct) AS n_recv,\n  sum(out_amt) AS out_sum,\n  min(lag_sec) AS min_lag,\n  quantile_cont(lag_sec, 0.5) AS med_lag,\n  max(lag_sec) AS max_lag,\n  sum(out_amt) / nullif(any_value(in_amt), 0) AS ratio\nFROM h2_edge\nGROUP BY in_tx_key\n",
+    "h3_edge": "\nCREATE TABLE h3_edge AS\nSELECT\n  e.in_tx_key AS v_tx_key,\n  e.victim,\n  e.from_acct AS hop1,\n  e.out_tx_key AS in_tx_key,\n  e.out_tx_id AS in_tx_id,\n  e.to_acct AS from_acct,\n  e.out_amt AS in_amt,\n  e.out_ts AS in_ts,\n  t.file_row_number AS out_tx_key,\n  t.tx_id AS out_tx_id,\n  t.dst_acct AS to_acct,\n  t.amount AS out_amt,\n  t.ts AS out_ts,\n  t.mode,\n  t.narration,\n  t.device,\n  t.is_headless,\n  t.is_foreign,\n  datediff('second', e.out_ts, t.ts) AS lag_sec\nFROM h2_edge e\nJOIN t\n  ON t.src_acct = e.to_acct\n AND t.ts >= e.out_ts\n AND t.ts <= e.out_ts + INTERVAL 60 MINUTE\n",
+    "h3_agg": "\nCREATE TABLE h3_agg AS\nSELECT\n  in_tx_key,\n  any_value(v_tx_key) AS v_tx_key,\n  any_value(victim) AS victim,\n  any_value(from_acct) AS hop2_acct,\n  any_value(in_amt) AS in_amt,\n  any_value(in_ts) AS in_ts,\n  count(*) AS n_out,\n  count(DISTINCT to_acct) AS n_recv,\n  sum(out_amt) AS out_sum,\n  min(lag_sec) AS min_lag,\n  quantile_cont(lag_sec, 0.5) AS med_lag,\n  max(lag_sec) AS max_lag,\n  sum(out_amt) / nullif(any_value(in_amt), 0) AS ratio\nFROM h3_edge\nGROUP BY in_tx_key\n",
+    "h4_edge": "\nCREATE TABLE h4_edge AS\nSELECT\n  e.v_tx_key,\n  e.victim,\n  e.in_tx_key AS hop3_in_key,\n  e.out_tx_key AS in_tx_key,\n  e.out_tx_id AS in_tx_id,\n  e.to_acct AS from_acct,\n  e.out_amt AS in_amt,\n  e.out_ts AS in_ts,\n  t.file_row_number AS out_tx_key,\n  t.tx_id AS out_tx_id,\n  t.dst_acct AS to_acct,\n  t.amount AS out_amt,\n  t.ts AS out_ts,\n  t.mode,\n  t.narration,\n  t.device,\n  t.is_headless,\n  t.is_foreign,\n  datediff('second', e.out_ts, t.ts) AS lag_sec\nFROM h3_edge e\nJOIN t\n  ON t.src_acct = e.to_acct\n AND t.ts >= e.out_ts\n AND t.ts <= e.out_ts + INTERVAL 60 MINUTE\n",
+    "h4_agg": "\nCREATE TABLE h4_agg AS\nSELECT\n  in_tx_key,\n  any_value(v_tx_key) AS v_tx_key,\n  any_value(victim) AS victim,\n  any_value(from_acct) AS hop3_acct,\n  any_value(in_amt) AS in_amt,\n  any_value(in_ts) AS in_ts,\n  count(*) AS n_out,\n  count(DISTINCT to_acct) AS n_recv,\n  sum(out_amt) AS out_sum,\n  min(lag_sec) AS min_lag,\n  quantile_cont(lag_sec, 0.5) AS med_lag,\n  max(lag_sec) AS max_lag,\n  sum(out_amt) / nullif(any_value(in_amt), 0) AS ratio\nFROM h4_edge\nGROUP BY in_tx_key\n",
+    "chain": "\nCREATE TABLE chain AS\nWITH\nh1_acct AS (\n  SELECT tx_key AS v_tx_key, hop1 AS acct, 1 AS hop FROM vpay\n),\nh2_acct AS (\n  SELECT in_tx_key AS v_tx_key, to_acct AS acct, 2 AS hop FROM h2_edge\n),\nh3_acct AS (\n  SELECT v_tx_key, to_acct AS acct, 3 AS hop FROM h3_edge\n),\nh4_acct AS (\n  SELECT v_tx_key, to_acct AS acct, 4 AS hop FROM h4_edge\n),\nnodes AS (\n  SELECT * FROM h1_acct\n  UNION ALL SELECT * FROM h2_acct\n  UNION ALL SELECT * FROM h3_acct\n  UNION ALL SELECT * FROM h4_acct\n),\nreach AS (\n  SELECT\n    n.v_tx_key,\n    min(CASE WHEN l.acct IS NOT NULL THEN n.hop END) AS l3_hop,\n    min(CASE WHEN s.acct IS NOT NULL THEN n.hop END) AS sink_hop\n  FROM nodes n\n  LEFT JOIN l3_senders l ON l.acct = n.acct\n  LEFT JOIN sinks s ON s.acct = n.acct\n  GROUP BY 1\n)\nSELECT\n  v.tx_key AS v_tx_key,\n  v.victim,\n  v.hop1,\n  v.amount,\n  v.ts,\n  v.tx_id,\n  r.l3_hop,\n  r.sink_hop,\n  (a.in_tx_key IS NOT NULL) AS has_h2,\n  a.n_recv AS h2_n_recv,\n  a.ratio AS h2_ratio,\n  a.min_lag AS h2_min_lag,\n  a.out_sum AS h2_out_sum\nFROM vpay v\nLEFT JOIN reach r ON r.v_tx_key = v.tx_key\nLEFT JOIN h2_agg a ON a.in_tx_key = v.tx_key\n",
+    "hop_accts": "\nCREATE TABLE hop_accts AS\nSELECT hop1 AS acct, 1 AS hop FROM vpay\nUNION\nSELECT to_acct, 2 FROM h2_edge\nUNION\nSELECT to_acct, 3 FROM h3_edge\nUNION\nSELECT to_acct, 4 FROM h4_edge\n"
+  },
+  "steps": [],
+  "step1": {
+    "n_victims": 300,
+    "n_vpay": 300,
+    "n_not_exactly_one_out": 0,
+    "n_out_dist": [
+      {
+        "n_out": 1,
+        "n_accts": 300
+      }
+    ],
+    "amount": {
+      "n": 300,
+      "min_amt": 51698.58,
+      "med_amt": 285009.345,
+      "avg_amt": 282556.0151666668,
+      "p90_amt": 453985.618,
+      "max_amt": 499823.99,
+      "n_ge_4L": 71,
+      "n_ge_1L": 276,
+      "sum_amt": 84766804.55000004
+    },
+    "time": {
+      "min_ts": "2026-09-15 00:10:45",
+      "max_ts": "2026-09-29 21:47:20",
+      "n_dates": 15
+    },
+    "by_date": [
+      {
+        "d": "2026-09-15",
+        "n": 18,
+        "amt": 4568070.86
+      },
+      {
+        "d": "2026-09-16",
+        "n": 20,
+        "amt": 4965581.71
+      },
+      {
+        "d": "2026-09-17",
+        "n": 16,
+        "amt": 4851573.27
+      },
+      {
+        "d": "2026-09-18",
+        "n": 22,
+        "amt": 6352455.62
+      },
+      {
+        "d": "2026-09-19",
+        "n": 30,
+        "amt": 7299715.67
+      },
+      {
+        "d": "2026-09-20",
+        "n": 20,
+        "amt": 5993186.92
+      },
+      {
+        "d": "2026-09-21",
+        "n": 21,
+        "amt": 5963179.81
+      },
+      {
+        "d": "2026-09-22",
+        "n": 24,
+        "amt": 7273440.44
+      },
+      {
+        "d": "2026-09-23",
+        "n": 21,
+        "amt": 5459861.39
+      },
+      {
+        "d": "2026-09-24",
+        "n": 18,
+        "amt": 6160089.88
+      },
+      {
+        "d": "2026-09-25",
+        "n": 15,
+        "amt": 4009183.24
+      },
+      {
+        "d": "2026-09-26",
+        "n": 19,
+        "amt": 5454909.03
+      },
+      {
+        "d": "2026-09-27",
+        "n": 23,
+        "amt": 6582527.77
+      },
+      {
+        "d": "2026-09-28",
+        "n": 17,
+        "amt": 5124254.5
+      },
+      {
+        "d": "2026-09-29",
+        "n": 16,
+        "amt": 4708774.44
+      }
+    ],
+    "examples": [
+      {
+        "tx_key": 2897,
+        "tx_id": "TXN956268943",
+        "victim": "SBIN10000294",
+        "hop1": "IPOS10000334",
+        "amount": 499823.99,
+        "ts": "2026-09-29 00:04:07",
+        "mode": "UPI"
+      },
+      {
+        "tx_key": 189,
+        "tx_id": "TXN188248885",
+        "victim": "AXIS10000018",
+        "hop1": "SBIN10000392",
+        "amount": 496878.67,
+        "ts": "2026-09-24 05:00:30",
+        "mode": "UPI"
+      },
+      {
+        "tx_key": 593,
+        "tx_id": "TXN214503073",
+        "victim": "HDFC10000062",
+        "hop1": "HDFC10000429",
+        "amount": 496130.24,
+        "ts": "2026-09-24 10:07:30",
+        "mode": "UPI"
+      },
+      {
+        "tx_key": 2637,
+        "tx_id": "TXN701118692",
+        "victim": "SBIN10000268",
+        "hop1": "IPOS10000387",
+        "amount": 495985.75,
+        "ts": "2026-09-20 01:40:24",
+        "mode": "UPI"
+      },
+      {
+        "tx_key": 912,
+        "tx_id": "TXN838033148",
+        "victim": "IPOS10000095",
+        "hop1": "KKBK10000389",
+        "amount": 495577.76,
+        "ts": "2026-09-27 08:31:52",
+        "mode": "UPI"
+      }
+    ]
+  },
+  "step2": {
+    "n_distinct_first_mules": 129,
+    "n_multi_victim_mules": 91,
+    "max_victims_per_mule": 8,
+    "fanin_dist": [
+      {
+        "n_victims": 1,
+        "n_mules": 38,
+        "n_payments": 38
+      },
+      {
+        "n_victims": 2,
+        "n_mules": 45,
+        "n_payments": 90
+      },
+      {
+        "n_victims": 3,
+        "n_mules": 24,
+        "n_payments": 72
+      },
+      {
+        "n_victims": 4,
+        "n_mules": 13,
+        "n_payments": 52
+      },
+      {
+        "n_victims": 5,
+        "n_mules": 8,
+        "n_payments": 40
+      },
+      {
+        "n_victims": 8,
+        "n_mules": 1,
+        "n_payments": 8
+      }
+    ],
+    "lifetime": {
+      "n_mules": 129,
+      "avg_n_tx": 12.612403100775193,
+      "med_n_tx": 11.0,
+      "min_n_tx": 4,
+      "max_n_tx": 41,
+      "avg_n_in": 2.3255813953488373,
+      "avg_n_out": 10.286821705426357,
+      "avg_days": 5.75968992248062,
+      "n_only_victim_inflows": 129,
+      "n_extra_inflows": 0,
+      "n_tx_ge_50": 0,
+      "n_in_ge_10": 0
+    },
+    "n_first_mules_are_l3_senders": 129,
+    "examples": [
+      {
+        "hop1": "HDFC10000336",
+        "n_victims": 8,
+        "n_vpay": 8,
+        "in_from_victims": 2719959.61,
+        "n_in": 8,
+        "n_out": 33,
+        "n_tx": 41,
+        "days_active": 12
+      },
+      {
+        "hop1": "SBIN10000401",
+        "n_victims": 5,
+        "n_vpay": 5,
+        "in_from_victims": 1665091.87,
+        "n_in": 5,
+        "n_out": 26,
+        "n_tx": 31,
+        "days_active": 10
+      },
+      {
+        "hop1": "PYTM10000327",
+        "n_victims": 5,
+        "n_vpay": 5,
+        "in_from_victims": 1398074.72,
+        "n_in": 5,
+        "n_out": 25,
+        "n_tx": 30,
+        "days_active": 11
+      },
+      {
+        "hop1": "AIRP10000329",
+        "n_victims": 5,
+        "n_vpay": 5,
+        "in_from_victims": 1020886.9299999999,
+        "n_in": 5,
+        "n_out": 24,
+        "n_tx": 29,
+        "days_active": 12
+      },
+      {
+        "hop1": "ICIC10000304",
+        "n_victims": 5,
+        "n_vpay": 5,
+        "in_from_victims": 1405334.5899999999,
+        "n_in": 5,
+        "n_out": 24,
+        "n_tx": 29,
+        "days_active": 7
+      }
+    ]
+  },
+  "step3": {
+    "n_edges": 1327,
+    "n_accts": 559,
+    "n_inflows_with_out": 300,
+    "lag": {
+      "min_lag": 180,
+      "med_lag": 542.0,
+      "max_lag": 898,
+      "avg_lag": 538.6850037678976,
+      "n_lag0": 0,
+      "n_lag_lt3": 0,
+      "n_backwards": 0
+    },
+    "ratio": {
+      "min_r": 0.9799998451832643,
+      "med_r": 0.9800000013326259,
+      "max_r": 0.9800002036859518,
+      "avg_r": 0.9800000006038462,
+      "n_exact_098": 300,
+      "n_round_098": 300,
+      "n_band_95_99": 300,
+      "n_exceeds": 0,
+      "n_exceeds_1_5": 0
+    },
+    "recv_dist": [
+      {
+        "n_recv": 3,
+        "n_inflows": 72
+      },
+      {
+        "n_recv": 4,
+        "n_inflows": 96
+      },
+      {
+        "n_recv": 5,
+        "n_inflows": 69
+      },
+      {
+        "n_recv": 6,
+        "n_inflows": 63
+      }
+    ],
+    "split_band": {
+      "n1": 0,
+      "n2": 0,
+      "n3_7": 300,
+      "n_gt7": 0
+    },
+    "n_vpay_no_forward": 0,
+    "n_backwards_edges": 0,
+    "examples": [
+      {
+        "in_tx_key": 2470,
+        "victim": "PUNB10000251",
+        "hop1": "PUNB10000428",
+        "in_amt": 241424.5,
+        "n_out": 6,
+        "n_recv": 6,
+        "out_sum": 236596.01,
+        "ratio": 0.9800000000000001,
+        "min_lag": 258,
+        "med_lag": 434.0,
+        "max_lag": 878
+      },
+      {
+        "in_tx_key": 2295,
+        "victim": "BARB10000234",
+        "hop1": "IPOS10000424",
+        "in_amt": 381634.5,
+        "n_out": 5,
+        "n_recv": 5,
+        "out_sum": 374001.81000000006,
+        "ratio": 0.9800000000000001,
+        "min_lag": 256,
+        "med_lag": 385.0,
+        "max_lag": 467
+      },
+      {
+        "in_tx_key": 584,
+        "victim": "AXIS10000061",
+        "hop1": "AXIS10000358",
+        "in_amt": 142897.5,
+        "n_out": 4,
+        "n_recv": 4,
+        "out_sum": 140039.55000000002,
+        "ratio": 0.9800000000000001,
+        "min_lag": 184,
+        "med_lag": 525.5,
+        "max_lag": 825
+      },
+      {
+        "in_tx_key": 2897,
+        "victim": "SBIN10000294",
+        "hop1": "IPOS10000334",
+        "in_amt": 499823.99,
+        "n_out": 5,
+        "n_recv": 5,
+        "out_sum": 489827.51,
+        "ratio": 0.9799999995998592,
+        "min_lag": 341,
+        "med_lag": 602.0,
+        "max_lag": 758
+      },
+      {
+        "in_tx_key": 2790,
+        "victim": "ICIC10000283",
+        "hop1": "AXIS10000358",
+        "in_amt": 352942.51,
+        "n_out": 3,
+        "n_recv": 3,
+        "out_sum": 345883.66,
+        "ratio": 0.9800000005666645,
+        "min_lag": 561,
+        "med_lag": 698.0,
+        "max_lag": 869
+      }
+    ],
+    "busy_examples": []
+  },
+  "step4_h3": {
+    "n_edges": 1337,
+    "n_accts": 385,
+    "n_inflows_with_out": 1327,
+    "lag": {
+      "min_lag": 123,
+      "med_lag": 1035.0,
+      "max_lag": 3450,
+      "avg_lag": 1042.2483171278982,
+      "n_lag0": 0,
+      "n_lag_lt3": 1,
+      "n_backwards": 0
+    },
+    "ratio": {
+      "min_r": 0.959956388145505,
+      "med_r": 0.96,
+      "max_r": 5.839046739956689,
+      "avg_r": 0.9726114711579479,
+      "n_exact_098": 0,
+      "n_round_098": 0,
+      "n_band_95_99": 1317,
+      "n_exceeds": 10,
+      "n_exceeds_1_5": 7
+    },
+    "recv_dist": [
+      {
+        "n_recv": 1,
+        "n_inflows": 1318
+      },
+      {
+        "n_recv": 2,
+        "n_inflows": 9
+      }
+    ],
+    "split_band": {
+      "n1": 1318,
+      "n2": 9,
+      "n3_7": 0,
+      "n_gt7": 0
+    },
+    "n_inflows_no_forward": 0,
+    "n_backwards_edges": 0,
+    "examples": [
+      {
+        "in_tx_key": 157,
+        "victim": "BARB10000015",
+        "hop2_acct": "HDFC10000760",
+        "in_amt": 639.44,
+        "n_out": 1,
+        "n_recv": 1,
+        "out_sum": 613.87,
+        "ratio": 0.9600118853997247,
+        "min_lag": 1435
+      },
+      {
+        "in_tx_key": 187,
+        "victim": "PYTM10000017",
+        "hop2_acct": "BARB10000666",
+        "in_amt": 487.36,
+        "n_out": 1,
+        "n_recv": 1,
+        "out_sum": 467.87,
+        "ratio": 0.9600090282337491,
+        "min_lag": 1206
+      },
+      {
+        "in_tx_key": 1473,
+        "victim": "AIRP10000149",
+        "hop2_acct": "PUNB10000591",
+        "in_amt": 936.44,
+        "n_out": 1,
+        "n_recv": 1,
+        "out_sum": 898.99,
+        "ratio": 0.9600081158429797,
+        "min_lag": 760
+      },
+      {
+        "in_tx_key": 2876,
+        "victim": "PUNB10000292",
+        "hop2_acct": "IPOS10000921",
+        "in_amt": 251.05,
+        "n_out": 1,
+        "n_recv": 1,
+        "out_sum": 241.01,
+        "ratio": 0.9600079665405297,
+        "min_lag": 1759
+      },
+      {
+        "in_tx_key": 1999,
+        "victim": "SBIN10000201",
+        "hop2_acct": "KKBK10000788",
+        "in_amt": 920.91,
+        "n_out": 1,
+        "n_recv": 1,
+        "out_sum": 884.08,
+        "ratio": 0.9600069496476312,
+        "min_lag": 572
+      }
+    ]
+  },
+  "step4_h4": {
+    "n_edges": 0,
+    "n_accts": 0,
+    "n_inflows_with_out": 0,
+    "lag": {
+      "min_lag": null,
+      "med_lag": null,
+      "max_lag": null,
+      "avg_lag": null,
+      "n_lag0": 0,
+      "n_lag_lt3": 0,
+      "n_backwards": 0
+    },
+    "ratio": {
+      "min_r": null,
+      "med_r": null,
+      "max_r": null,
+      "avg_r": null,
+      "n_exact_098": 0,
+      "n_round_098": 0,
+      "n_band_95_99": 0,
+      "n_exceeds": 0,
+      "n_exceeds_1_5": 0
+    },
+    "recv_dist": [],
+    "split_band": {
+      "n1": 0,
+      "n2": 0,
+      "n3_7": 0,
+      "n_gt7": 0
+    },
+    "n_inflows_no_forward": 1337,
+    "n_backwards_edges": 0,
+    "examples": []
+  },
+  "step5": {
+    "n_sinks": 385,
+    "n_l3_senders": 688,
+    "n_l3_rows": 2654,
+    "endpoints": {
+      "n_chains": 300,
+      "n_reach_l3": 300,
+      "l3_at_1": 300,
+      "l3_at_2": 0,
+      "l3_at_3": 0,
+      "l3_at_4": 0,
+      "n_reach_sink": 300,
+      "sink_at_1": 0,
+      "sink_at_2": 0,
+      "sink_at_3": 300,
+      "sink_at_4": 0,
+      "n_neither": 0,
+      "n_dead_after_h1": 0
+    }
+  },
+  "step6": {
+    "n_h1": 129,
+    "n_h2": 559,
+    "n_h3": 385,
+    "n_h4": 0,
+    "n_union_1_4": 1073,
+    "expected_mules": 1500,
+    "overlap_l3": {
+      "n_overlap": 688,
+      "n_h1": 129,
+      "n_h2": 559,
+      "n_h3": 0,
+      "n_h4": 0
+    },
+    "l3_senders_not_in_chains": 0,
+    "hop_role_mix": [
+      {
+        "hop": 1,
+        "n_accts": 129,
+        "n_l3": 129,
+        "n_sink": 0
+      },
+      {
+        "hop": 2,
+        "n_accts": 559,
+        "n_l3": 559,
+        "n_sink": 0
+      },
+      {
+        "hop": 3,
+        "n_accts": 385,
+        "n_l3": 0,
+        "n_sink": 385
+      }
+    ],
+    "n_l3_senders": 688
+  },
+  "breakers": {
+    "victims_not_exactly_one_out": 0,
+    "vpay_with_no_60min_forward": 0,
+    "h2_backwards_edges": 0,
+    "h3_backwards_edges": 0,
+    "h4_backwards_edges": 0,
+    "first_mules_with_extra_inflows": 0,
+    "first_mules_n_tx_ge_50": 0,
+    "h2_inflows_out_exceeds_in": 0,
+    "h2_inflows_out_gt_1_5_in": 0,
+    "h2_split_gt7": 0,
+    "h2_split_1": 0,
+    "h2_exact_098": 300,
+    "chains_never_reach_l3_or_sink": 0,
+    "first_mules_that_are_l3": 129,
+    "multi_victim_first_mules": 91,
+    "h2_back_to_hop1": 0,
+    "h2_back_to_victim": 0,
+    "h3_to_hop1": 0
+  },
+  "edge_combo": {
+    "vpay": {
+      "n": 300,
+      "n_headless": 0,
+      "n_foreign": 0,
+      "n_l3combo": 0,
+      "n_p2a": 0,
+      "n_wallet": 0
+    },
+    "h2": {
+      "n": 1327,
+      "n_headless": 1327,
+      "n_foreign": 1327,
+      "n_l3combo": 1327,
+      "n_p2a": 1327,
+      "n_wallet": 0
+    },
+    "h3": {
+      "n": 1337,
+      "n_headless": 1337,
+      "n_foreign": 1337,
+      "n_l3combo": 1337,
+      "n_p2a": 0,
+      "n_wallet": 1337
+    }
+  },
+  "h3_exact_096": 1317,
+  "vpay_narr": [
+    {
+      "cat": "REF",
+      "n": 300
+    }
+  ],
+  "runtime_s": 1.648,
+  "duckdb": "1.5.6",
+  "examples": [
+    {
+      "label": "textbook_098_to_L3",
+      "meta": {
+        "v_tx_key": 2470,
+        "victim": "PUNB10000251",
+        "hop1": "PUNB10000428",
+        "amount": 241424.5,
+        "ts": "2026-09-22 06:16:01",
+        "tx_id": "TXN921756220",
+        "l3_hop": 1,
+        "sink_hop": 3,
+        "h2_n_recv": 6,
+        "h2_ratio": 0.9800000000000001,
+        "h2_min_lag": 258
+      },
+      "path": [
+        {
+          "tx_key": 2470,
+          "tx_id": "TXN921756220",
+          "from_acct": "PUNB10000251",
+          "to_acct": "PUNB10000428",
+          "amount": 241424.5,
+          "ts": "2026-09-22 06:16:01",
+          "mode": "RTGS",
+          "device": "Android",
+          "narration": "UPI/REF/TASK_EARNING_REFUND_42843",
+          "hop": 1,
+          "lag_sec": null
+        },
+        {
+          "tx_key": 2481,
+          "tx_id": "TXN619632542",
+          "from_acct": "PUNB10000428",
+          "to_acct": "AXIS10000755",
+          "amount": 93025.98,
+          "ts": "2026-09-22 06:30:39",
+          "lag_sec": 878,
+          "mode": "IMPS",
+          "device": "Web_Emulator",
+          "narration": "IMPS/P2A/INTERNAL_SETTLEMENT_1580",
+          "to_is_l3": true,
+          "to_is_sink": false,
+          "hop": 2
+        },
+        {
+          "tx_key": 2482,
+          "tx_id": "TXN697947265",
+          "from_acct": "AXIS10000755",
+          "to_acct": "HDFC10001292",
+          "amount": 89304.94,
+          "ts": "2026-09-22 06:50:54",
+          "lag_sec": 1215,
+          "mode": "UPI",
+          "device": "Linux_Script",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_1298",
+          "to_is_l3": false,
+          "to_is_sink": true,
+          "hop": 3
+        }
+      ],
+      "h2_siblings": [
+        {
+          "out_tx_key": 2473,
+          "out_tx_id": "TXN737412056",
+          "to_acct": "ICIC10000920",
+          "out_amt": 14962.75,
+          "out_ts": "2026-09-22 06:20:19",
+          "lag_sec": 258
+        },
+        {
+          "out_tx_key": 2477,
+          "out_tx_id": "TXN579768904",
+          "to_acct": "ICIC10000810",
+          "out_amt": 56002.98,
+          "out_ts": "2026-09-22 06:22:10",
+          "lag_sec": 369
+        },
+        {
+          "out_tx_key": 2471,
+          "out_tx_id": "TXN664133134",
+          "to_acct": "PUNB10000709",
+          "out_amt": 31594.32,
+          "out_ts": "2026-09-22 06:22:12",
+          "lag_sec": 371
+        },
+        {
+          "out_tx_key": 2475,
+          "out_tx_id": "TXN114202319",
+          "to_acct": "PYTM10000635",
+          "out_amt": 37898.85,
+          "out_ts": "2026-09-22 06:24:18",
+          "lag_sec": 497
+        },
+        {
+          "out_tx_key": 2479,
+          "out_tx_id": "TXN706881033",
+          "to_acct": "IPOS10000546",
+          "out_amt": 3111.13,
+          "out_ts": "2026-09-22 06:26:57",
+          "lag_sec": 656
+        },
+        {
+          "out_tx_key": 2481,
+          "out_tx_id": "TXN619632542",
+          "to_acct": "AXIS10000755",
+          "out_amt": 93025.98,
+          "out_ts": "2026-09-22 06:30:39",
+          "lag_sec": 878
+        }
+      ]
+    },
+    {
+      "label": "reaches_sink",
+      "meta": {
+        "v_tx_key": 2897,
+        "victim": "SBIN10000294",
+        "hop1": "IPOS10000334",
+        "amount": 499823.99,
+        "ts": "2026-09-29 00:04:07",
+        "tx_id": "TXN956268943",
+        "l3_hop": 1,
+        "sink_hop": 3,
+        "h2_n_recv": 5,
+        "h2_ratio": 0.9799999995998592,
+        "h2_min_lag": 341
+      },
+      "path": [
+        {
+          "tx_key": 2897,
+          "tx_id": "TXN956268943",
+          "from_acct": "SBIN10000294",
+          "to_acct": "IPOS10000334",
+          "amount": 499823.99,
+          "ts": "2026-09-29 00:04:07",
+          "mode": "UPI",
+          "device": "Android",
+          "narration": "UPI/REF/TASK_EARNING_REFUND_29188",
+          "hop": 1,
+          "lag_sec": null
+        },
+        {
+          "tx_key": 2902,
+          "tx_id": "TXN183298817",
+          "from_acct": "IPOS10000334",
+          "to_acct": "BARB10000757",
+          "amount": 225969.07,
+          "ts": "2026-09-29 00:14:09",
+          "lag_sec": 602,
+          "mode": "IMPS",
+          "device": "Web_Emulator",
+          "narration": "IMPS/P2A/INTERNAL_SETTLEMENT_7039",
+          "to_is_l3": true,
+          "to_is_sink": false,
+          "hop": 2
+        },
+        {
+          "tx_key": 2903,
+          "tx_id": "TXN202799936",
+          "from_acct": "BARB10000757",
+          "to_acct": "BARB10001447",
+          "amount": 216930.31,
+          "ts": "2026-09-29 00:21:10",
+          "lag_sec": 421,
+          "mode": "UPI",
+          "device": "Linux_Script",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_5020",
+          "to_is_l3": false,
+          "to_is_sink": true,
+          "hop": 3
+        }
+      ],
+      "h2_siblings": [
+        {
+          "out_tx_key": 2906,
+          "out_tx_id": "TXN599121241",
+          "to_acct": "AIRP10000765",
+          "out_amt": 41691.98,
+          "out_ts": "2026-09-29 00:09:48",
+          "lag_sec": 341
+        },
+        {
+          "out_tx_key": 2898,
+          "out_tx_id": "TXN633214556",
+          "to_acct": "SBIN10000599",
+          "out_amt": 58294.45,
+          "out_ts": "2026-09-29 00:10:34",
+          "lag_sec": 387
+        },
+        {
+          "out_tx_key": 2902,
+          "out_tx_id": "TXN183298817",
+          "to_acct": "BARB10000757",
+          "out_amt": 225969.07,
+          "out_ts": "2026-09-29 00:14:09",
+          "lag_sec": 602
+        },
+        {
+          "out_tx_key": 2900,
+          "out_tx_id": "TXN386361189",
+          "to_acct": "AXIS10000853",
+          "out_amt": 56145.69,
+          "out_ts": "2026-09-29 00:14:25",
+          "lag_sec": 618
+        },
+        {
+          "out_tx_key": 2904,
+          "out_tx_id": "TXN106109533",
+          "to_acct": "AIRP10000925",
+          "out_amt": 107726.32,
+          "out_ts": "2026-09-29 00:16:45",
+          "lag_sec": 758
+        }
+      ]
+    },
+    {
+      "label": "smallest_victim_not_5_lakh",
+      "meta": {
+        "v_tx_key": 1811,
+        "victim": "ICIC10000184",
+        "hop1": "KKBK10000340",
+        "amount": 51698.58,
+        "ts": "2026-09-27 04:56:56",
+        "tx_id": "TXN203412789",
+        "l3_hop": 1,
+        "sink_hop": 3,
+        "h2_n_recv": 5,
+        "h2_ratio": 0.9800000309486256,
+        "h2_min_lag": 231,
+        "hop1_n_tx": 12,
+        "hop1_n_in": 2,
+        "hop1_n_out": 10
+      },
+      "path": [
+        {
+          "tx_key": 1811,
+          "tx_id": "TXN203412789",
+          "from_acct": "ICIC10000184",
+          "to_acct": "KKBK10000340",
+          "amount": 51698.58,
+          "ts": "2026-09-27 04:56:56",
+          "mode": "RTGS",
+          "device": "Android",
+          "narration": "UPI/REF/TASK_EARNING_REFUND_38371",
+          "hop": 1,
+          "lag_sec": null
+        },
+        {
+          "tx_key": 1820,
+          "tx_id": "TXN987465728",
+          "from_acct": "KKBK10000340",
+          "to_acct": "PUNB10001056",
+          "amount": 18040.64,
+          "ts": "2026-09-27 05:10:56",
+          "lag_sec": 840,
+          "mode": "IMPS",
+          "device": "Web_Emulator",
+          "narration": "IMPS/P2A/INTERNAL_SETTLEMENT_5466",
+          "to_is_l3": true,
+          "to_is_sink": false,
+          "hop": 2
+        },
+        {
+          "tx_key": 1821,
+          "tx_id": "TXN797411755",
+          "from_acct": "PUNB10001056",
+          "to_acct": "IPOS10001304",
+          "amount": 17319.02,
+          "ts": "2026-09-27 05:31:49",
+          "lag_sec": 1253,
+          "mode": "UPI",
+          "device": "Linux_Script",
+          "narration": "UPI/WALLET_LOAD/P2P_CRYPTO_9413",
+          "to_is_l3": false,
+          "to_is_sink": true,
+          "hop": 3
+        }
+      ],
+      "h2_siblings": [
+        {
+          "out_tx_key": 1816,
+          "out_tx_id": "TXN377197654",
+          "to_acct": "AXIS10000849",
+          "out_amt": 14724.94,
+          "out_ts": "2026-09-27 05:00:47",
+          "lag_sec": 231
+        },
+        {
+          "out_tx_key": 1812,
+          "out_tx_id": "TXN392227439",
+          "to_acct": "PYTM10000997",
+          "out_amt": 10392.05,
+          "out_ts": "2026-09-27 05:01:28",
+          "lag_sec": 272
+        },
+        {
+          "out_tx_key": 1814,
+          "out_tx_id": "TXN155007085",
+          "to_acct": "ICIC10000792",
+          "out_amt": 6862.55,
+          "out_ts": "2026-09-27 05:02:38",
+          "lag_sec": 342
+        },
+        {
+          "out_tx_key": 1818,
+          "out_tx_id": "TXN222416397",
+          "to_acct": "KKBK10000541",
+          "out_amt": 644.43,
+          "out_ts": "2026-09-27 05:07:33",
+          "lag_sec": 637
+        },
+        {
+          "out_tx_key": 1820,
+          "out_tx_id": "TXN987465728",
+          "to_acct": "PUNB10001056",
+          "out_amt": 18040.64,
+          "out_ts": "2026-09-27 05:10:56",
+          "lag_sec": 840
+        }
+      ]
+    }
+  ]
+}
