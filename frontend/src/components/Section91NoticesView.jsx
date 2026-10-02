@@ -30,6 +30,7 @@ import { fetchFrozenAccounts, executeEmergencyFreeze, unfreezeAccount } from "..
 
 export default function Section91NoticesView({
   noticesData,
+  traceData = null,
   victimAccount = "100000000001",
   victimName = "Sunil Kumar Verma",
   firNumber = "FIR-0142/2026/CYBER-INDORE"
@@ -884,6 +885,7 @@ export default function Section91NoticesView({
           {activeNotice ? (
             <GovernmentRequisitionDocument
               notice={activeNotice}
+              traceData={traceData}
               victimAccount={victimAccount}
               victimName={victimName}
               firNumber={firNumber}

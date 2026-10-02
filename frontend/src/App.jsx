@@ -451,6 +451,7 @@ export default function App() {
             <ErrorBoundary name="Section 91 Notices">
               <Section91NoticesView
                 noticesData={noticesData}
+                traceData={traceData}
                 victimAccount={activeCase}
                 victimName={victimName}
                 firNumber={firNumber}
