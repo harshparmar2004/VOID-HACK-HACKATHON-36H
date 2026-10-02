@@ -448,6 +448,11 @@ export default function App() {
               <CaseDiaryView
                 diaryData={diaryData}
                 victimAccount={activeCase}
+                victimName={victimName}
+                mobileNumber={mobileNumber}
+                firNumber={firNumber}
+                traceData={traceData}
+                noticesData={noticesData}
               />
             </ErrorBoundary>
           </div>

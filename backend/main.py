@@ -10,6 +10,8 @@ import time
 import shutil
 import re
 import urllib.request
+from datetime import datetime
+import hashlib
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -532,13 +534,33 @@ def get_bank_notices(victim_account: str, fir_number: str = "FIR-0142/2026/CYBER
 def get_case_diary(victim_account: str, fir_number: str = "FIR-0142/2026/CYBER-INDORE"):
     if not is_initialized:
         initialize_core()
+    import hashlib
     trace = graph.trace_victim_trail(victim_account)
     diary = legal.generate_police_case_diary(victim_account, fir_number, trace)
+    notices = legal.generate_bank_freeze_notices(victim_account, fir_number, trace)
+    
+    nodes_raw = trace.get("nodes", [])
+    nodes_list = list(nodes_raw.values()) if isinstance(nodes_raw, dict) else nodes_raw
+    links_list = trace.get("links", [])
+    sha256_hash = hashlib.sha256(diary.encode("utf-8")).hexdigest()
+    
     return {
         "victim_account": victim_account,
         "fir_number": fir_number,
-        "case_diary": diary
+        "case_diary": diary,
+        "total_siphoned": trace.get("total_siphoned_inr", 0.0),
+        "recoverable_holding": trace.get("recoverable_holding_inr", 0.0),
+        "nodes": nodes_list,
+        "links": links_list,
+        "nodes_count": len(nodes_list),
+        "edges_count": trace.get("edges_count", len(links_list)),
+        "latency_ms": trace.get("latency_ms", 0),
+        "freeze_candidates": trace.get("freeze_candidates", []),
+        "notices": notices,
+        "digital_seal_sha256": sha256_hash,
+        "generated_at": datetime.now().strftime("%d-%B-%Y %H:%M:%S")
     }
+
 
 @app.post("/api/jury/blind-test")
 def run_jury_blind_evaluation():
