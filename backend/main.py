@@ -89,11 +89,12 @@ def get_system_status():
     }
 
 @app.post("/api/upload")
-async def upload_bank_statement(file: UploadFile = File(...)):
+def upload_bank_statement(file: UploadFile = File(...)):
     """
     Real-world Bank File Ingestion Endpoint.
     Accepts CSV, Parquet, or Excel exports from any Indian Bank.
     Applies automatic column mapping, cleaning, and re-computes mule scores.
+    Runs synchronously in threadpool to prevent event loop blocking on 2M row ingestion.
     """
     upload_dir = os.path.join(DATA_DIR, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
@@ -102,13 +103,17 @@ async def upload_bank_statement(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    global scorer, graph
+    global scorer, graph, scanner, hami_engine
     try:
         res = engine.load_dataset(file_path)
         scorer = MuleScorer(engine.con)
         score_res = scorer.compute_all_scores()
         graph = GraphEngine(engine.con)
+        scanner = FraudScanner(engine.con)
+        hami_engine = HAMIHoppingEngine(engine.con)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"Failed to process bank statement: {str(e)}")
     
     return {

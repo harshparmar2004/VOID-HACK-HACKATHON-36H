@@ -27,10 +27,14 @@ class MuleScorer:
         print("[*] Computing 0-100 Mule Risk Index and parameter heuristics across all accounts...")
         
         self.con.execute(f"DROP TABLE IF EXISTS {self.scored_accounts_table};")
+        self.con.execute("DROP TABLE IF EXISTS account_inflow;")
+        self.con.execute("DROP TABLE IF EXISTS account_outflow;")
+        self.con.execute("DROP TABLE IF EXISTS pass_through_analysis;")
+        self.con.execute("DROP TABLE IF EXISTS gt_roles;")
         
         # 1. Compute Base Account Aggregates (Inflow, Outflow, In-degree, Out-degree, Anomaly counts)
         self.con.execute("""
-        CREATE TEMP TABLE account_inflow AS
+        CREATE OR REPLACE TEMP TABLE account_inflow AS
         SELECT
             Receiver_Account AS account_id,
             COUNT(DISTINCT Sender_Account) AS distinct_senders,
@@ -47,7 +51,7 @@ class MuleScorer:
         """)
         
         self.con.execute("""
-        CREATE TEMP TABLE account_outflow AS
+        CREATE OR REPLACE TEMP TABLE account_outflow AS
         SELECT
             Sender_Account AS account_id,
             COUNT(DISTINCT Receiver_Account) AS distinct_receivers,
@@ -66,7 +70,7 @@ class MuleScorer:
         # 2. Velocity Calculation: Fast Pass-Through within 3 to 15 minutes
         # We join incoming and outgoing transactions for the same account where outgoing is within 3-15 min of incoming
         self.con.execute("""
-        CREATE TEMP TABLE pass_through_analysis AS
+        CREATE OR REPLACE TEMP TABLE pass_through_analysis AS
         SELECT
             t_in.Receiver_Account AS account_id,
             COUNT(DISTINCT t_out.Transaction_ID) AS fast_outgoing_txns,
@@ -81,7 +85,7 @@ class MuleScorer:
 
         # 3. Combine Metrics and Calculate P1 - P6
         self.con.execute(f"""
-        CREATE TABLE {self.scored_accounts_table} AS
+        CREATE OR REPLACE TABLE {self.scored_accounts_table} AS
         WITH combined AS (
             SELECT
                 COALESCE(i.account_id, o.account_id) AS account_id,
@@ -209,6 +213,7 @@ class MuleScorer:
         """)
         
         # Build index on account_id
+        self.con.execute("DROP INDEX IF EXISTS idx_scored_account;")
         self.con.execute(f"CREATE INDEX idx_scored_account ON {self.scored_accounts_table}(account_id);")
 
         # Reconcile with ground truth if available to preserve exact ground-truth role labels (L1, L2, L3)
