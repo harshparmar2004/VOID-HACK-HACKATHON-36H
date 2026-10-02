@@ -98,11 +98,18 @@ export async function fetchProblematicTransactions(limit = 100, filterType = nul
   return res.json();
 }
 
-export async function executeEmergencyFreeze(accountIds) {
+export async function executeEmergencyFreeze(accountIds, details = null) {
+  const payload = {
+    account_ids: accountIds,
+    target_accounts: accountIds
+  };
+  if (details && Array.isArray(details) && details.length > 0) {
+    payload.details = details;
+  }
   const res = await fetch(`${API_BASE}/scanner/emergency-freeze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ account_ids: accountIds, target_accounts: accountIds })
+    body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error("Failed to execute emergency multi-bank freeze");
   return res.json();

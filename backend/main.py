@@ -456,8 +456,16 @@ def trace_victim_flow(
         custom_rules=parsed_rules
     )
     if not res.get("found", True):
-        raise HTTPException(status_code=404, detail="Victim account has no outgoing transactions.")
-    
+        return {
+            "victim_account": victim_account,
+            "found": False,
+            "total_siphoned_inr": 0.0,
+            "recoverable_holding_inr": 0.0,
+            "nodes": [],
+            "edges": [],
+            "links": [],
+            "layer_stats": {}
+        }
     return res
 
 @app.get("/api/mules")
@@ -510,14 +518,24 @@ def get_bank_notices(victim_account: str, fir_number: str = "FIR-0142/2026/CYBER
     if not is_initialized:
         initialize_core()
     trace = graph.trace_victim_trail(victim_account)
-    if not trace.get("nodes"):
-        raise HTTPException(status_code=404, detail="No trace trail found for this account.")
-    notices = legal.generate_bank_freeze_notices(victim_account, fir_number, trace)
-    
     global scanner
     if scanner is None:
         scanner = FraudScanner(engine.con)
     frozen_list = scanner.get_frozen_accounts()
+
+    if not trace.get("nodes"):
+        return {
+            "victim_account": victim_account,
+            "fir_number": fir_number,
+            "total_notices": 0,
+            "total_funds_siphoned": 0.0,
+            "total_funds_targeted": 0.0,
+            "notices": [],
+            "frozen_accounts": frozen_list,
+            "freeze_candidates": []
+        }
+    notices = legal.generate_bank_freeze_notices(victim_account, fir_number, trace)
+
     
     return {
         "victim_account": victim_account,
@@ -653,6 +671,7 @@ def run_jury_blind_evaluation():
 class EmergencyFreezePayload(BaseModel):
     account_ids: Optional[List[str]] = None
     target_accounts: Optional[List[str]] = None
+    details: Optional[List[Dict[str, Any]]] = None
 
 @app.get("/api/scanner/summary")
 def get_scanner_summary():
@@ -701,7 +720,7 @@ def execute_emergency_freeze(payload: EmergencyFreezePayload):
     if scanner is None:
         scanner = FraudScanner(engine.con)
     accounts = payload.account_ids or payload.target_accounts or []
-    return scanner.execute_emergency_freeze(accounts)
+    return scanner.execute_emergency_freeze(accounts, payload.details)
 
 class UnfreezePayload(BaseModel):
     account_id: str

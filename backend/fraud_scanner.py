@@ -338,7 +338,7 @@ class FraudScanner:
 
         return results
 
-    def execute_emergency_freeze(self, target_accounts: List[str]) -> Dict[str, Any]:
+    def execute_emergency_freeze(self, target_accounts: List[str], details: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Executes immediate multi-bank emergency freeze registration for targeted accounts.
         """
@@ -348,6 +348,14 @@ class FraudScanner:
         cleaned_accounts = [str(acc).strip() for acc in target_accounts if str(acc).strip()]
         if not cleaned_accounts:
             return {"status": "error", "message": "No valid target accounts provided."}
+
+        details_map = {}
+        if details and isinstance(details, list):
+            for d in details:
+                if isinstance(d, dict):
+                    acc = str(d.get("account_id") or d.get("account_number") or "").strip()
+                    if acc:
+                        details_map[acc] = d
 
         placeholders = ", ".join(["?"] * len(cleaned_accounts))
         query_mules = f"""
@@ -382,10 +390,6 @@ class FraudScanner:
             found_txns = self.con.execute(query_txns, missing_ids).fetchall()
             targets.extend(found_txns)
 
-        total_frozen = sum(float(t[4] or 0.0) for t in targets)
-        banks_affected = len(set(str(t[1])[:4] for t in targets if t[1]))
-        frozen_account_ids = [str(t[0]) for t in targets]
-
         now_ts = time.strftime("%Y-%m-%d %H:%M:%S")
         BANK_NAMES_MAP = {
             "SBIN": "State Bank of India",
@@ -403,14 +407,36 @@ class FraudScanner:
             "AIRP": "Airtel Payments Bank",
             "IPOS": "India Post Payments Bank"
         }
+
+        persisted_targets = []
         for t in targets:
             acc_id = str(t[0])
-            ifsc_val = str(t[1]) if t[1] else "BANK0000001"
+            d = details_map.get(acc_id, {})
+            
+            # Prioritize details from explicit transaction if provided
+            ifsc_val = str(d.get("ifsc") or (t[1] if t[1] else "BANK0000001"))
             b_code = ifsc_val[:4].upper()
-            b_name = BANK_NAMES_MAP.get(b_code, f"{b_code} Bank")
-            role_val = str(t[2]) if t[2] else "SUSPECT_BENEFICIARY"
+            b_name = d.get("bank_name") or BANK_NAMES_MAP.get(b_code, f"{b_code} Bank")
+            role_val = str(d.get("role") or (t[2] if t[2] else "SUSPECT_BENEFICIARY"))
             risk_val = float(t[3] or 85.0)
-            lien_amt = float(t[4] or 0.0)
+            
+            # Prioritize the actual transaction amount
+            if "amount" in d and d["amount"] is not None and float(d["amount"]) > 0:
+                lien_amt = float(d["amount"])
+            elif "lien_amount" in d and d["lien_amount"] is not None and float(d["lien_amount"]) > 0:
+                lien_amt = float(d["lien_amount"])
+            else:
+                lien_amt = float(t[4] or 0.0)
+
+            persisted_targets.append({
+                "account_id": acc_id,
+                "ifsc": ifsc_val,
+                "bank_name": b_name,
+                "role": role_val,
+                "risk_index": risk_val,
+                "lien_amount": lien_amt
+            })
+
             try:
                 self.con.execute("""
                     INSERT INTO frozen_accounts (account_id, ifsc, bank_name, role, risk_index, lien_amount, freeze_timestamp, statutory_act, fir_number, status)
@@ -426,6 +452,10 @@ class FraudScanner:
                 """, [acc_id, ifsc_val, b_name, role_val, risk_val, lien_amt, now_ts])
             except Exception as e:
                 print(f"[!] Error recording frozen account {acc_id}:", e)
+
+        total_frozen = sum(p["lien_amount"] for p in persisted_targets)
+        banks_affected = len(set(p["ifsc"][:4] for p in persisted_targets if p["ifsc"]))
+        frozen_account_ids = [p["account_id"] for p in persisted_targets]
 
         return {
             "status": "success",

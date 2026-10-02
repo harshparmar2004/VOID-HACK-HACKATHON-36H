@@ -61,8 +61,10 @@ export default function Sidebar({
         {/* Navigation Sections */}
         {navSections.map((section) => (
           <div key={section.title} className="space-y-1">
-            <div className="text-[10px] font-bold tracking-widest text-[#9E968D] uppercase px-3 mb-1.5 font-mono">
-              {section.title}
+            <div className="flex items-center gap-2 px-2.5 py-1 mb-2 rounded-lg bg-[#EFE8DC] border-l-[3px] border-[#D96B27] shadow-2xs">
+              <span className="text-[11px] font-black tracking-wider text-[#2C2623] uppercase font-mono">
+                {section.title}
+              </span>
             </div>
             <nav className="space-y-0.5">
               {section.items.map((item) => {
