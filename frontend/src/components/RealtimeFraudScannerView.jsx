@@ -19,13 +19,13 @@ import {
 import { DEFAULT_PROBLEMATIC_TXNS } from "../mockData";
 import { run60sFraudBenchmark, fetchProblematicTransactions, executeEmergencyFreeze } from "../api";
 
-export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }) {
+export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, forensicParams }) {
   const [benchmarkLoading, setBenchmarkLoading] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState(null);
   const [problematicTxns, setProblematicTxns] = useState(DEFAULT_PROBLEMATIC_TXNS);
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedBank, setSelectedBank] = useState("ALL");
+  const [selectedBank, setSelectedBank] = useState(() => forensicParams?.bankFilter || "ALL");
   const [copiedId, setCopiedId] = useState(null);
   const [freezeStatus, setFreezeStatus] = useState(null);
   
@@ -49,20 +49,32 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch initial problematic transactions from backend
+  // Fetch problematic transactions from backend using active forensic parameters
   useEffect(() => {
     async function loadData() {
       try {
-        const txns = await fetchProblematicTransactions(100, activeFilter === "ALL" ? null : activeFilter);
+        const bFilter = forensicParams?.bankFilter && forensicParams.bankFilter !== "ALL" 
+          ? forensicParams.bankFilter 
+          : (selectedBank !== "ALL" ? selectedBank : null);
+        const minAmt = Number(forensicParams?.minAmount) || 0;
+        const kw = forensicParams?.narrationKeyword || null;
+
+        const txns = await fetchProblematicTransactions(
+          100, 
+          activeFilter === "ALL" ? null : activeFilter,
+          minAmt,
+          bFilter,
+          kw
+        );
         if (txns && Array.isArray(txns) && txns.length > 0) {
           setProblematicTxns(txns);
         }
       } catch (err) {
-        console.warn("Using offline problematic transactions state:", err.message);
+        console.warn("Using sample transactions:", err.message);
       }
     }
     loadData();
-  }, [activeFilter]);
+  }, [activeFilter, selectedBank, forensicParams?.minAmount, forensicParams?.bankFilter, forensicParams?.narrationKeyword]);
 
   // Reset page when filters or search change
   useEffect(() => {

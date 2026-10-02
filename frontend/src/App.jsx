@@ -83,6 +83,60 @@ export default function App() {
   ]);
   const [chatInput, setChatInput] = useState("");
 
+  const [forensicParams, setForensicParams] = useState(() => {
+    try {
+      const saved = localStorage.getItem("abhedya_forensic_params");
+      return saved ? {
+        minAmount: 0,
+        maxHops: 4,
+        timeWindow: 180,
+        minRisk: 0,
+        bankFilter: "ALL",
+        narrationKeyword: "",
+        deviceFilter: "ALL",
+        ...JSON.parse(saved)
+      } : {
+        minAmount: 0,
+        maxHops: 4,
+        timeWindow: 180,
+        minRisk: 0,
+        bankFilter: "ALL",
+        narrationKeyword: "",
+        deviceFilter: "ALL"
+      };
+    } catch (e) {
+      return {
+        minAmount: 0,
+        maxHops: 4,
+        timeWindow: 180,
+        minRisk: 0,
+        bankFilter: "ALL",
+        narrationKeyword: "",
+        deviceFilter: "ALL"
+      };
+    }
+  });
+
+  const handleSaveParams = async (newParams) => {
+    setForensicParams(newParams);
+    try {
+      localStorage.setItem("abhedya_forensic_params", JSON.stringify(newParams));
+    } catch (e) {}
+
+    // Reload active case trail with new parameters
+    loadCaseData(activeCase, newParams);
+
+    // Reload mules with new parameters
+    try {
+      const muleList = await fetchMules(100, muleFilter, newParams.minRisk, newParams.minAmount, newParams.bankFilter);
+      if (muleList && Array.isArray(muleList)) {
+        setMules(muleList);
+      }
+    } catch (e) {
+      console.warn("Could not reload mules with new parameters:", e);
+    }
+  };
+
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     try {
@@ -117,12 +171,12 @@ export default function App() {
             : victimsList.victims[0];
           setActiveCase(initialCase);
           localStorage.setItem("abhedya_active_case", initialCase);
-          loadCaseData(initialCase);
+          loadCaseData(initialCase, forensicParams);
         } else {
-          loadCaseData(activeCase);
+          loadCaseData(activeCase, forensicParams);
         }
         
-        const muleList = await fetchMules(100);
+        const muleList = await fetchMules(100, muleFilter, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
         if (muleList && Array.isArray(muleList) && muleList.length > 0) {
           setMules(muleList);
         }
@@ -137,7 +191,7 @@ export default function App() {
   const handleFilterMuleRole = async (role) => {
     setMuleFilter(role);
     try {
-      const muleList = await fetchMules(100, role);
+      const muleList = await fetchMules(100, role, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
       if (muleList && Array.isArray(muleList) && muleList.length > 0) {
         setMules(muleList);
       }
@@ -146,10 +200,18 @@ export default function App() {
     }
   };
 
-  const loadCaseData = async (victimId) => {
+  const loadCaseData = async (victimId, params = forensicParams) => {
     setLoading(true);
     try {
-      const trace = await traceVictim(victimId);
+      const p = params || forensicParams;
+      const trace = await traceVictim(
+        victimId,
+        p.maxHops,
+        p.timeWindow,
+        p.minAmount,
+        p.bankFilter,
+        p.narrationKeyword
+      );
       if (trace && trace.nodes) setTraceData(trace);
       
       const notices = await fetchBankNotices(victimId);
@@ -188,10 +250,10 @@ export default function App() {
         try {
           localStorage.setItem("abhedya_active_case", targetVictim);
         } catch (e) {}
-        loadCaseData(targetVictim);
+        loadCaseData(targetVictim, forensicParams);
       }
       
-      const muleList = await fetchMules(100);
+      const muleList = await fetchMules(100, muleFilter, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
       if (muleList?.length) setMules(muleList);
     } catch (err) {
       console.warn("Refresh error:", err.message);
@@ -207,7 +269,7 @@ export default function App() {
       localStorage.setItem("abhedya_active_case", formData.accountNumber);
       localStorage.setItem("abhedya_victim_name", formData.victimName);
     } catch (e) {}
-    loadCaseData(formData.accountNumber);
+    loadCaseData(formData.accountNumber, forensicParams);
     handleTabChange("trail"); // Instantly navigate officer to the multi-hop trace!
   };
 
@@ -268,11 +330,13 @@ export default function App() {
 
       {/* Main Split Layout: Left Navigation + Right Feature Execution Canvas */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Left Navigation Sidebar */}
+        {/* Left Navigation Sidebar with Dedicated Editable Parameters Section */}
         <Sidebar
           activeTab={activeTab}
           onSelectTab={handleTabChange}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          forensicParams={forensicParams}
+          onSaveParams={handleSaveParams}
           counts={{
             totalAccounts: "24,368",
             flaggedMules: mules.length ? String(mules.length) : "333",
@@ -292,6 +356,7 @@ export default function App() {
                 firNumber={firNumber}
                 totalSiphoned={traceData?.total_siphoned_inr}
                 systemStatus={systemStatus}
+                forensicParams={forensicParams}
                 onTraceNow={() => handleTabChange("trail")}
                 onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
                 onSelectCase={handleSelectCase}
@@ -316,6 +381,7 @@ export default function App() {
               <RealtimeFraudScannerView
                 onNavigateTab={handleTabChange}
                 onSelectCase={handleSelectCase}
+                forensicParams={forensicParams}
               />
             </ErrorBoundary>
           </div>
@@ -323,7 +389,10 @@ export default function App() {
           {/* TAB 3: Entity Directory (Master Database Index of 24,368 Accounts) */}
           <div className={activeTab === "entities" ? "block" : "hidden"}>
             <ErrorBoundary name="Entity Directory">
-              <EntityDirectoryView totalAccounts="24,368" />
+              <EntityDirectoryView 
+                totalAccounts="24,368" 
+                forensicParams={forensicParams}
+              />
             </ErrorBoundary>
           </div>
 
@@ -334,6 +403,7 @@ export default function App() {
                 mules={mules?.length ? mules : DEFAULT_MULES}
                 onFilterRole={handleFilterMuleRole}
                 activeFilter={muleFilter}
+                forensicParams={forensicParams}
                 onNavigateTab={handleTabChange}
                 onSelectCase={handleSelectCase}
               />

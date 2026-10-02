@@ -13,13 +13,23 @@ class GraphEngine:
     def __init__(self, con: duckdb.DuckDBPyConnection):
         self.con = con
         
-    def trace_victim_trail(self, victim_account_id: str, max_hops=4, time_window_minutes=180):
+    def trace_victim_trail(
+        self, 
+        victim_account_id: str, 
+        max_hops=4, 
+        time_window_minutes=180,
+        min_amount=0.0,
+        bank_filter=None,
+        keyword=None
+    ):
         """
         Executes a temporal Breadth-First Search (BFS) starting from the Victim Account.
-        Follows stolen money forward in time (t_out >= t_in) to capture:
-        - Hop 1: L1 Collector Mules (targeted accounts receiving victim funds)
-        - Hop 2: L2 Distributor Mules (fan-out smurfing into 3-50+ accounts)
-        - Hop 3 & 4: L3 Cash-out Nodes (Wallets, Crypto P2P, Foreign IPs, ATMs)
+        Follows stolen money forward in time (t_out >= t_in) with customizable investigation filters:
+        - min_amount: Minimum transaction volume threshold (e.g. ₹50k, ₹1Lakh, ₹2-3 Cr Whales)
+        - bank_filter: Target specific bank IFSC prefixes (e.g. PYTM, IPOS, AXIS, SBIN)
+        - keyword: Suspicious narration tags (e.g. CRYPTO, P2P, TASK, DIGITAL ARREST)
+        - max_hops: Custom depth (1-5 hops)
+        - time_window_minutes: Velocity window for rapid dispersion
         """
         t0 = time.time()
         
@@ -131,16 +141,31 @@ class GraphEngine:
                 continue
                 
             # Find downstream outflows from curr_acct occurring AFTER in_time within time window
-            # Captures all 3-50 fan-out distributor transfers
-            outflows = self.con.execute(f"""
+            # Apply user-specified forensic parameter filters (min_amount, bank_filter, keyword)
+            outflow_sql = f"""
                 SELECT Transaction_ID, Sender_Account, Receiver_Account, Sender_IFSC, Receiver_IFSC,
                        Amount_INR, Timestamp, Payment_Mode, Narration, IP_Address, Device_Type
                 FROM transactions
                 WHERE Sender_Account = ?
                   AND Timestamp >= ?
                   AND Timestamp <= ? + INTERVAL {time_window_minutes} MINUTE
-                ORDER BY Timestamp ASC
-            """, [curr_acct, in_time, in_time]).fetchall()
+            """
+            outflow_params = [curr_acct, in_time, in_time]
+            
+            if min_amount and float(min_amount) > 0:
+                outflow_sql += " AND Amount_INR >= ?"
+                outflow_params.append(float(min_amount))
+                
+            if bank_filter and bank_filter != "ALL":
+                outflow_sql += " AND Receiver_IFSC LIKE ?"
+                outflow_params.append(f"{bank_filter}%")
+                
+            if keyword and str(keyword).strip():
+                outflow_sql += " AND LOWER(Narration) LIKE ?"
+                outflow_params.append(f"%{str(keyword).strip().lower()}%")
+                
+            outflow_sql += " ORDER BY Timestamp ASC;"
+            outflows = self.con.execute(outflow_sql, outflow_params).fetchall()
             
             if not outflows:
                 continue
@@ -210,7 +235,14 @@ class GraphEngine:
             "latency_ms": round(elapsed * 1000, 2),
             "nodes": list(nodes.values()),
             "links": links,
-            "freeze_candidates": freeze_candidates
+            "freeze_candidates": freeze_candidates,
+            "filters_applied": {
+                "max_hops": max_hops,
+                "time_window_minutes": time_window_minutes,
+                "min_amount": min_amount,
+                "bank_filter": bank_filter,
+                "keyword": keyword
+            }
         }
 
 if __name__ == "__main__":

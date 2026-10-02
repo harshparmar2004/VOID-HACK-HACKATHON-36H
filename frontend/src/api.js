@@ -12,15 +12,22 @@ export async function fetchVictims() {
   return res.json();
 }
 
-export async function traceVictim(victimAccount, maxHops = 4, timeWindow = 180) {
-  const res = await fetch(`${API_BASE}/trace/${victimAccount}?max_hops=${maxHops}&time_window=${timeWindow}`);
+export async function traceVictim(victimAccount, maxHops = 4, timeWindow = 180, minAmount = 0, bankFilter = null, keyword = null) {
+  let url = `${API_BASE}/trace/${victimAccount}?max_hops=${maxHops}&time_window=${timeWindow}`;
+  if (minAmount > 0) url += `&min_amount=${minAmount}`;
+  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
+  if (keyword && String(keyword).trim()) url += `&keyword=${encodeURIComponent(String(keyword).trim())}`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to trace victim money trail");
   return res.json();
 }
 
-export async function fetchMules(limit = 100, role = null) {
+export async function fetchMules(limit = 100, role = null, minRisk = 0, minAmount = 0, bankFilter = null) {
   let url = `${API_BASE}/mules?limit=${limit}`;
   if (role) url += `&role_filter=${role}`;
+  if (minRisk > 0) url += `&min_risk=${minRisk}`;
+  if (minAmount > 0) url += `&min_amount=${minAmount}`;
+  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch mules");
   return res.json();
@@ -61,9 +68,12 @@ export async function run60sFraudBenchmark() {
   return res.json();
 }
 
-export async function fetchProblematicTransactions(limit = 100, filterType = null) {
+export async function fetchProblematicTransactions(limit = 100, filterType = null, minAmount = 0, bankFilter = null, keyword = null) {
   let url = `${API_BASE}/scanner/problematic-transactions?limit=${limit}`;
   if (filterType) url += `&filter_type=${encodeURIComponent(filterType)}`;
+  if (minAmount > 0) url += `&min_amount=${minAmount}`;
+  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
+  if (keyword && String(keyword).trim()) url += `&keyword=${encodeURIComponent(String(keyword).trim())}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch problematic transactions");
   return res.json();
@@ -98,8 +108,11 @@ export async function fetchDetectedVictims() {
   return res.json();
 }
 
-export async function fetchEntities(limit = 500) {
-  const res = await fetch(`${API_BASE}/entities?limit=${limit}`);
+export async function fetchEntities(limit = 500, bankFilter = null, minAmount = 0) {
+  let url = `${API_BASE}/entities?limit=${limit}`;
+  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
+  if (minAmount > 0) url += `&min_amount=${minAmount}`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch entity directory");
   return res.json();
 }

@@ -25,6 +25,7 @@ export default function CaseIntakeView({
   firNumber = "FIR-0142/2026/CYBER-INDORE",
   totalSiphoned,
   systemStatus,
+  forensicParams,
   onTraceNow,
   onOpenRegisterModal,
   onSelectCase,
@@ -294,7 +295,26 @@ export default function CaseIntakeView({
           </div>
         </div>
 
-        {/* Tab 1: Google Sheet / URL Mode */}
+        {/* Active Investigation Filter Banner from Left Sidebar */}
+        {forensicParams && (Number(forensicParams.minAmount) > 0 || forensicParams.bankFilter !== "ALL" || forensicParams.maxHops !== 4 || (forensicParams.narrationKeyword && forensicParams.narrationKeyword.trim())) && (
+          <div className="bg-[#FFFBF5] border border-[#FDE68A] rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#D96B27] animate-pulse"></span>
+              <span className="font-bold text-[#92400E] font-mono text-[11px]">
+                Active Filter Parameters Enforced:
+              </span>
+              <span className="text-[#B45309] font-mono text-[11px]">
+                {Number(forensicParams.minAmount) > 0 ? `Min: ₹${Number(forensicParams.minAmount).toLocaleString('en-IN')} ` : ""}
+                {forensicParams.maxHops !== 4 ? `• Max Hops: ${forensicParams.maxHops} ` : ""}
+                {forensicParams.bankFilter !== "ALL" ? `• Bank: ${forensicParams.bankFilter} ` : ""}
+                {forensicParams.narrationKeyword ? `• Tag: "${forensicParams.narrationKeyword}"` : ""}
+              </span>
+            </div>
+            <span className="text-[10px] text-[#9E968D] font-mono">
+              Configured & Editable in Left Sidebar
+            </span>
+          </div>
+        )}
         {ingestMode === "url" && (
           <div className="space-y-4">
             <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-4 space-y-3">

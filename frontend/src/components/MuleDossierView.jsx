@@ -28,16 +28,22 @@ export default function MuleDossierView({
   onFilterRole,
   activeFilter,
   onNavigateTab,
-  onSelectCase
+  onSelectCase,
+  forensicParams
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedBank, setSelectedBank] = useState("ALL");
-  const [minRisk, setMinRisk] = useState(0);
+  const [selectedBank, setSelectedBank] = useState(() => forensicParams?.bankFilter || "ALL");
+  const [minRisk, setMinRisk] = useState(() => forensicParams?.minRisk || 0);
   const [sortBy, setSortBy] = useState("risk_desc");
   const [copiedAccount, setCopiedAccount] = useState(null);
   const [expandedAccount, setExpandedAccount] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+
+  useEffect(() => {
+    if (forensicParams?.bankFilter) setSelectedBank(forensicParams.bankFilter);
+    if (forensicParams?.minRisk !== undefined) setMinRisk(forensicParams.minRisk);
+  }, [forensicParams]);
 
   // Normalize list defensively
   const rawList = Array.isArray(mules) && mules.length > 0 ? mules : DEFAULT_MULES;
@@ -144,7 +150,11 @@ export default function MuleDossierView({
         // Min Risk Filter
         const matchesRisk = m.risk_index >= minRisk;
 
-        return matchesRole && matchesSearch && matchesBank && matchesRisk;
+        // Min Amount Filter from forensicParams
+        const minAmt = Number(forensicParams?.minAmount) || 0;
+        const matchesAmount = minAmt === 0 || m.total_incoming_amt >= minAmt || m.current_holding_balance >= minAmt;
+
+        return matchesRole && matchesSearch && matchesBank && matchesRisk && matchesAmount;
       })
       .sort((a, b) => {
         if (sortBy === "risk_desc") return b.risk_index - a.risk_index;
@@ -153,7 +163,7 @@ export default function MuleDossierView({
         if (sortBy === "incoming_desc") return b.total_incoming_amt - a.total_incoming_amt;
         return 0;
       });
-  }, [normalizedMules, activeFilter, searchTerm, selectedBank, minRisk, sortBy]);
+  }, [normalizedMules, activeFilter, searchTerm, selectedBank, minRisk, sortBy, forensicParams?.minAmount]);
 
   // Reset page when filters change
   useEffect(() => {

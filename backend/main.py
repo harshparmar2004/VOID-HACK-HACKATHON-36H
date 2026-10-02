@@ -225,11 +225,28 @@ BANK_NAME_MAP = {
 }
 
 @app.get("/api/entities")
-def get_entity_directory(limit: int = 500, bank_filter: Optional[str] = None):
+def get_entity_directory(
+    limit: int = 500, 
+    bank_filter: Optional[str] = None,
+    min_amount: float = 0.0
+):
     if not is_initialized:
         initialize_core()
         
-    query = """
+    where_clauses = []
+    params = []
+    if bank_filter and bank_filter != "ALL":
+        where_clauses.append("f.ifsc LIKE ?")
+        params.append(f"{bank_filter}%")
+    if min_amount and float(min_amount) > 0:
+        where_clauses.append("(f.total_in >= ? OR f.balance >= ?)")
+        params.append(float(min_amount))
+        params.append(float(min_amount))
+        
+    filter_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    params.append(limit)
+        
+    query = f"""
         WITH flow_summary AS (
             SELECT 
                 account_id,
@@ -263,10 +280,11 @@ def get_entity_directory(limit: int = 500, bank_filter: Optional[str] = None):
             COALESCE(s.risk_index, CASE WHEN f.total_in = 0 THEN 0 ELSE 75 END) AS risk_index
         FROM flow_summary f
         LEFT JOIN scored_mules s ON f.account_id = s.account_id
+        {filter_sql}
         ORDER BY f.total_in DESC, f.balance DESC
         LIMIT ?;
     """
-    rows = engine.con.execute(query, [limit]).fetchall()
+    rows = engine.con.execute(query, params).fetchall()
     
     entities = []
     bank_counts = {}
@@ -330,22 +348,58 @@ def get_entity_directory(limit: int = 500, bank_filter: Optional[str] = None):
     }
 
 @app.get("/api/trace/{victim_account}")
-def trace_victim_flow(victim_account: str, max_hops: int = 4, time_window: int = 180):
+def trace_victim_flow(
+    victim_account: str, 
+    max_hops: int = 4, 
+    time_window: int = 180,
+    min_amount: float = 0.0,
+    bank_filter: Optional[str] = None,
+    keyword: Optional[str] = None
+):
     if not is_initialized:
         initialize_core()
-    res = graph.trace_victim_trail(victim_account, max_hops=max_hops, time_window_minutes=time_window)
+    res = graph.trace_victim_trail(
+        victim_account, 
+        max_hops=max_hops, 
+        time_window_minutes=time_window,
+        min_amount=min_amount,
+        bank_filter=bank_filter,
+        keyword=keyword
+    )
     if not res.get("found", True):
         raise HTTPException(status_code=404, detail="Victim account has no outgoing transactions.")
     return res
 
 @app.get("/api/mules")
-def get_flagged_mules(limit: int = 100, role_filter: Optional[str] = None):
+def get_flagged_mules(
+    limit: int = 100, 
+    role_filter: Optional[str] = None,
+    min_risk: float = 0.0,
+    min_amount: float = 0.0,
+    bank_filter: Optional[str] = None
+):
     if not is_initialized:
         initialize_core()
     
-    where_clause = "WHERE risk_band IN ('HIGH_CONFIDENCE_MULE', 'SUSPECTED_MULE')"
+    where_conds = ["risk_band IN ('HIGH_CONFIDENCE_MULE', 'SUSPECTED_MULE')"]
+    params = []
+    
     if role_filter:
-        where_clause += f" AND role = '{role_filter}'"
+        where_conds.append("role = ?")
+        params.append(role_filter)
+    if min_risk and float(min_risk) > 0:
+        where_conds.append("risk_index >= ?")
+        params.append(float(min_risk))
+    if min_amount and float(min_amount) > 0:
+        where_conds.append("(total_incoming_amt >= ? OR current_holding_balance >= ?)")
+        params.append(float(min_amount))
+        params.append(float(min_amount))
+    if bank_filter and bank_filter != "ALL":
+        where_conds.append("ifsc LIKE ?")
+        params.append(f"{bank_filter}%")
+        
+    where_clause = "WHERE " + " AND ".join(where_conds)
+    params.append(limit)
         
     query = f"""
         SELECT account_id, ifsc, role, risk_index, risk_band, 
@@ -357,7 +411,7 @@ def get_flagged_mules(limit: int = 100, role_filter: Optional[str] = None):
         ORDER BY risk_index DESC, total_incoming_amt DESC
         LIMIT ?;
     """
-    rows = engine.con.execute(query, [limit]).fetchall()
+    rows = engine.con.execute(query, params).fetchall()
     cols = [d[0] for d in engine.con.description]
     return [dict(zip(cols, r)) for r in rows]
 
@@ -491,13 +545,25 @@ def run_60s_fraud_benchmark():
     return scanner.run_60s_benchmark()
 
 @app.get("/api/scanner/problematic-transactions")
-def get_problematic_transactions(limit: int = 100, filter_type: Optional[str] = None):
+def get_problematic_transactions(
+    limit: int = 100, 
+    filter_type: Optional[str] = None,
+    min_amount: float = 0.0,
+    bank_filter: Optional[str] = None,
+    keyword: Optional[str] = None
+):
     if not is_initialized:
         initialize_core()
     global scanner
     if scanner is None:
         scanner = FraudScanner(engine.con)
-    return scanner.get_problematic_transactions(limit=limit, filter_type=filter_type)
+    return scanner.get_problematic_transactions(
+        limit=limit, 
+        filter_type=filter_type,
+        min_amount=min_amount,
+        bank_filter=bank_filter,
+        keyword=keyword
+    )
 
 @app.post("/api/scanner/emergency-freeze")
 def execute_emergency_freeze(payload: EmergencyFreezePayload):

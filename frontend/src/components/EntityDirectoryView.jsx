@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Users, Search, Building2, CreditCard, ArrowDownRight, ArrowUpRight, Filter, RefreshCw } from "lucide-react";
 import { fetchEntities } from "../api";
 
-export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
+export default function EntityDirectoryView({ totalAccounts = "24,368", forensicParams }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBank, setSelectedBank] = useState("ALL");
   const [entities, setEntities] = useState([]);
@@ -35,7 +35,9 @@ export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
   const loadEntities = async () => {
     setLoading(true);
     try {
-      const data = await fetchEntities(500);
+      const bFilter = forensicParams?.bankFilter && forensicParams.bankFilter !== "ALL" ? forensicParams.bankFilter : null;
+      const mAmount = forensicParams?.minAmount || 0;
+      const data = await fetchEntities(500, bFilter, mAmount);
       if (data && data.entities && data.entities.length > 0) {
         setEntities(data.entities);
         if (data.bank_stats && data.bank_stats.length > 0) {
@@ -52,7 +54,7 @@ export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
 
   useEffect(() => {
     loadEntities();
-  }, []);
+  }, [forensicParams?.bankFilter, forensicParams?.minAmount]);
 
   const activeEntities = entities.length > 0 ? entities : sampleEntities;
   const activeBankStats = bankStats.length > 0 ? bankStats : defaultBankStats;

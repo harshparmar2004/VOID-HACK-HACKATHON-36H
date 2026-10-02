@@ -178,7 +178,10 @@ class FraudScanner:
     def get_problematic_transactions(
         self,
         limit: int = 100,
-        filter_type: Optional[str] = None
+        filter_type: Optional[str] = None,
+        min_amount: float = 0.0,
+        bank_filter: Optional[str] = None,
+        keyword: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Extracts real-time problematic and suspicious transactions across 100s of accounts.
@@ -188,6 +191,7 @@ class FraudScanner:
         - 'SMURFING_HOPS' (Fan-out layer)
         - 'ILLEGAL_LINKAGES' (Scam tags / Digital arrest / Mahadev / USDT)
         - 'FOREIGN_IP' (Proxy & VPNs)
+        - User-defined editable parameters: min_amount, bank_filter, keyword
         """
         where_conditions = []
 
@@ -221,6 +225,14 @@ class FraudScanner:
                  OR t.is_scam_narration = 1
                  OR m.risk_index >= 85.0)
             """)
+
+        if min_amount and float(min_amount) > 0:
+            where_conditions.append(f"t.Amount_INR >= {float(min_amount)}")
+        if bank_filter and bank_filter != "ALL":
+            where_conditions.append(f"(t.Sender_IFSC LIKE '{bank_filter}%' OR t.Receiver_IFSC LIKE '{bank_filter}%')")
+        if keyword and str(keyword).strip():
+            clean_kw = str(keyword).strip().replace("'", "''").lower()
+            where_conditions.append(f"LOWER(t.Narration) LIKE '%{clean_kw}%'")
 
         where_clause = "WHERE " + " AND ".join(where_conditions)
 
