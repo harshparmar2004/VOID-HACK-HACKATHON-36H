@@ -19,13 +19,13 @@ import {
 import { DEFAULT_PROBLEMATIC_TXNS } from "../mockData";
 import { run60sFraudBenchmark, fetchProblematicTransactions, executeEmergencyFreeze } from "../api";
 
-export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }) {
+export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, forensicParams }) {
   const [benchmarkLoading, setBenchmarkLoading] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState(null);
   const [problematicTxns, setProblematicTxns] = useState(DEFAULT_PROBLEMATIC_TXNS);
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedBank, setSelectedBank] = useState("ALL");
+  const [selectedBank, setSelectedBank] = useState(() => forensicParams?.bankFilter || "ALL");
   const [copiedId, setCopiedId] = useState(null);
   const [freezeStatus, setFreezeStatus] = useState(null);
   
@@ -49,20 +49,32 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch initial problematic transactions from backend
+  // Fetch problematic transactions from backend using active forensic parameters
   useEffect(() => {
     async function loadData() {
       try {
-        const txns = await fetchProblematicTransactions(100, activeFilter === "ALL" ? null : activeFilter);
+        const bFilter = forensicParams?.bankFilter && forensicParams.bankFilter !== "ALL" 
+          ? forensicParams.bankFilter 
+          : (selectedBank !== "ALL" ? selectedBank : null);
+        const minAmt = Number(forensicParams?.minAmount) || 0;
+        const kw = forensicParams?.narrationKeyword || null;
+
+        const txns = await fetchProblematicTransactions(
+          100, 
+          activeFilter === "ALL" ? null : activeFilter,
+          minAmt,
+          bFilter,
+          kw
+        );
         if (txns && Array.isArray(txns) && txns.length > 0) {
           setProblematicTxns(txns);
         }
       } catch (err) {
-        console.warn("Using offline problematic transactions state:", err.message);
+        console.warn("Using sample transactions:", err.message);
       }
     }
     loadData();
-  }, [activeFilter]);
+  }, [activeFilter, selectedBank, forensicParams?.minAmount, forensicParams?.bankFilter, forensicParams?.narrationKeyword]);
 
   // Reset page when filters or search change
   useEffect(() => {
@@ -189,24 +201,34 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
     document.body.removeChild(link);
   };
 
-  // Filtered transactions
+  // Defensively filtered transactions (safe against missing IFSC/accounts)
   const filteredTxns = useMemo(() => {
+    if (!Array.isArray(problematicTxns)) return [];
     return problematicTxns.filter((t) => {
+      if (!t) return false;
       const term = searchTerm.trim().toLowerCase();
+      const sId = String(t.Transaction_ID || "").toLowerCase();
+      const sAcc = String(t.Sender_Account || "").toLowerCase();
+      const rAcc = String(t.Receiver_Account || "").toLowerCase();
+      const sIfsc = String(t.Sender_IFSC || "").toLowerCase();
+      const rIfsc = String(t.Receiver_IFSC || "").toLowerCase();
+      const narr = String(t.Narration || "").toLowerCase();
+      const flags = String(t.anomaly_flags || "").toLowerCase();
+
       const matchesSearch =
         !term ||
-        t.Transaction_ID.toLowerCase().includes(term) ||
-        t.Sender_Account.toLowerCase().includes(term) ||
-        t.Receiver_Account.toLowerCase().includes(term) ||
-        t.Sender_IFSC.toLowerCase().includes(term) ||
-        t.Receiver_IFSC.toLowerCase().includes(term) ||
-        t.Narration.toLowerCase().includes(term) ||
-        (t.anomaly_flags && t.anomaly_flags.toLowerCase().includes(term));
+        sId.includes(term) ||
+        sAcc.includes(term) ||
+        rAcc.includes(term) ||
+        sIfsc.includes(term) ||
+        rIfsc.includes(term) ||
+        narr.includes(term) ||
+        flags.includes(term);
 
       const matchesBank =
         selectedBank === "ALL" ||
-        t.Receiver_IFSC.startsWith(selectedBank) ||
-        t.Sender_IFSC.startsWith(selectedBank);
+        rIfsc.toUpperCase().startsWith(selectedBank) ||
+        sIfsc.toUpperCase().startsWith(selectedBank);
 
       return matchesSearch && matchesBank;
     });
@@ -540,28 +562,28 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                       {/* Sender -> Receiver Flow */}
                       <td className="py-3 px-4 font-mono text-[11px]">
                         <div className="flex items-center gap-1.5 text-[#2C2623]">
-                          <span className="font-semibold">{t.Sender_Account}</span>
+                          <span className="font-semibold">{t.Sender_Account || "N/A"}</span>
                           <span className="text-[9px] bg-[#FAF6EE] px-1.5 py-0.2 rounded border border-[#E8E2D5] font-sans text-[#746D65]">
-                            {t.Sender_IFSC.substring(0, 4)}
+                            {t.Sender_IFSC ? String(t.Sender_IFSC).substring(0, 4) : "BANK"}
                           </span>
                           <ArrowRight className="w-3 h-3 text-[#D96B27] shrink-0" />
-                          <span className="font-bold text-[#DC2626]">{t.Receiver_Account}</span>
+                          <span className="font-bold text-[#DC2626]">{t.Receiver_Account || "N/A"}</span>
                           <span className="text-[9px] bg-[#FAF6EE] px-1.5 py-0.2 rounded border border-[#E8E2D5] font-sans text-[#746D65]">
-                            {t.Receiver_IFSC.substring(0, 4)}
+                            {t.Receiver_IFSC ? String(t.Receiver_IFSC).substring(0, 4) : "BANK"}
                           </span>
                         </div>
                         <div className="text-[10px] text-[#746D65] font-sans truncate max-w-xs mt-0.5">
-                          {t.Narration}
+                          {t.Narration || "Transfer"}
                         </div>
                       </td>
 
                       {/* Amount */}
                       <td className="py-3 px-3">
                         <div className={`font-bold font-mono text-xs ${isWhale ? "text-[#DC2626] font-extrabold text-sm" : "text-[#2C2623]"}`}>
-                          ₹{t.Amount_INR.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                          ₹{Number(t.Amount_INR || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                         </div>
                         <span className="text-[9px] font-sans text-[#746D65] bg-[#FAF6EE] px-1 py-0.2 rounded border border-[#E8E2D5]">
-                          {t.Payment_Mode}
+                          {t.Payment_Mode || "UPI"}
                         </span>
                       </td>
 
@@ -757,7 +779,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase }
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-semibold text-[#746D65]">Transfer Volume:</span>
                   <span className="text-xl font-bold font-mono text-[#DC2626]">
-                    ₹{selectedTxn.Amount_INR.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    ₹{Number(selectedTxn.Amount_INR || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                   </span>
                 </div>
 

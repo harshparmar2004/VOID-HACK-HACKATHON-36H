@@ -7,16 +7,22 @@ import {
   Share2,
   GitCommit,
   Layers,
-  Clock,
   FileCheck,
   FileText,
   Award,
   Settings,
   Zap,
-  Network
+  Network,
+  SlidersHorizontal
 } from "lucide-react";
 
-export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings }) {
+export default function Sidebar({
+  activeTab,
+  onSelectTab,
+  counts,
+  onOpenSettings,
+  forensicParams = {}
+}) {
   const navSections = [
     {
       title: "CASE OPERATIONS",
@@ -28,14 +34,19 @@ export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings
     {
       title: "FORENSIC ANALYSIS",
       items: [
+        {
+          id: "parameters",
+          label: "Forensic Parameters",
+          icon: SlidersHorizontal,
+          badge: Number(forensicParams?.minAmount) > 0 || forensicParams?.bankFilter !== "ALL" ? "Active" : "P1–P10"
+        },
         { id: "scanner", label: "Real-Time 60s Scanner", icon: Zap, badge: "60s / 2M" },
         { id: "hami", label: "HAMI AML Hopping", icon: Network, badge: "GAT / HF" },
         { id: "entities", label: "Entity Directory", icon: Users, badge: counts?.totalAccounts || "24,368" },
         { id: "dossier", label: "Mule Dossier", icon: UserX, badge: counts?.flaggedMules || "333" },
         { id: "graph", label: "Mule Network Graph", icon: Share2, badge: "WebGL" },
         { id: "trail", label: "Endpoint Trail", icon: GitCommit, badge: "4 Hops" },
-        { id: "patterns", label: "Patterns & Story", icon: Layers, badge: null },
-        { id: "timeline", label: "Activity Timeline", icon: Clock, badge: "15-Day" }
+        { id: "patterns", label: "Patterns & Story", icon: Layers, badge: null }
       ]
     },
     {
@@ -49,14 +60,15 @@ export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings
   ];
 
   return (
-    <aside className="w-64 bg-[#FBF7EE] border-r border-[#E8E2D5] h-full overflow-y-auto flex flex-col justify-between p-4 shrink-0 select-none">
-      <div className="space-y-6">
+    <aside className="w-72 bg-[#FBF7EE] border-r border-[#E8E2D5] h-full overflow-y-auto flex flex-col justify-between p-3.5 shrink-0 select-none space-y-4">
+      <div className="space-y-5">
+        {/* Navigation Sections */}
         {navSections.map((section) => (
-          <div key={section.title}>
-            <div className="text-[10px] font-bold tracking-widest text-[#9E968D] uppercase px-3 mb-2 font-mono">
+          <div key={section.title} className="space-y-1">
+            <div className="text-[10px] font-bold tracking-widest text-[#9E968D] uppercase px-3 mb-1.5 font-mono">
               {section.title}
             </div>
-            <nav className="space-y-1">
+            <nav className="space-y-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -79,6 +91,8 @@ export default function Sidebar({ activeTab, onSelectTab, counts, onOpenSettings
                         className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${
                           isActive
                             ? "bg-[#D96B27] text-white"
+                            : item.badge === "Active"
+                            ? "bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-semibold"
                             : "bg-[#EAE4D8] text-[#746D65]"
                         }`}
                       >

@@ -23,5 +23,7 @@ Thumbs.db
 
 # Data & Large Files
 *.csv
+!backend/data/cyber_crime_sample.csv
 backend/data/uploads/
 backend/data/settings.json
+

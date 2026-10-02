@@ -10,14 +10,15 @@ import MuleDossierView from "./components/MuleDossierView";
 import NetworkGraphView from "./components/NetworkGraphView";
 import EndpointTrailView from "./components/EndpointTrailView";
 import PatternsStoryView from "./components/PatternsStoryView";
-import ActivityTimelineView from "./components/ActivityTimelineView";
 import Section91NoticesView from "./components/Section91NoticesView";
 import CaseDiaryView from "./components/CaseDiaryView";
 import JuryBenchmarkView from "./components/JuryBenchmarkView";
 import RealtimeFraudScannerView from "./components/RealtimeFraudScannerView";
 import HamiHoppingView from "./components/HamiHoppingView";
+import ForensicParametersView from "./components/ForensicParametersView";
 import RegisterFIRModal from "./components/RegisterFIRModal";
 import SettingsModal from "./components/SettingsModal";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import { MessageSquare, X, Send, Bot, ShieldAlert } from "lucide-react";
 
@@ -39,9 +40,16 @@ import {
 } from "./api";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("intake");
-  const [activeCase, setActiveCase] = useState(DEFAULT_VICTIM);
-  const [victimName, setVictimName] = useState("Sunil Kumar Verma");
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem("abhedya_active_tab");
+    return saved === "timeline" ? "trail" : (saved || "intake");
+  });
+  const [activeCase, setActiveCase] = useState(() => {
+    return localStorage.getItem("abhedya_active_case") || DEFAULT_VICTIM;
+  });
+  const [victimName, setVictimName] = useState(() => {
+    return localStorage.getItem("abhedya_victim_name") || "Sunil Kumar Verma";
+  });
   const [mobileNumber, setMobileNumber] = useState("+91 9811000001");
   const [firNumber, setFirNumber] = useState("FIR-0142/2026/CYBER-INDORE");
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -61,6 +69,14 @@ export default function App() {
   const [diaryData, setDiaryData] = useState(DEFAULT_DIARY);
   const [loading, setLoading] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [activeIngestResult, setActiveIngestResult] = useState(() => {
+    try {
+      const saved = localStorage.getItem("abhedya_ingest_result");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [chatMessages, setChatMessages] = useState([
     {
       sender: "ai",
@@ -68,6 +84,78 @@ export default function App() {
     }
   ]);
   const [chatInput, setChatInput] = useState("");
+
+  const [forensicParams, setForensicParams] = useState(() => {
+    try {
+      const saved = localStorage.getItem("abhedya_forensic_params");
+      return saved ? {
+        minAmount: 0,
+        maxHops: 4,
+        timeWindow: 180,
+        minRisk: 0,
+        bankFilter: "ALL",
+        narrationKeyword: "",
+        deviceFilter: "ALL",
+        ...JSON.parse(saved)
+      } : {
+        minAmount: 0,
+        maxHops: 4,
+        timeWindow: 180,
+        minRisk: 0,
+        bankFilter: "ALL",
+        narrationKeyword: "",
+        deviceFilter: "ALL"
+      };
+    } catch (e) {
+      return {
+        minAmount: 0,
+        maxHops: 4,
+        timeWindow: 180,
+        minRisk: 0,
+        bankFilter: "ALL",
+        narrationKeyword: "",
+        deviceFilter: "ALL"
+      };
+    }
+  });
+
+  const handleSaveParams = async (newParams) => {
+    setForensicParams(newParams);
+    try {
+      localStorage.setItem("abhedya_forensic_params", JSON.stringify(newParams));
+    } catch (e) {}
+
+    // Reload active case trail with new parameters
+    loadCaseData(activeCase, newParams);
+
+    // Reload mules with new parameters
+    try {
+      const muleList = await fetchMules(100, muleFilter, newParams.minRisk, newParams.minAmount, newParams.bankFilter);
+      if (muleList && Array.isArray(muleList)) {
+        setMules(muleList);
+      }
+    } catch (e) {
+      console.warn("Could not reload mules with new parameters:", e);
+    }
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    try {
+      localStorage.setItem("abhedya_active_tab", tab);
+    } catch (e) {}
+  };
+
+  const handleUpdateIngestResult = (res) => {
+    setActiveIngestResult(res);
+    try {
+      if (res) {
+        localStorage.setItem("abhedya_ingest_result", JSON.stringify(res));
+      } else {
+        localStorage.removeItem("abhedya_ingest_result");
+      }
+    } catch (e) {}
+  };
 
   // Load live data on mount and auto-retry if backend is warming up
   useEffect(() => {
@@ -79,11 +167,18 @@ export default function App() {
         const victimsList = await fetchVictims();
         if (victimsList?.victims?.length) {
           setCases(victimsList.victims);
-          setActiveCase(victimsList.victims[0]);
-          loadCaseData(victimsList.victims[0]);
+          const savedCase = localStorage.getItem("abhedya_active_case");
+          const initialCase = savedCase && victimsList.victims.includes(savedCase)
+            ? savedCase
+            : victimsList.victims[0];
+          setActiveCase(initialCase);
+          localStorage.setItem("abhedya_active_case", initialCase);
+          loadCaseData(initialCase, forensicParams);
+        } else {
+          loadCaseData(activeCase, forensicParams);
         }
         
-        const muleList = await fetchMules(100);
+        const muleList = await fetchMules(100, muleFilter, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
         if (muleList && Array.isArray(muleList) && muleList.length > 0) {
           setMules(muleList);
         }
@@ -98,7 +193,7 @@ export default function App() {
   const handleFilterMuleRole = async (role) => {
     setMuleFilter(role);
     try {
-      const muleList = await fetchMules(100, role);
+      const muleList = await fetchMules(100, role, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
       if (muleList && Array.isArray(muleList) && muleList.length > 0) {
         setMules(muleList);
       }
@@ -107,10 +202,19 @@ export default function App() {
     }
   };
 
-  const loadCaseData = async (victimId) => {
+  const loadCaseData = async (victimId, params = forensicParams) => {
     setLoading(true);
     try {
-      const trace = await traceVictim(victimId);
+      const p = params || forensicParams;
+      const trace = await traceVictim(
+        victimId,
+        p.maxHops,
+        p.timeWindow,
+        p.minAmount,
+        p.bankFilter,
+        p.narrationKeyword,
+        p.customRules
+      );
       if (trace && trace.nodes) setTraceData(trace);
       
       const notices = await fetchBankNotices(victimId);
@@ -127,7 +231,36 @@ export default function App() {
 
   const handleSelectCase = (victimId) => {
     setActiveCase(victimId);
+    try {
+      localStorage.setItem("abhedya_active_case", victimId);
+    } catch (e) {}
     loadCaseData(victimId);
+  };
+
+  const handleRefreshAll = async (newVictimId = null) => {
+    try {
+      const status = await fetchSystemStatus();
+      if (status) setSystemStatus(status);
+      
+      const victimsList = await fetchVictims();
+      if (victimsList?.victims?.length) {
+        setCases(victimsList.victims);
+      }
+      
+      const targetVictim = newVictimId || activeCase || victimsList?.victims?.[0];
+      if (targetVictim) {
+        setActiveCase(targetVictim);
+        try {
+          localStorage.setItem("abhedya_active_case", targetVictim);
+        } catch (e) {}
+        loadCaseData(targetVictim, forensicParams);
+      }
+      
+      const muleList = await fetchMules(100, muleFilter, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
+      if (muleList?.length) setMules(muleList);
+    } catch (err) {
+      console.warn("Refresh error:", err.message);
+    }
   };
 
   const handleRegisterCase = (formData) => {
@@ -135,8 +268,12 @@ export default function App() {
     setMobileNumber(formData.mobile);
     setFirNumber(formData.firNumber);
     setActiveCase(formData.accountNumber);
-    loadCaseData(formData.accountNumber);
-    setActiveTab("trail"); // Instantly navigate officer to the multi-hop trace!
+    try {
+      localStorage.setItem("abhedya_active_case", formData.accountNumber);
+      localStorage.setItem("abhedya_victim_name", formData.victimName);
+    } catch (e) {}
+    loadCaseData(formData.accountNumber, forensicParams);
+    handleTabChange("trail"); // Instantly navigate officer to the multi-hop trace!
   };
 
   const handleSendMessage = async (e) => {
@@ -184,7 +321,7 @@ export default function App() {
         cases={cases}
         onSelectCase={handleSelectCase}
         totalSiphoned={traceData?.total_siphoned_inr}
-        onExportPdf={() => setActiveTab("notices")}
+        onExportPdf={() => handleTabChange("notices")}
         onOpenAssistant={() => setAssistantOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         activeTab={activeTab}
@@ -196,11 +333,13 @@ export default function App() {
 
       {/* Main Split Layout: Left Navigation + Right Feature Execution Canvas */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Left Navigation Sidebar */}
+        {/* Left Navigation Sidebar with Dedicated Editable Parameters Section */}
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={handleTabChange}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          forensicParams={forensicParams}
+          onSaveParams={handleSaveParams}
           counts={{
             totalAccounts: "24,368",
             flaggedMules: mules.length ? String(mules.length) : "333",
@@ -208,106 +347,150 @@ export default function App() {
           }}
         />
 
-        {/* Right Feature Execution Canvas */}
+        {/* Right Feature Execution Canvas (Persistent Mount to Prevent State Wipeout) */}
         <main className="flex-1 p-6 overflow-y-auto min-h-0 max-w-7xl mx-auto w-full">
           {/* TAB 1: Case Intake */}
-          {activeTab === "intake" && (
-            <CaseIntakeView
-              victimAccount={activeCase}
-              victimName={victimName}
-              mobileNumber={mobileNumber}
-              firNumber={firNumber}
-              totalSiphoned={traceData?.total_siphoned_inr}
-              systemStatus={systemStatus}
-              onTraceNow={() => setActiveTab("trail")}
-              onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
-            />
-          )}
+          <div className={activeTab === "intake" ? "block" : "hidden"}>
+            <ErrorBoundary name="Case Intake">
+              <CaseIntakeView
+                victimAccount={activeCase}
+                victimName={victimName}
+                mobileNumber={mobileNumber}
+                firNumber={firNumber}
+                totalSiphoned={traceData?.total_siphoned_inr}
+                systemStatus={systemStatus}
+                forensicParams={forensicParams}
+                onTraceNow={() => handleTabChange("trail")}
+                onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
+                onSelectCase={handleSelectCase}
+                onNavigateTab={handleTabChange}
+                onRefreshData={handleRefreshAll}
+                activeIngestResult={activeIngestResult}
+                onUpdateIngestResult={handleUpdateIngestResult}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 2: Evidence Vault (Dedicated Chained Custody Ledger) */}
-          {activeTab === "vault" && (
-            <EvidenceVaultView />
-          )}
+          <div className={activeTab === "vault" ? "block" : "hidden"}>
+            <ErrorBoundary name="Evidence Vault">
+              <EvidenceVaultView />
+            </ErrorBoundary>
+          </div>
+
+          {/* TAB: Forensic Parameters & PRD P1-P10 Heuristics Setup */}
+          <div className={activeTab === "parameters" ? "block" : "hidden"}>
+            <ErrorBoundary name="Forensic Parameters Setup">
+              <ForensicParametersView
+                forensicParams={forensicParams}
+                onSaveParams={handleSaveParams}
+                activeCase={activeCase}
+                onNavigateTab={handleTabChange}
+                onSelectCase={handleSelectCase}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* Real-Time 60s 2M Fraud Scanner & Early Intercept Monitor */}
-          {activeTab === "scanner" && (
-            <RealtimeFraudScannerView
-              onNavigateTab={setActiveTab}
-              onSelectCase={handleSelectCase}
-            />
-          )}
+          <div className={activeTab === "scanner" ? "block" : "hidden"}>
+            <ErrorBoundary name="Real-Time 2M Fraud Scanner">
+              <RealtimeFraudScannerView
+                onNavigateTab={handleTabChange}
+                onSelectCase={handleSelectCase}
+                forensicParams={forensicParams}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* HAMI AML Detector: Multi-Hop Hopping & GNN Graph Analysis */}
-          {activeTab === "hami" && (
-            <HamiHoppingView
-              victimAccount={activeCase}
-              onSelectVictim={handleSelectCase}
-              onNavigateTab={setActiveTab}
-            />
-          )}
+          <div className={activeTab === "hami" ? "block" : "hidden"}>
+            <ErrorBoundary name="HAMI AML Hopping">
+              <HamiHoppingView
+                victimAccount={activeCase}
+                onSelectVictim={handleSelectCase}
+                onNavigateTab={handleTabChange}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 3: Entity Directory (Master Database Index of 24,368 Accounts) */}
-          {activeTab === "entities" && (
-            <EntityDirectoryView totalAccounts="24,368" />
-          )}
+          <div className={activeTab === "entities" ? "block" : "hidden"}>
+            <ErrorBoundary name="Entity Directory">
+              <EntityDirectoryView 
+                totalAccounts="24,368" 
+                forensicParams={forensicParams}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 4: Mule Dossier (0-100 Risk Index Table & P1-P6 Heuristics) */}
-          {activeTab === "dossier" && (
-            <MuleDossierView
-              mules={mules?.length ? mules : DEFAULT_MULES}
-              onFilterRole={handleFilterMuleRole}
-              activeFilter={muleFilter}
-              onNavigateTab={setActiveTab}
-              onSelectCase={handleSelectCase}
-            />
-          )}
+          <div className={activeTab === "dossier" ? "block" : "hidden"}>
+            <ErrorBoundary name="Mule Dossier">
+              <MuleDossierView
+                mules={mules?.length ? mules : DEFAULT_MULES}
+                onFilterRole={handleFilterMuleRole}
+                activeFilter={muleFilter}
+                forensicParams={forensicParams}
+                onNavigateTab={handleTabChange}
+                onSelectCase={handleSelectCase}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 5: Mule Network Graph (Interactive WebGL Force Graph) */}
-          {activeTab === "graph" && (
-            <NetworkGraphView traceData={traceData} />
-          )}
+          <div className={activeTab === "graph" ? "block" : "hidden"}>
+            <ErrorBoundary name="Mule Network Graph">
+              <NetworkGraphView traceData={traceData} />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 6: Endpoint Trail (4-Hop Money Trail & 50-Account Fan-out Smurfing) */}
-          {activeTab === "trail" && (
-            <EndpointTrailView
-              victimAccount={activeCase}
-              onSearchVictim={handleSelectCase}
-              traceData={traceData}
-              loading={loading}
-              onNavigateToNotices={() => setActiveTab("notices")}
-            />
-          )}
+          <div className={activeTab === "trail" ? "block" : "hidden"}>
+            <ErrorBoundary name="Endpoint Trail">
+              <EndpointTrailView
+                victimAccount={activeCase}
+                onSearchVictim={handleSelectCase}
+                traceData={traceData}
+                loading={loading}
+                onNavigateToNotices={() => handleTabChange("notices")}
+                isActive={activeTab === "trail"}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 7: Patterns & Story (42 Syndicate Rings & Modus Operandi) */}
-          {activeTab === "patterns" && (
-            <PatternsStoryView />
-          )}
+          <div className={activeTab === "patterns" ? "block" : "hidden"}>
+            <ErrorBoundary name="Patterns & Story">
+              <PatternsStoryView />
+            </ErrorBoundary>
+          </div>
 
-          {/* TAB 8: Activity Timeline (15-Day Chronological Velocity Reconstruction) */}
-          {activeTab === "timeline" && (
-            <ActivityTimelineView traceData={traceData} />
-          )}
-
-          {/* TAB 9: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
-          {activeTab === "notices" && (
-            <Section91NoticesView
-              noticesData={noticesData}
-              victimAccount={activeCase}
-            />
-          )}
+          {/* TAB 8: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
+          <div className={activeTab === "notices" ? "block" : "hidden"}>
+            <ErrorBoundary name="Section 91 Notices">
+              <Section91NoticesView
+                noticesData={noticesData}
+                victimAccount={activeCase}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 10: Investigative Brief (Police Case Diary under Sec 172 CrPC) */}
-          {activeTab === "brief" && (
-            <CaseDiaryView
-              diaryData={diaryData}
-              victimAccount={activeCase}
-            />
-          )}
+          <div className={activeTab === "brief" ? "block" : "hidden"}>
+            <ErrorBoundary name="Investigative Brief">
+              <CaseDiaryView
+                diaryData={diaryData}
+                victimAccount={activeCase}
+              />
+            </ErrorBoundary>
+          </div>
 
           {/* TAB 11: Audit & Evaluation (1-Click Live Jury Blind Benchmark) */}
-          {activeTab === "jury" && (
-            <JuryBenchmarkView />
-          )}
+          <div className={activeTab === "jury" ? "block" : "hidden"}>
+            <ErrorBoundary name="Audit & Evaluation">
+              <JuryBenchmarkView />
+            </ErrorBoundary>
+          </div>
         </main>
       </div>
 

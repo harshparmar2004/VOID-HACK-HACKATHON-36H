@@ -1,11 +1,16 @@
-import React, { useState } from "react";
-import { Users, Search, Building2, CreditCard, ArrowDownRight, ArrowUpRight, Filter } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Users, Search, Building2, CreditCard, ArrowDownRight, ArrowUpRight, Filter, RefreshCw } from "lucide-react";
+import { fetchEntities } from "../api";
 
-export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
+export default function EntityDirectoryView({ totalAccounts = "24,368", forensicParams }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBank, setSelectedBank] = useState("ALL");
+  const [entities, setEntities] = useState([]);
+  const [bankStats, setBankStats] = useState([]);
+  const [totalCount, setTotalCount] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const bankStats = [
+  const defaultBankStats = [
     { code: "SBIN", name: "State Bank of India", count: "4,821 accounts", share: "19.8%" },
     { code: "HDFC", name: "HDFC Bank", count: "4,120 accounts", share: "16.9%" },
     { code: "ICIC", name: "ICICI Bank", count: "3,890 accounts", share: "16.0%" },
@@ -27,9 +32,38 @@ export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
     { account: "300000000219", bank: "Bank of Baroda", ifsc: "BARB0001129", type: "Corporate Payroll Account", totalIn: 2500000, totalOut: 2450000, balance: 50000, risk: "CLEAN" }
   ];
 
-  const filtered = sampleEntities.filter((e) => {
-    const matchesSearch = e.account.includes(searchTerm) || e.ifsc.toLowerCase().includes(searchTerm.toLowerCase()) || e.bank.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBank = selectedBank === "ALL" || e.ifsc.startsWith(selectedBank);
+  const loadEntities = async () => {
+    setLoading(true);
+    try {
+      const bFilter = forensicParams?.bankFilter && forensicParams.bankFilter !== "ALL" ? forensicParams.bankFilter : null;
+      const mAmount = forensicParams?.minAmount || 0;
+      const data = await fetchEntities(500, bFilter, mAmount);
+      if (data && data.entities && data.entities.length > 0) {
+        setEntities(data.entities);
+        if (data.bank_stats && data.bank_stats.length > 0) {
+          setBankStats(data.bank_stats);
+        }
+        setTotalCount(data.total_accounts);
+      }
+    } catch (e) {
+      console.warn("Could not fetch entities from backend, using sample dataset:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEntities();
+  }, [forensicParams?.bankFilter, forensicParams?.minAmount]);
+
+  const activeEntities = entities.length > 0 ? entities : sampleEntities;
+  const activeBankStats = bankStats.length > 0 ? bankStats : defaultBankStats;
+
+  const filtered = activeEntities.filter((e) => {
+    const matchesSearch = e.account.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      e.ifsc.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      e.bank.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesBank = selectedBank === "ALL" || e.ifsc.toUpperCase().startsWith(selectedBank.toUpperCase());
     return matchesSearch && matchesBank;
   });
 
@@ -45,10 +79,10 @@ export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
             </span>
           </div>
           <h2 className="text-2xl font-serif font-bold text-[#2C2623] mt-1">
-            Entity Directory ({totalAccounts} Accounts)
+            Entity Directory ({totalCount ? `${totalCount.toLocaleString()} Accounts` : totalAccounts})
           </h2>
           <p className="text-xs text-[#746D65] mt-1">
-            Complete database of unique sender and receiver accounts extracted from 2,000,000 transactions across 10 major Indian banks.
+            Dynamic database of unique sender and receiver accounts correlated across Indian banks and cyber crime statements.
           </p>
         </div>
 
@@ -71,18 +105,25 @@ export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
             className="bg-white border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
           >
             <option value="ALL">All Banks</option>
-            <option value="SBIN">State Bank of India</option>
-            <option value="HDFC">HDFC Bank</option>
-            <option value="ICIC">ICICI Bank</option>
-            <option value="UTIB">Axis Bank</option>
-            <option value="PUNB">Punjab National Bank</option>
+            {activeBankStats.map((b) => (
+              <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
+            ))}
           </select>
+
+          <button
+            onClick={loadEntities}
+            disabled={loading}
+            title="Refresh Directory"
+            className="p-2 border border-[#E8E2D5] rounded-xl bg-white hover:bg-[#FAF6EE] text-[#746D65] transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
         </div>
       </div>
 
       {/* Bank Share Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        {bankStats.map((b) => (
+        {activeBankStats.map((b) => (
           <div
             key={b.code}
             onClick={() => setSelectedBank(selectedBank === b.code ? "ALL" : b.code)}
@@ -94,7 +135,7 @@ export default function EntityDirectoryView({ totalAccounts = "24,368" }) {
           >
             <div className="text-[10px] font-mono font-bold text-[#D96B27]">{b.code}</div>
             <div className="text-xs font-bold text-[#2C2623] truncate mt-0.5">{b.name}</div>
-            <div className="text-[11px] text-[#746D65] mt-1 font-mono">{b.share}</div>
+            <div className="text-[11px] text-[#746D65] mt-1 font-mono">{b.count} • {b.share}</div>
           </div>
         ))}
       </div>

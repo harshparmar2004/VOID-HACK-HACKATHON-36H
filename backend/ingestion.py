@@ -2,11 +2,12 @@
 Operation Abhedya-Chakra: High-Throughput Real-World Ingestion & Normalization Engine
 Loads 2,000,000+ records into DuckDB in under 5 seconds with zero OOM errors.
 Features robust real-world bank data sanitizers:
-- Cleans mangled account numbers (strips dashes, spaces, scientific notation, restores leading zeroes).
+- Cleans and normalizes account numbers (supports alphanumeric bank IDs like ICIC10000335, PYTM10000639 as well as digit accounts).
 - Cleans Indian currency formatting (strips ₹, commas, handles negative debit signs, converts to paise integer).
-- Multi-format timestamp parser (supports DD/MM/YYYY, YYYY-MM-DD, AM/PM timestamps).
-- Automatic bank statement column detection across SBI, HDFC, ICICI, Axis, PNB, NPCI formats.
-- Real-world narration intelligence: Extracts 12-digit UTR/RRN, UPI handles (@ybl, @okhdfcbank), and scam markers.
+- Multi-format timestamp parser (supports M/D/YY, MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD, AM/PM timestamps).
+- Automatic bank statement column detection across SBI, HDFC, ICICI, Axis, PNB, NPCI, Cyber Crime formats.
+- Real-world narration intelligence: JEV-accelerated extraction of 12-digit UTR/RRN, UPI handles, and scam categories (P2P Crypto, Task Scam, Digital Arrest, Stock IPO).
+- Auto-detects complainant victim accounts.
 """
 
 import os
@@ -17,17 +18,18 @@ import duckdb
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 DEFAULT_PARQUET = os.path.join(DATA_DIR, "transactions_2m.parquet")
 
-# Common aliases used by different Indian banks in statement exports
+# Common aliases used by different Indian banks and cyber crime statement exports
 COLUMN_ALIASES = {
-    "sender": ["sender_account", "from_account", "source_account", "debit_account", "remitter_account", "payer_account", "sender_acc", "from_acc"],
-    "receiver": ["receiver_account", "to_account", "beneficiary_account", "credit_account", "payee_account", "receiver_acc", "to_acc", "ben_acc"],
+    "transaction_id": ["transaction_id", "txn_id", "txnid", "trans_id", "reference_no", "ref_no", "rrn", "utr"],
+    "sender": ["sender_account", "from_account", "source_account", "debit_account", "remitter_account", "payer_account", "sender_acc", "from_acc", "sender"],
+    "receiver": ["receiver_account", "to_account", "beneficiary_account", "credit_account", "payee_account", "receiver_acc", "to_acc", "ben_acc", "receiver"],
     "amount": ["amount", "txn_amount", "transaction_amount", "amount_inr", "withdrawal_amount", "debit_amount", "transfer_amount"],
-    "timestamp": ["timestamp", "txn_date", "transaction_date", "value_date", "date_time", "trans_date", "booking_date"],
-    "sender_ifsc": ["sender_ifsc", "from_ifsc", "remitter_ifsc", "payer_ifsc", "source_ifsc"],
-    "receiver_ifsc": ["receiver_ifsc", "to_ifsc", "beneficiary_ifsc", "payee_ifsc", "dest_ifsc"],
-    "narration": ["narration", "description", "remarks", "particulars", "transaction_remarks", "txn_desc"],
+    "timestamp": ["timestamp", "txn_date", "transaction_date", "value_date", "date_time", "trans_date", "booking_date", "date"],
+    "sender_ifsc": ["sender_ifsc", "from_ifsc", "remitter_ifsc", "payer_ifsc", "source_ifsc", "sender_bank_ifsc"],
+    "receiver_ifsc": ["receiver_ifsc", "to_ifsc", "beneficiary_ifsc", "payee_ifsc", "dest_ifsc", "receiver_bank_ifsc"],
+    "narration": ["narration", "description", "remarks", "particulars", "transaction_remarks", "txn_desc", "narrative"],
     "payment_mode": ["payment_mode", "mode", "txn_type", "channel", "trans_type", "payment_channel"],
-    "ip_address": ["ip_address", "client_ip", "source_ip", "ip", "originating_ip"],
+    "ip_address": ["ip_address", "client_ip", "source_ip", "ip", "originating_ip", "ipaddress"],
     "device_type": ["device_type", "device", "client_type", "user_agent", "channel_device"]
 }
 
@@ -85,6 +87,7 @@ class IngestionEngine:
         mappings = self.detect_column_mappings(col_names)
         
         # Build robust dynamic SQL expressions
+        txn_id_col = mappings.get("transaction_id") or ("Transaction_ID" if "Transaction_ID" in col_names else "Txn_ID" if "Txn_ID" in col_names else None)
         sender_col = mappings.get("sender") or ("Sender_Account" if "Sender_Account" in col_names else col_names[1])
         receiver_col = mappings.get("receiver") or ("Receiver_Account" if "Receiver_Account" in col_names else col_names[2])
         amount_col = mappings.get("amount") or ("Amount" if "Amount" in col_names else "Amount_INR" if "Amount_INR" in col_names else col_names[5])
@@ -96,19 +99,30 @@ class IngestionEngine:
         ip_col = mappings.get("ip_address") or ("IP_Address" if "IP_Address" in col_names else "'103.118.12.1'")
         device_col = mappings.get("device_type") or ("Device_Type" if "Device_Type" in col_names else "'Android'")
 
-        # Robust Account Sanitizer: Strips spaces and hyphens; if purely numeric and < 12 digits, pads to 12 digits; otherwise preserves full alphanumeric ID
+        # Robust Transaction ID: Preserves existing ID or generates canonical TXN...
+        clean_txn_id_expr = f"""
+            COALESCE(
+                NULLIF(TRIM(CAST({txn_id_col} AS VARCHAR)), ''),
+                'TXN' || LPAD(CAST(ROW_NUMBER() OVER () AS VARCHAR), 8, '0')
+            )
+        """ if txn_id_col else "'TXN' || LPAD(CAST(ROW_NUMBER() OVER () AS VARCHAR), 8, '0')"
+
+        # Robust Account Sanitizer:
+        # Handles alphanumeric accounts like ICIC10000335, PYTM10000639 and pure digit accounts
         clean_sender_expr = f"""
             CASE 
-                WHEN REGEXP_MATCHES(TRIM(CAST({sender_col} AS VARCHAR)), '^[0-9]+$') 
-                THEN LPAD(TRIM(CAST({sender_col} AS VARCHAR)), 12, '0')
-                ELSE UPPER(REGEXP_REPLACE(TRIM(CAST({sender_col} AS VARCHAR)), '[ -]', '', 'g'))
+                WHEN REGEXP_MATCHES(TRIM(CAST({sender_col} AS VARCHAR)), '^[0-9\\s\\-_]+$') THEN
+                    LPAD(REGEXP_REPLACE(CAST({sender_col} AS VARCHAR), '[^0-9]', '', 'g'), 12, '0')
+                ELSE 
+                    UPPER(REGEXP_REPLACE(TRIM(CAST({sender_col} AS VARCHAR)), '[\\s\\-_\\/]', '', 'g'))
             END
         """
         clean_receiver_expr = f"""
             CASE 
-                WHEN REGEXP_MATCHES(TRIM(CAST({receiver_col} AS VARCHAR)), '^[0-9]+$') 
-                THEN LPAD(TRIM(CAST({receiver_col} AS VARCHAR)), 12, '0')
-                ELSE UPPER(REGEXP_REPLACE(TRIM(CAST({receiver_col} AS VARCHAR)), '[ -]', '', 'g'))
+                WHEN REGEXP_MATCHES(TRIM(CAST({receiver_col} AS VARCHAR)), '^[0-9\\s\\-_]+$') THEN
+                    LPAD(REGEXP_REPLACE(CAST({receiver_col} AS VARCHAR), '[^0-9]', '', 'g'), 12, '0')
+                ELSE 
+                    UPPER(REGEXP_REPLACE(TRIM(CAST({receiver_col} AS VARCHAR)), '[\\s\\-_\\/]', '', 'g'))
             END
         """
 
@@ -117,15 +131,26 @@ class IngestionEngine:
             ABS(TRY_CAST(REGEXP_REPLACE(CAST({amount_col} AS VARCHAR), '[^0-9.]', '', 'g') AS DOUBLE))
         """
 
-        # Robust Multi-Format Timestamp Sanitizer:
+        # Robust Multi-Format Timestamp Sanitizer: Supports real Indian banking timestamps
         clean_timestamp_expr = f"""
             COALESCE(
                 TRY_CAST({time_col} AS TIMESTAMP),
-                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%Y-%m-%d %H:%M:%S'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%m/%d/%y %H:%M'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%m/%d/%Y %H:%M'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%m/%d/%y %H:%M:%S'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%m/%d/%Y %H:%M:%S'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%d/%m/%y %H:%M'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%d/%m/%Y %H:%M'),
                 TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%d/%m/%Y %H:%M:%S'),
                 TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%d-%m-%Y %H:%M:%S'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%d-%m-%Y %H:%M'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%Y-%m-%d %H:%M:%S'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%Y-%m-%d %H:%M'),
                 TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%d/%m/%Y %I:%M:%S %p'),
-                TIMESTAMP '2026-10-13 00:00:00'
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%d/%m/%Y %I:%M %p'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%m/%d/%Y %I:%M:%S %p'),
+                TRY_STRPTIME(CAST({time_col} AS VARCHAR), '%m/%d/%Y %I:%M %p'),
+                TIMESTAMP '2026-09-26 00:00:00'
             )
         """
 
@@ -135,7 +160,7 @@ class IngestionEngine:
         self.con.execute(f"""
         CREATE TABLE {staging_table} AS
         SELECT
-            'TXN' || LPAD(CAST(ROW_NUMBER() OVER () AS VARCHAR), 8, '0') AS Transaction_ID,
+            {clean_txn_id_expr} AS Transaction_ID,
             {clean_sender_expr} AS Sender_Account,
             {clean_receiver_expr} AS Receiver_Account,
             UPPER(COALESCE(CAST({sender_ifsc_col} AS VARCHAR), 'SBIN0001000')) AS Sender_IFSC,
@@ -150,7 +175,11 @@ class IngestionEngine:
             
             -- Anomaly Detection Flags
             CASE 
-                WHEN CAST({ip_col} AS VARCHAR) LIKE '185.%' OR CAST({ip_col} AS VARCHAR) LIKE '194.%' THEN 1 
+                WHEN CAST({ip_col} AS VARCHAR) LIKE '185.%' 
+                  OR CAST({ip_col} AS VARCHAR) LIKE '194.%' 
+                  OR CAST({ip_col} AS VARCHAR) LIKE '45.%' 
+                  OR CAST({ip_col} AS VARCHAR) LIKE '91.%' 
+                THEN 1 
                 ELSE 0 
             END AS is_foreign_ip,
             
@@ -173,6 +202,32 @@ class IngestionEngine:
                 ELSE 0 
             END AS is_scam_narration,
             
+            -- JEV Category Extraction
+            CASE 
+                WHEN LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%crypto%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%usdt%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%p2p%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%binance%' 
+                THEN 'P2P_CRYPTO_CASHOUT'
+                WHEN LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%task%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%bonus%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%refund%' 
+                THEN 'TASK_EARNING_SCAM'
+                WHEN LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%digital%arrest%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%cbi%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%police%' 
+                THEN 'DIGITAL_ARREST_SCAM'
+                WHEN LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%sebi%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%ipo%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%allotment%' 
+                THEN 'STOCK_IPO_SCAM'
+                WHEN LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%internal_settlement%' 
+                  OR LOWER(CAST({narration_col} AS VARCHAR)) LIKE '%settlement%' 
+                THEN 'INTERNAL_LAYER_SETTLEMENT'
+                ELSE 'STANDARD_TRANSFER'
+            END AS jev_scam_category,
+            REGEXP_EXTRACT(CAST({narration_col} AS VARCHAR), '([0-9]{4,16})', 1) AS jev_ref_utr,
+
             SUBSTRING(UPPER(COALESCE(CAST({receiver_ifsc_col} AS VARCHAR), 'HDFC0001000')), 1, 4) AS Receiver_Bank_Prefix
         FROM {source_query}
         WHERE {clean_sender_expr} IS NOT NULL 
@@ -186,6 +241,9 @@ class IngestionEngine:
         
         # Build multi-column indexes for sub-millisecond query performance
         print("[*] Creating multi-column B-Tree indexes on Sender, Receiver, and Timestamp...")
+        self.con.execute("DROP INDEX IF EXISTS idx_sender;")
+        self.con.execute("DROP INDEX IF EXISTS idx_receiver;")
+        self.con.execute("DROP INDEX IF EXISTS idx_txn_id;")
         self.con.execute("CREATE INDEX idx_sender ON transactions(Sender_Account, Timestamp);")
         self.con.execute("CREATE INDEX idx_receiver ON transactions(Receiver_Account, Timestamp);")
         self.con.execute("CREATE INDEX idx_txn_id ON transactions(Transaction_ID);")
@@ -202,33 +260,79 @@ class IngestionEngine:
             "benchmark_passed": self.load_duration <= 60.0
         }
 
+    def detect_victims(self, limit=5):
+        """
+        Identifies complainant victim accounts from the dataset.
+        Looks for accounts with substantial outflows to mules and minimal or zero incoming fraud funds.
+        """
+        try:
+            res = self.con.execute("""
+                SELECT 
+                    t.Sender_Account AS account_id,
+                    MAX(t.Sender_IFSC) AS ifsc,
+                    SUBSTRING(MAX(t.Sender_IFSC), 1, 4) AS bank,
+                    COUNT(*) AS outgoing_txns,
+                    ROUND(SUM(t.Amount_INR), 2) AS total_lost_inr,
+                    MIN(t.Timestamp) AS first_loss_timestamp
+                FROM transactions t
+                LEFT JOIN transactions r ON t.Sender_Account = r.Receiver_Account
+                WHERE r.Receiver_Account IS NULL
+                GROUP BY t.Sender_Account
+                ORDER BY total_lost_inr DESC
+                LIMIT ?;
+            """, [limit]).fetchall()
+            
+            cols = [d[0] for d in self.con.description]
+            return [dict(zip(cols, r)) for r in res]
+        except Exception as e:
+            print(f"[-] Error detecting victims: {e}")
+            return []
+
     def get_summary_stats(self):
-        stats = self.con.execute("""
-        SELECT
-            COUNT(*) as total_txns,
-            COUNT(DISTINCT Sender_Account) as unique_senders,
-            COUNT(DISTINCT Receiver_Account) as unique_receivers,
-            ROUND(SUM(Amount_INR), 2) as total_volume_inr,
-            MIN(Timestamp) as min_time,
-            MAX(Timestamp) as max_time,
-            SUM(is_foreign_ip) as foreign_ip_txns,
-            SUM(is_headless_device) as headless_device_txns,
-            SUM(is_scam_narration) as scam_narration_txns
-        FROM transactions;
-        """).fetchone()
+        try:
+            stats = self.con.execute("""
+            SELECT
+                COUNT(*) as total_txns,
+                COUNT(DISTINCT Sender_Account) as unique_senders,
+                COUNT(DISTINCT Receiver_Account) as unique_receivers,
+                ROUND(SUM(Amount_INR), 2) as total_volume_inr,
+                MIN(Timestamp) as min_time,
+                MAX(Timestamp) as max_time,
+                SUM(is_foreign_ip) as foreign_ip_txns,
+                SUM(is_headless_device) as headless_device_txns,
+                SUM(is_scam_narration) as scam_narration_txns
+            FROM transactions;
+            """).fetchone()
+        except Exception as e:
+            stats = None
         
+        if not stats or stats[0] is None or stats[0] == 0:
+            return {
+                "total_transactions": 0,
+                "unique_senders": 0,
+                "unique_receivers": 0,
+                "total_volume_inr": 0.0,
+                "timeline_start": "",
+                "timeline_end": "",
+                "foreign_ip_txns": 0,
+                "headless_device_txns": 0,
+                "scam_narration_txns": 0,
+                "engine": "DuckDB In-Memory Columnar + Arrow"
+            }
+            
         return {
-            "total_transactions": stats[0],
-            "unique_senders": stats[1],
-            "unique_receivers": stats[2],
-            "total_volume_inr": stats[3],
-            "timeline_start": str(stats[4]),
-            "timeline_end": str(stats[5]),
-            "foreign_ip_txns": stats[6],
-            "headless_device_txns": stats[7],
-            "scam_narration_txns": stats[8],
+            "total_transactions": int(stats[0] or 0),
+            "unique_senders": int(stats[1] or 0),
+            "unique_receivers": int(stats[2] or 0),
+            "total_volume_inr": float(stats[3] or 0.0),
+            "timeline_start": str(stats[4]) if stats[4] else "",
+            "timeline_end": str(stats[5]) if stats[5] else "",
+            "foreign_ip_txns": int(stats[6] or 0),
+            "headless_device_txns": int(stats[7] or 0),
+            "scam_narration_txns": int(stats[8] or 0),
             "engine": "DuckDB In-Memory Columnar + Arrow"
         }
+
 
 if __name__ == "__main__":
     engine = IngestionEngine()

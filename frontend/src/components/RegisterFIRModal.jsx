@@ -22,39 +22,39 @@ export default function RegisterFIRModal({ isOpen, onClose, onRegisterCase }) {
       setFormData({
         victimName: "Sunil Kumar Verma",
         mobile: "+91 9811000001",
-        accountNumber: "100000000001",
-        bankName: "HDFC Bank",
-        ifsc: "HDFC0000250",
-        upiId: "sunilverma@okhdfcbank",
-        amount: "1478894",
+        accountNumber: "PUNB10000001",
+        bankName: "Punjab National Bank",
+        ifsc: "PUNB0001001",
+        upiId: "sunil.verma@okpnb",
+        amount: "370415.81",
         modusOperandi: "DIGITAL_ARREST",
-        incidentDate: "2026-10-13T00:04",
+        incidentDate: "2026-09-22T01:20",
         firNumber: "FIR-0142/2026/CYBER-INDORE"
       });
     } else if (preset === "case2") {
       setFormData({
         victimName: "Priya Sharma",
         mobile: "+91 9822334455",
-        accountNumber: "100000000002",
-        bankName: "State Bank of India",
-        ifsc: "SBIN0001420",
-        upiId: "priya.sharma@oksbi",
-        amount: "890000",
+        accountNumber: "BARB10000610",
+        bankName: "Bank of Baroda",
+        ifsc: "BARB0001610",
+        upiId: "priya.sharma@okbob",
+        amount: "163532.28",
         modusOperandi: "FAKE_TASK",
-        incidentDate: "2026-10-12T14:30",
+        incidentDate: "2026-09-26T10:57",
         firNumber: "FIR-0143/2026/CYBER-INDORE"
       });
     } else if (preset === "case3") {
       setFormData({
         victimName: "Ramesh Patel",
         mobile: "+91 9988776655",
-        accountNumber: "100000000003",
-        bankName: "ICICI Bank",
-        ifsc: "ICIC0008912",
-        upiId: "ramesh.patel@icici",
-        amount: "1125000",
-        modusOperandi: "PONZI_BOT",
-        incidentDate: "2026-10-11T18:15",
+        accountNumber: "AXIS10001045",
+        bankName: "Axis Bank",
+        ifsc: "AXIS0002045",
+        upiId: "ramesh.patel@okaxis",
+        amount: "144911.95",
+        modusOperandi: "CRYPTO_P2P",
+        incidentDate: "2026-09-26T11:02",
         firNumber: "FIR-0144/2026/CYBER-INDORE"
       });
     }

@@ -29,7 +29,8 @@ export default function EndpointTrailView({
   onSearchVictim,
   traceData,
   loading,
-  onNavigateToNotices
+  onNavigateToNotices,
+  isActive = true
 }) {
   const [inputAcct, setInputAcct] = useState(victimAccount || "");
   const [zoom, setZoom] = useState(0.85);
@@ -205,9 +206,15 @@ export default function EndpointTrailView({
   };
 
   useEffect(() => {
-    const timer = setTimeout(updateConnections, 60);
-    return () => clearTimeout(timer);
-  }, [traceData, hop2Layout, zoom, lineStyle, effectiveLinks.length]);
+    if (isActive !== false) {
+      const timer1 = setTimeout(updateConnections, 50);
+      const timer2 = setTimeout(updateConnections, 200);
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
+    }
+  }, [traceData, hop2Layout, zoom, lineStyle, effectiveLinks.length, isActive]);
 
   useEffect(() => {
     window.addEventListener("resize", updateConnections);

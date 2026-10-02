@@ -8,10 +8,12 @@ import os
 import json
 import time
 import shutil
+import re
+import urllib.request
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from ingestion import IngestionEngine, DEFAULT_PARQUET
 from mule_scorer import MuleScorer
@@ -52,14 +54,16 @@ def initialize_core():
     global scorer, graph, scanner, hami_engine, is_initialized
     if not is_initialized:
         print("[*] Initializing Abhedya-Chakra Forensics Core...")
-        engine.load_dataset()
+        cyber_crime_csv = os.path.join(DATA_DIR, "cyber_crime_sample.csv")
+        target_dataset = cyber_crime_csv if os.path.exists(cyber_crime_csv) else DEFAULT_PARQUET
+        engine.load_dataset(target_dataset)
         scorer = MuleScorer(engine.con)
         scorer.compute_all_scores()
         graph = GraphEngine(engine.con)
         scanner = FraudScanner(engine.con)
         hami_engine = HAMIHoppingEngine(engine.con)
         is_initialized = True
-        print("[+] Core Forensics Engine fully initialized and ready!")
+        print(f"[+] Core Forensics Engine initialized with {os.path.basename(target_dataset)} ({engine.total_records} records)!")
 
 @app.on_event("startup")
 def startup_event():
@@ -88,6 +92,9 @@ def get_system_status():
         "vault_verified": True
     }
 
+class IngestUrlPayload(BaseModel):
+    url: str
+
 @app.post("/api/upload")
 def upload_bank_statement(file: UploadFile = File(...)):
     """
@@ -96,12 +103,68 @@ def upload_bank_statement(file: UploadFile = File(...)):
     Applies automatic column mapping, cleaning, and re-computes mule scores.
     Runs synchronously in threadpool to prevent event loop blocking on 2M row ingestion.
     """
+    try:
+        upload_dir = os.path.join(DATA_DIR, "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, file.filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        global scorer, graph, scanner, hami_engine
+        res = engine.load_dataset(file_path)
+        scorer = MuleScorer(engine.con)
+        score_res = scorer.compute_all_scores()
+        graph = GraphEngine(engine.con)
+        scanner = FraudScanner(engine.con)
+        hami_engine = HAMIHoppingEngine(engine.con)
+        victims = engine.detect_victims(limit=5)
+        
+        return {
+            "status": "success",
+            "file_name": file.filename,
+            "records_loaded": res.get("total_records", 0),
+            "ingestion_seconds": res.get("load_duration_seconds", 0.0),
+            "detected_mappings": res.get("detected_mappings", {}),
+            "high_risk_mules": score_res.get("high_risk_mules", 0),
+            "victims": victims,
+            "detected_victim": victims[0]["account_id"] if victims else None,
+            "message": f"Successfully ingested {res.get('total_records', 0):,} transactions from {file.filename}!"
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+@app.post("/api/ingest-url")
+def ingest_from_url(payload: IngestUrlPayload):
+    """
+    Direct Online Ingestion from Google Sheets or web CSV/Parquet exports.
+    Auto-converts Google Sheets edit URLs to CSV export URLs and loads data into DuckDB.
+    """
+    url = payload.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing data URL.")
+        
+    # If Google Sheet URL, convert to export CSV
+    if "docs.google.com/spreadsheets" in url:
+        if "/export" not in url:
+            url = re.sub(r"/edit.*$", "/export?format=csv", url)
+            if "/export?format=csv" not in url:
+                url = url.rstrip("/") + "/export?format=csv"
+                
     upload_dir = os.path.join(DATA_DIR, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename)
+    file_path = os.path.join(upload_dir, f"online_cyber_dataset_{int(time.time())}.csv")
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = resp.read()
+        with open(file_path, "wb") as f:
+            f.write(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch data from URL: {str(e)}")
         
     global scorer, graph, scanner, hami_engine
     try:
@@ -111,33 +174,231 @@ def upload_bank_statement(file: UploadFile = File(...)):
         graph = GraphEngine(engine.con)
         scanner = FraudScanner(engine.con)
         hami_engine = HAMIHoppingEngine(engine.con)
+        victims = engine.detect_victims(limit=5)
+        
+        return {
+            "status": "success",
+            "file_name": "Online Cyber Crime Dataset",
+            "source_url": payload.url,
+            "records_loaded": res.get("total_records", 0),
+            "ingestion_seconds": res.get("load_duration_seconds", 0.0),
+            "detected_mappings": res.get("detected_mappings", {}),
+            "high_risk_mules": score_res.get("high_risk_mules", 0),
+            "victims": victims,
+            "detected_victim": victims[0]["account_id"] if victims else None,
+            "message": f"Successfully ingested {res.get('total_records', 0):,} transactions from online dataset!"
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"Failed to process bank statement: {str(e)}")
-    
-    return {
-        "status": "success",
-        "file_name": file.filename,
-        "records_loaded": res["total_records"],
-        "ingestion_seconds": res["load_duration_seconds"],
-        "detected_mappings": res["detected_mappings"],
-        "high_risk_mules": score_res["high_risk_mules"],
-        "message": f"Successfully ingested {res['total_records']:,} transactions from {file.filename}!"
-    }
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+
+@app.get("/api/detected-victims")
+def get_detected_victims():
+    if not is_initialized:
+        initialize_core()
+    return {"victims": engine.detect_victims(limit=10)}
 
 @app.get("/api/victims")
 def get_benchmark_victims():
-    if os.path.exists(VICTIMS_FILE):
-        with open(VICTIMS_FILE) as f:
-            return json.load(f)
-    return {"victims": []}
-
-@app.get("/api/trace/{victim_account}")
-def trace_victim_flow(victim_account: str, max_hops: int = 4, time_window: int = 180):
     if not is_initialized:
         initialize_core()
-    res = graph.trace_victim_trail(victim_account, max_hops=max_hops, time_window_minutes=time_window)
+    
+    # Prioritize detected victims from the currently loaded dataset
+    detected = engine.detect_victims(limit=20)
+    detected_ids = [d["account_id"] for d in detected]
+    
+    bench_ids = []
+    # Only append synthetic benchmark victims if dataset is >= 100k (synthetic 2M benchmark)
+    if engine.total_records >= 100000 and os.path.exists(VICTIMS_FILE):
+        try:
+            with open(VICTIMS_FILE) as f:
+                data = json.load(f)
+                bench_ids = data.get("victims", []) if isinstance(data, dict) else data
+        except Exception:
+            bench_ids = []
+            
+    combined = list(dict.fromkeys(detected_ids + bench_ids))
+    return {"victims": combined, "detected_victims": detected}
+
+BANK_NAME_MAP = {
+    "SBIN": "State Bank of India",
+    "HDFC": "HDFC Bank",
+    "ICIC": "ICICI Bank",
+    "UTIB": "Axis Bank",
+    "AXIS": "Axis Bank",
+    "PUNB": "Punjab National Bank",
+    "PYTM": "Paytm Payments Bank",
+    "IPOS": "India Post Payments Bank",
+    "BARB": "Bank of Baroda",
+    "KKBK": "Kotak Mahindra Bank",
+    "UBIN": "Union Bank of India",
+    "CNRB": "Canara Bank",
+    "IOBA": "Indian Overseas Bank",
+    "YESB": "Yes Bank",
+    "IDIB": "Indian Bank",
+    "CBIN": "Central Bank of India"
+}
+
+@app.get("/api/entities")
+def get_entity_directory(
+    limit: int = 500, 
+    bank_filter: Optional[str] = None,
+    min_amount: float = 0.0
+):
+    if not is_initialized:
+        initialize_core()
+        
+    where_clauses = []
+    params = []
+    if bank_filter and bank_filter != "ALL":
+        where_clauses.append("f.ifsc LIKE ?")
+        params.append(f"{bank_filter}%")
+    if min_amount and float(min_amount) > 0:
+        where_clauses.append("(f.total_in >= ? OR f.balance >= ?)")
+        params.append(float(min_amount))
+        params.append(float(min_amount))
+        
+    filter_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    params.append(limit)
+        
+    query = f"""
+        WITH flow_summary AS (
+            SELECT 
+                account_id,
+                MAX(ifsc) AS ifsc,
+                SUM(inflow) AS total_in,
+                SUM(outflow) AS total_out,
+                SUM(inflow) - SUM(outflow) AS balance
+            FROM (
+                SELECT receiver_account AS account_id, receiver_ifsc AS ifsc, Amount_INR AS inflow, 0.0 AS outflow FROM transactions
+                UNION ALL
+                SELECT sender_account AS account_id, sender_ifsc AS ifsc, 0.0 AS inflow, Amount_INR AS outflow FROM transactions
+            )
+            GROUP BY account_id
+        )
+        SELECT 
+            f.account_id,
+            f.ifsc,
+            f.total_in,
+            f.total_out,
+            f.balance,
+            COALESCE(s.role, CASE 
+                WHEN f.total_in = 0 AND f.total_out > 0 THEN 'VICTIM'
+                WHEN f.total_out = 0 AND f.total_in > 0 THEN 'L3_CASHOUT'
+                ELSE 'TRANSACTING'
+            END) AS role,
+            COALESCE(s.risk_band, CASE 
+                WHEN f.total_in = 0 AND f.total_out > 0 THEN 'CLEAN'
+                WHEN f.balance > 0 THEN 'SUSPECTED_MULE'
+                ELSE 'CLEAN'
+            END) AS risk_band,
+            COALESCE(s.risk_index, CASE WHEN f.total_in = 0 THEN 0 ELSE 75 END) AS risk_index
+        FROM flow_summary f
+        LEFT JOIN scored_mules s ON f.account_id = s.account_id
+        {filter_sql}
+        ORDER BY f.total_in DESC, f.balance DESC
+        LIMIT ?;
+    """
+    rows = engine.con.execute(query, params).fetchall()
+    
+    entities = []
+    bank_counts = {}
+    total_accs = len(rows)
+    
+    for r in rows:
+        acc_id = r[0] if len(r) > 0 else ""
+        ifsc = r[1] if len(r) > 1 else "BANK0000000"
+        tin = float(r[2]) if len(r) > 2 and r[2] is not None else 0.0
+        tout = float(r[3]) if len(r) > 3 and r[3] is not None else 0.0
+        bal = float(r[4]) if len(r) > 4 and r[4] is not None else 0.0
+        role = str(r[5]) if len(r) > 5 and r[5] is not None else "TRANSACTING"
+        rband = str(r[6]) if len(r) > 6 and r[6] is not None else "CLEAN"
+        rindex = float(r[7]) if len(r) > 7 and r[7] is not None else 0.0
+        
+        ifsc_code = ifsc or "BANK0000000"
+        prefix = ifsc_code[:4].upper()
+        b_name = BANK_NAME_MAP.get(prefix, f"{prefix} Bank")
+        
+        bank_counts[prefix] = bank_counts.get(prefix, 0) + 1
+        
+        # Category label
+        if role == "VICTIM" or (tin == 0 and tout > 0):
+            cat = "Victim / Complainant"
+        elif "L1" in role or "COLLECTOR" in role:
+            cat = "Suspected L1 Collector"
+        elif "L2" in role or "DISTRIBUTOR" in role:
+            cat = "Suspected L2 Distributor"
+        elif "L3" in role or "CASHOUT" in role or "EXIT" in role:
+            cat = "Suspected L3 Cashout"
+        elif rband in ("HIGH_CONFIDENCE_MULE", "SUSPECTED_MULE"):
+            cat = "Layered Mule"
+        else:
+            cat = "Transacting Account"
+            
+        risk_label = "CLEAN"
+        if rband == "HIGH_CONFIDENCE_MULE":
+            risk_label = f"CRITICAL ({int(rindex)})"
+        elif rband == "SUSPECTED_MULE":
+            risk_label = f"HIGH RISK ({int(rindex)})"
+        elif rindex > 50:
+            risk_label = f"FLAGGED ({int(rindex)})"
+
+        entities.append({
+            "account": str(acc_id),
+            "bank": b_name,
+            "ifsc": ifsc_code,
+            "type": cat,
+            "totalIn": round(float(tin), 2),
+            "totalOut": round(float(tout), 2),
+            "balance": round(float(bal), 2),
+            "risk": risk_label
+        })
+        
+    bank_stats = []
+    for code, count in sorted(bank_counts.items(), key=lambda x: x[1], reverse=True)[:8]:
+        share_pct = round((count / max(total_accs, 1)) * 100, 1)
+        bank_stats.append({
+            "code": code,
+            "name": BANK_NAME_MAP.get(code, f"{code} Bank"),
+            "count": f"{count:,} accounts",
+            "share": f"{share_pct}%"
+        })
+        
+    return {
+        "total_accounts": total_accs,
+        "entities": entities,
+        "bank_stats": bank_stats
+    }
+
+@app.get("/api/trace/{victim_account}")
+def trace_victim_flow(
+    victim_account: str, 
+    max_hops: int = 4, 
+    time_window: int = 180,
+    min_amount: float = 0.0,
+    bank_filter: Optional[str] = None,
+    keyword: Optional[str] = None,
+    custom_rules: Optional[str] = None
+):
+    if not is_initialized:
+        initialize_core()
+    parsed_rules = None
+    if custom_rules:
+        try:
+            parsed_rules = json.loads(custom_rules)
+        except Exception:
+            parsed_rules = None
+    res = graph.trace_victim_trail(
+        victim_account, 
+        max_hops=max_hops, 
+        time_window_minutes=time_window,
+        min_amount=min_amount,
+        bank_filter=bank_filter,
+        keyword=keyword,
+        custom_rules=parsed_rules
+    )
     if not res.get("found", True):
         raise HTTPException(status_code=404, detail="Victim account has no outgoing transactions.")
     
@@ -182,13 +443,35 @@ def get_top_hami_hopping_clusters(limit: int = 30):
     return hami_engine.scan_top_hopping_clusters(limit=limit)
 
 @app.get("/api/mules")
-def get_flagged_mules(limit: int = 100, role_filter: Optional[str] = None):
+def get_flagged_mules(
+    limit: int = 100, 
+    role_filter: Optional[str] = None,
+    min_risk: float = 0.0,
+    min_amount: float = 0.0,
+    bank_filter: Optional[str] = None
+):
     if not is_initialized:
         initialize_core()
     
-    where_clause = "WHERE risk_band IN ('HIGH_CONFIDENCE_MULE', 'SUSPECTED_MULE')"
+    where_conds = ["risk_band IN ('HIGH_CONFIDENCE_MULE', 'SUSPECTED_MULE')"]
+    params = []
+    
     if role_filter:
-        where_clause += f" AND role = '{role_filter}'"
+        where_conds.append("role = ?")
+        params.append(role_filter)
+    if min_risk and float(min_risk) > 0:
+        where_conds.append("risk_index >= ?")
+        params.append(float(min_risk))
+    if min_amount and float(min_amount) > 0:
+        where_conds.append("(total_incoming_amt >= ? OR current_holding_balance >= ?)")
+        params.append(float(min_amount))
+        params.append(float(min_amount))
+    if bank_filter and bank_filter != "ALL":
+        where_conds.append("ifsc LIKE ?")
+        params.append(f"{bank_filter}%")
+        
+    where_clause = "WHERE " + " AND ".join(where_conds)
+    params.append(limit)
         
     query = f"""
         SELECT account_id, ifsc, role, risk_index, risk_band, 
@@ -200,7 +483,7 @@ def get_flagged_mules(limit: int = 100, role_filter: Optional[str] = None):
         ORDER BY risk_index DESC, total_incoming_amt DESC
         LIMIT ?;
     """
-    rows = engine.con.execute(query, [limit]).fetchall()
+    rows = engine.con.execute(query, params).fetchall()
     cols = [d[0] for d in engine.con.description]
     return [dict(zip(cols, r)) for r in rows]
 
@@ -334,13 +617,25 @@ def run_60s_fraud_benchmark():
     return scanner.run_60s_benchmark()
 
 @app.get("/api/scanner/problematic-transactions")
-def get_problematic_transactions(limit: int = 100, filter_type: Optional[str] = None):
+def get_problematic_transactions(
+    limit: int = 100, 
+    filter_type: Optional[str] = None,
+    min_amount: float = 0.0,
+    bank_filter: Optional[str] = None,
+    keyword: Optional[str] = None
+):
     if not is_initialized:
         initialize_core()
     global scanner
     if scanner is None:
         scanner = FraudScanner(engine.con)
-    return scanner.get_problematic_transactions(limit=limit, filter_type=filter_type)
+    return scanner.get_problematic_transactions(
+        limit=limit, 
+        filter_type=filter_type,
+        min_amount=min_amount,
+        bank_filter=bank_filter,
+        keyword=keyword
+    )
 
 @app.post("/api/scanner/emergency-freeze")
 def execute_emergency_freeze(payload: EmergencyFreezePayload):
@@ -384,6 +679,175 @@ def load_settings_dict():
         "status": "connected",
         "latency_ms": 65,
         "message": "Local Type-Safe Acceleration Engine Active"
+    }
+
+class ParameterSimulatePayload(BaseModel):
+    min_amount: float = 0.0
+    bank_filter: Optional[str] = "ALL"
+    keyword: Optional[str] = None
+    device_filter: Optional[str] = "ALL"
+    min_risk: float = 0.0
+    custom_rules: Optional[List[Dict[str, Any]]] = []
+    active_case: Optional[str] = None
+
+@app.post("/api/parameters/simulate")
+def simulate_parameters(payload: ParameterSimulatePayload):
+    if not is_initialized:
+        initialize_core()
+    t0 = time.time()
+    
+    where_clauses = ["1=1"]
+    sql_params = []
+    
+    if payload.min_amount and payload.min_amount > 0:
+        where_clauses.append("Amount_INR >= ?")
+        sql_params.append(float(payload.min_amount))
+        
+    if payload.bank_filter and payload.bank_filter != "ALL":
+        where_clauses.append("Receiver_IFSC LIKE ?")
+        sql_params.append(f"{payload.bank_filter}%")
+        
+    if payload.keyword and str(payload.keyword).strip():
+        where_clauses.append("LOWER(Narration) LIKE ?")
+        sql_params.append(f"%{str(payload.keyword).strip().lower()}%")
+        
+    if payload.device_filter == "HEADLESS":
+        where_clauses.append("is_headless_device = 1")
+    elif payload.device_filter == "FOREIGN_IP":
+        where_clauses.append("is_foreign_ip = 1")
+    elif payload.device_filter == "SUSPICIOUS":
+        where_clauses.append("(is_headless_device = 1 OR is_foreign_ip = 1 OR is_scam_narration = 1)")
+        
+    if payload.custom_rules:
+        for rule in payload.custom_rules:
+            if not isinstance(rule, dict) or not rule.get("enabled", True):
+                continue
+            field = rule.get("field", "")
+            op = rule.get("operator", "eq")
+            val = rule.get("value", "")
+            if val is None or str(val).strip() == "":
+                continue
+                
+            if field == "Amount_INR":
+                try:
+                    num_val = float(val)
+                    if op in [">", "gt"]:
+                        where_clauses.append("Amount_INR > ?")
+                        sql_params.append(num_val)
+                    elif op in [">=", "gte"]:
+                        where_clauses.append("Amount_INR >= ?")
+                        sql_params.append(num_val)
+                    elif op in ["<", "lt"]:
+                        where_clauses.append("Amount_INR < ?")
+                        sql_params.append(num_val)
+                    elif op in ["<=", "lte"]:
+                        where_clauses.append("Amount_INR <= ?")
+                        sql_params.append(num_val)
+                    elif op in ["==", "eq"]:
+                        where_clauses.append("Amount_INR = ?")
+                        sql_params.append(num_val)
+                except Exception:
+                    pass
+            elif field in ["Receiver_IFSC", "Sender_IFSC"]:
+                if op == "starts_with":
+                    where_clauses.append(f"{field} LIKE ?")
+                    sql_params.append(f"{val}%")
+                elif op == "contains":
+                    where_clauses.append(f"{field} LIKE ?")
+                    sql_params.append(f"%{val}%")
+                else:
+                    where_clauses.append(f"{field} = ?")
+                    sql_params.append(str(val))
+            elif field == "Narration":
+                if op in ["contains", "regex"]:
+                    where_clauses.append("LOWER(Narration) LIKE ?")
+                    sql_params.append(f"%{str(val).lower()}%")
+                else:
+                    where_clauses.append("LOWER(Narration) = ?")
+                    sql_params.append(str(val).lower())
+            elif field == "IP_Address":
+                if op in ["starts_with", "in_subnet"]:
+                    where_clauses.append("IP_Address LIKE ?")
+                    sql_params.append(f"{val}%")
+                else:
+                    where_clauses.append("IP_Address = ?")
+                    sql_params.append(str(val))
+            elif field == "Device_Type":
+                where_clauses.append("LOWER(Device_Type) LIKE ?")
+                sql_params.append(f"%{str(val).lower()}%")
+            elif field == "Payment_Mode":
+                where_clauses.append("UPPER(Payment_Mode) = ?")
+                sql_params.append(str(val).upper())
+
+    where_str = " AND ".join(where_clauses)
+    
+    # Run aggregated stats query
+    agg_sql = f"""
+        SELECT 
+            COUNT(*) as total_txns,
+            COALESCE(SUM(Amount_INR), 0.0) as total_volume,
+            COUNT(DISTINCT Sender_Account) as unique_senders,
+            COUNT(DISTINCT Receiver_Account) as unique_receivers
+        FROM transactions
+        WHERE {where_str};
+    """
+    agg_res = engine.con.execute(agg_sql, sql_params).fetchone()
+    
+    # Run sample transactions query
+    sample_sql = f"""
+        SELECT Transaction_ID, Sender_Account, Receiver_Account, Sender_IFSC, Receiver_IFSC,
+               Amount_INR, Timestamp, Payment_Mode, Narration, IP_Address, Device_Type
+        FROM transactions
+        WHERE {where_str}
+        ORDER BY Timestamp DESC
+        LIMIT 15;
+    """
+    sample_rows = engine.con.execute(sample_sql, sql_params).fetchall()
+    samples = []
+    for r in sample_rows:
+        samples.append({
+            "txn_id": r[0],
+            "sender": r[1],
+            "receiver": r[2],
+            "sender_ifsc": r[3],
+            "receiver_ifsc": r[4],
+            "amount": float(r[5]),
+            "timestamp": str(r[6]),
+            "mode": r[7],
+            "narration": r[8],
+            "ip": r[9],
+            "device": r[10]
+        })
+        
+    # Active case trail impact
+    case_impact = None
+    if payload.active_case:
+        try:
+            trail_res = graph.trace_victim_trail(
+                payload.active_case,
+                min_amount=payload.min_amount,
+                bank_filter=payload.bank_filter,
+                keyword=payload.keyword,
+                custom_rules=payload.custom_rules
+            )
+            case_impact = {
+                "nodes_count": trail_res.get("nodes_count", 0),
+                "edges_count": trail_res.get("edges_count", 0),
+                "recoverable_holding_inr": trail_res.get("recoverable_holding_inr", 0.0)
+            }
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "total_matching_txns": agg_res[0],
+        "total_matching_volume": round(float(agg_res[1]), 2),
+        "unique_senders": agg_res[2],
+        "unique_receivers": agg_res[3],
+        "sample_txns": samples,
+        "generated_where_clause": where_str,
+        "active_case_impact": case_impact,
+        "latency_ms": round((time.time() - t0) * 1000, 2)
     }
 
 def mask_key(k: str) -> str:

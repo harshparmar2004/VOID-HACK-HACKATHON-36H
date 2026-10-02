@@ -14,11 +14,14 @@ BANK_NODAL_ADDRESSES = {
     "ICIC": "Designated Nodal Officer (Law Enforcement Cell), ICICI Bank Towers, Bandra Kurla Complex, Mumbai",
     "PUNB": "Chief General Manager, Cyber Fraud Monitoring Wing, Punjab National Bank, New Delhi",
     "UTIB": "Principal Nodal Officer, Fraud & Risk Control, Axis Bank Ltd, Ahmedabad / Mumbai",
+    "AXIS": "Principal Nodal Officer, Fraud & Risk Control, Axis Bank Ltd, Ahmedabad / Mumbai",
     "BARB": "General Manager & Nodal Officer, Bank of Baroda, Baroda Bhavan, Vadodara",
     "CNRB": "Cyber Crime Coordination Desk, Canara Bank Head Office, Bengaluru",
     "UBIN": "Nodal Officer (Law Enforcement Cell), Union Bank of India, Nariman Point, Mumbai",
     "IOBA": "Law Enforcement Nodal Officer, Indian Overseas Bank, Chennai",
-    "KKBK": "Head - Fraud Risk Management, Kotak Mahindra Bank Ltd, Mumbai"
+    "KKBK": "Head - Fraud Risk Management, Kotak Mahindra Bank Ltd, Mumbai",
+    "PYTM": "Nodal Officer (Law Enforcement Cell), Paytm Payments Bank Ltd, Noida, UP",
+    "IPOS": "Chief Nodal Officer, Fraud Risk Cell, India Post Payments Bank (IPPB), New Delhi"
 }
 
 BANK_NAMES = {
@@ -27,11 +30,14 @@ BANK_NAMES = {
     "ICIC": "ICICI Bank",
     "PUNB": "Punjab National Bank",
     "UTIB": "Axis Bank",
+    "AXIS": "Axis Bank",
     "BARB": "Bank of Baroda",
     "CNRB": "Canara Bank",
     "UBIN": "Union Bank of India",
     "IOBA": "Indian Overseas Bank",
-    "KKBK": "Kotak Mahindra Bank"
+    "KKBK": "Kotak Mahindra Bank",
+    "PYTM": "Paytm Payments Bank",
+    "IPOS": "India Post Payments Bank"
 }
 
 def amount_to_words(amt: float) -> str:
@@ -43,7 +49,7 @@ def amount_to_words(amt: float) -> str:
     return f"INR {amt_int:,.2f} (Rupees {amt_int:,} Only)"
 
 class FreezeTarget(BaseModel):
-    account_number: str = Field(..., pattern=r"^\d{12}$")
+    account_number: str = Field(..., pattern=r"^[A-Za-z0-9\-_]{6,34}$")
     ifsc: str
     bank_name: str
     role: str
