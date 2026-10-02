@@ -1029,7 +1029,7 @@ def check_time_pattern(con, column: str, rules: dict | None = None) -> dict:
                 flat.append(f"{name.replace('_', ' ')} (spread {_pct(spread)}, flat p {_p(fit['p_value'])})")
                 off.append(_off("pattern", f"{name} of {column} as evidence of unusual timing",
                                 "unrealistically flat time pattern",
-                                {"n_slots": full, "relative_spread": _js(spread), **fit}))
+                                {"cycle": name, "n_slots": full, "relative_spread": _js(spread), **fit}))
         cycles[name] = info
     result = {"cycles": cycles}
     if off:

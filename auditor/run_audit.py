@@ -5,11 +5,12 @@
 Two layers (--layer raw | engine | both, default both):
 - raw:    reads only tx and accounts, so it works before the engine has run.
           Includes the funnel's Stage A.
-- engine: checks on features and scores, and the funnel's Stage B.
+- engine: checks on features and scores, gate consistency against the raw
+          layer's do_not_use list, score sanity, and the funnel's Stage B.
 Every finding and funnel stage records the layer it came from.
 
 The database is opened read-only. Columns a database does not have are skipped.
---limits and --roles name domain files (see audits\\); both have defaults there.
+--limits, --roles and --lineage name domain files (see audits\\), with defaults there.
 """
 from __future__ import annotations
 
@@ -24,12 +25,13 @@ import duckdb
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from auditor import funnel, tools  # noqa: E402
+from auditor import engine_checks, funnel, tools  # noqa: E402
 
 DEFAULT_OUT = ROOT / "reports" / "json" / "audit.json"
 DOMAIN_DIR = ROOT / "audits"
 DEFAULT_LIMITS = DOMAIN_DIR / "payment_limits.json"
 DEFAULT_ROLES = DOMAIN_DIR / "funnel_roles.json"
+DEFAULT_LINEAGE = DOMAIN_DIR / "feature_lineage.json"
 
 LAYERS = ("raw", "engine")
 RAW_TABLES = ("tx", "accounts")
@@ -89,7 +91,7 @@ def _existing(path) -> str | None:
 
 
 def run(db_path: str, out_path: Path, limits_path: str | None = None, roles_path: str | None = None,
-        layers: tuple[str, ...] = LAYERS) -> int:
+        layers: tuple[str, ...] = LAYERS, lineage_path: str | None = None) -> int:
     t0 = time.perf_counter()
     findings, failures, rules = [], [], {}
     con = tools.connect(db_path)
@@ -112,6 +114,15 @@ def run(db_path: str, out_path: Path, limits_path: str | None = None, roles_path
                     failures.append({"id": fid, "layer": layer, "error": f"{type(e).__name__}: {str(e)[:200]}"})
                     continue
                 findings.append({"id": fid, "layer": layer, **finding})
+        if "engine" in layers:
+            raw = [f for f in findings if f["layer"] == "raw"] if "raw" in layers else None
+            try:
+                findings += engine_checks.gate_consistency(
+                    con, raw, engine_checks.load_lineage(lineage_path), rules["engine"])
+                findings += engine_checks.score_sanity(con, rules["engine"])
+            except duckdb.Error as e:
+                failures.append({"id": "engine_checks", "layer": "engine",
+                                 "error": f"{type(e).__name__}: {str(e)[:200]}"})
         try:
             flow = funnel.run(con, layers, funnel.load_role_map(roles_path), rules[layers[-1]])
         except duckdb.Error as e:
@@ -181,9 +192,11 @@ def main() -> int:
     ap.add_argument("--limits", default=_existing(DEFAULT_LIMITS), help="JSON file of domain amount limits")
     ap.add_argument("--roles", default=_existing(DEFAULT_ROLES),
                     help="JSON file mapping funnel groups to the roles scoring should give them")
+    ap.add_argument("--lineage", default=_existing(DEFAULT_LINEAGE),
+                    help="JSON file saying which fields each engine feature reads")
     a = ap.parse_args()
     layers = LAYERS if a.layer == "both" else (a.layer,)
-    return run(a.db, Path(a.out), a.limits, a.roles, layers)
+    return run(a.db, Path(a.out), a.limits, a.roles, layers, a.lineage)
 
 
 if __name__ == "__main__":

@@ -76,3 +76,27 @@
 - The raw layer never reads the scoring profile's `audit_rules`, so it answers the same before and after the engine runs; `rules` in `audit.json` is now keyed by layer. `ingest_meta` is still read for the file hash when present.
 - Funnel stages are counted apart from findings (`n_findings` stays 78). The engine layer still holds only feature outliers plus Stage B; no new score checks were added.
 - Arrival = the sender's latest incoming transfer at or before the forward; out/in uses the sender's total sent / total received.
+
+## 2026-10-03 — Task D1d: gate consistency, score sanity, funnel labels
+
+**Step** — two new engine-layer checks; funnel receiver counts relabelled and the arrival definition stated in every hop.
+
+**Files** — new `auditor\engine_checks.py`, `audits\feature_lineage.json`; changed `auditor\run_audit.py` (`--lineage`), `auditor\funnel.py`, `auditor\tools.py` (`cycle` in time-pattern evidence), `auditor\audit_rules.json` (`near_threshold_points`), `reports\json\audit.json`.
+
+**Key names** — `gate_consistency`, `score_sanity`, `profile_parameters`, `load_lineage`; finding ids `check_gate:<finding>|<test>`, `check_scores:final_index`; `funnel.MEMBER`, `ARRIVAL`, `RECEIVERS_LABEL`; hop result key `distinct_receivers_lifetime` (was `receivers_per_sender`), `arrival_definition`.
+
+**Results** — `run_audit.py --db ...`: 7.7 s, 90 findings (raw 50 unchanged, engine 40), 5 funnel stages, 0 failures; two runs identical.
+- engine: CLEAN 9 · TRAP 3 · SIGNAL 12 · NOISE 11 · INCONCLUSIVE 5.
+- Gate consistency, 11 do_not_use entries: CLEAN 8, TRAP 3.
+  - TRAP `device` too-even distribution and `device` identical rare counts: T7 (`device_consistency`, weight 5, no gate) still reads `device`.
+  - TRAP `is_foreign_ip` / `is_headless` twins: MP3 (weight 15) and T7 (weight 5) both score them. MP7 and T5 inherit through neighbours' scores.
+  - CLEAN: hour of day (ZP4 weight 0, disabled, gate closed); day of week, `bank`, `ifsc_bank`, row position x3, adjacency (no parameter uses them).
+- Score sanity (observed): final index no group 0 (23,500); send_only 40; receive_only 70; next_hop 75-80, median 80; payees 85.9-87.4, median 87.4. No two groups overlap. 385 accounts within 5 points of the threshold 65: all receive_only at 70, all flagged.
+- `check_auditor_generic.py` PASS x3; `check_auditor_raw_layer.py` 10 of 10 PASS.
+
+**Deviations**
+- What a feature reads cannot be derived inside `auditor\`, so it is a hand-written domain file (`audits\feature_lineage.json`, from the engine SQL). The gate check is only as good as that file; scored features missing from it make an entry INCONCLUSIVE.
+- Only parameters with a feature list (mule, trust, zero-weight) are checked. Role-score weights, overrides and the trace's `narration_device` weight are not.
+- T7 uses a distinct-device count, not device frequencies; it is TRAP under the literal rule "feature uses the field". Nothing was switched off: engine decision.
+- Twin columns are TRAP only when two different live parameters read them. A closed gate counts as off even with weight > 0 (MP6); `gate_closed_but_weighted` marks that case.
+- `--layer engine` alone has no do_not_use list, so the gate check is one INCONCLUSIVE finding there.

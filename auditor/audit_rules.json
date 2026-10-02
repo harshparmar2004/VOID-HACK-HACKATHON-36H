@@ -21,5 +21,6 @@
   "position_bins": 20,
   "position_min_lift": 2.0,
   "time_sorted_min_share": 0.99,
-  "adjacency_min_ratio": 3.0
+  "adjacency_min_ratio": 3.0,
+  "near_threshold_points": 5
 }

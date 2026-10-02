@@ -54,6 +54,18 @@ MEMBERS = """
         WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)
     )"""
 
+# One group per account: the first group (in funnel order) the account falls in.
+MEMBER = """member AS (
+            SELECT acct_id, arg_min(grp, rnk) AS grp, count(*) AS n_groups
+            FROM ({ranked})
+            GROUP BY 1
+        )""".format(ranked=" UNION ALL ".join(
+    f"SELECT acct_id, '{g}' AS grp, {i} AS rnk FROM {g}" for i, g in enumerate(GROUPS)))
+
+ARRIVAL = ("Arrival = the sender's latest incoming transfer, from any account, at or before the forward; "
+           "receivers = distinct receivers over the sender's lifetime, not per arrival.")
+RECEIVERS_LABEL = "distinct receivers (lifetime)"
+
 
 def load_role_map(path: str | Path | None) -> dict[str, str]:
     """Domain file: funnel group -> the role label scoring is expected to give it."""
@@ -162,20 +174,22 @@ def _hop(con, sender: str, receiver: str) -> dict:
     result = {
         "from": sender, "to": receiver,
         "accounts": {"sender_group": r["n_sender_group"], "senders_in_hop": r["n_senders_in_hop"],
-                     "receiver_group": r["n_receiver_group"], "receivers_in_hop": r["n_receivers_in_hop"]},
+                     "receiver_group": r["n_receiver_group"], "receivers_in_hop": r["n_receivers_in_hop"],
+                     "receivers_label": RECEIVERS_LABEL},
         "transfers": {"in_hop": r["n_transfers"], "from_sender_group_elsewhere": r["n_transfers_elsewhere"]},
         "arrival_to_forward_s": {"median": r["wait_median_s"], "min": r["wait_min_s"], "max": r["wait_max_s"],
                                  "n_with_arrival": r["n_with_arrival"],
                                  "n_without_arrival": r["n_without_arrival"]},
-        "receivers_per_sender": {"median": r["receivers_median"], "min": r["receivers_min"],
-                                 "max": r["receivers_max"]},
+        "distinct_receivers_lifetime": {"label": RECEIVERS_LABEL, "median": r["receivers_median"],
+                                        "min": r["receivers_min"], "max": r["receivers_max"]},
+        "arrival_definition": ARRIVAL,
         "out_in_ratio": {"median": r["out_in_median"], "q1": r["out_in_q1"], "q3": r["out_in_q3"],
                          "min": r["out_in_min"], "max": r["out_in_max"], "n_senders": r["n_with_ratio"]},
         "observed_only": True,
     }
     name = f"{sender} -> {receiver}"
     if not r["n_transfers"]:
-        verdict, why = tools.INCONCLUSIVE, f"{name}: no transfer links these two groups."
+        verdict, why = tools.INCONCLUSIVE, f"{name}: no transfer links these two groups. {ARRIVAL}"
     else:
         verdict = tools.SIGNAL
         wait = ("no earlier arrival (the money starts here)" if not r["n_with_arrival"] else
@@ -185,10 +199,10 @@ def _hop(con, sender: str, receiver: str) -> dict:
                  f"out/in ratio median {r['out_in_median']:.3f} "
                  f"(middle half {r['out_in_q1']:.3f} to {r['out_in_q3']:.3f})")
         why = (f"{name}: {r['n_senders_in_hop']:,} of {r['n_sender_group']:,} senders reach "
-               f"{r['n_receivers_in_hop']:,} of {r['n_receiver_group']:,} receivers in {r['n_transfers']:,} "
+               f"{r['n_receivers_in_hop']:,} of {r['n_receiver_group']:,} {RECEIVERS_LABEL} in {r['n_transfers']:,} "
                f"transfers ({r['n_transfers_elsewhere']:,} go elsewhere); {wait}; "
-               f"{r['receivers_median']:g} receivers per sender (median, {r['receivers_min']} to "
-               f"{r['receivers_max']}); {ratio}. Observed, not thresholds.")
+               f"{r['receivers_median']:g} {RECEIVERS_LABEL} per sender (median, {r['receivers_min']} to "
+               f"{r['receivers_max']}); {ratio}. Observed, not thresholds. {ARRIVAL}")
     return _stage(f"A:{sender}->{receiver}", "A", "raw",
                   f"How does money move from the {sender} group to the {receiver} group?",
                   sql, result, verdict, why)
@@ -214,15 +228,10 @@ def stage_b(con, role_map: dict[str, str], rules: dict) -> list[dict]:
     if any(tools._label(role, lab) != role for role in role_map.values()):
         return [_stage(sid, "B", "engine", question, None, {}, tools.INCONCLUSIVE,
                        "The role map holds a role that is not a plain label.")]
-    ranked = " UNION ALL ".join(f"SELECT acct_id, '{g}' AS grp, {i} AS rnk FROM {g}" for i, g in enumerate(GROUPS))
     expected = ", ".join(f"('{g}', '{role_map[g]}')" for g in GROUPS if g in role_map) or "(CAST(NULL AS VARCHAR), CAST(NULL AS VARCHAR))"
     base = f"""
         {MEMBERS},
-        member AS (
-            SELECT acct_id, arg_min(grp, rnk) AS grp, count(*) AS n_groups
-            FROM ({ranked})
-            GROUP BY 1
-        ),
+        {MEMBER},
         expected(grp, role) AS (VALUES {expected}),
         scored AS (
             SELECT s.acct_id, s.role FROM scores s

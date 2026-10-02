@@ -7,12 +7,12 @@
       "accounts": 24873
     },
     "duckdb_version": "1.5.6",
-    "runtime_s": 4.892,
+    "runtime_s": 5.743,
     "layers": [
       "raw",
       "engine"
     ],
-    "n_findings": 78,
+    "n_findings": 90,
     "n_funnel_stages": 5,
     "n_failures": 0
   },
@@ -40,6 +40,7 @@
       "position_min_lift": 2.0,
       "time_sorted_min_share": 0.99,
       "adjacency_min_ratio": 3.0,
+      "near_threshold_points": 5,
       "ranges": {
         "amount_paise": {
           "min": 1,
@@ -87,6 +88,7 @@
       "position_min_lift": 2.0,
       "time_sorted_min_share": 0.99,
       "adjacency_min_ratio": 3.0,
+      "near_threshold_points": 5,
       "ranges": {
         "amount_paise": {
           "min": 1,
@@ -113,9 +115,9 @@
     }
   },
   "summary": {
-    "CLEAN": 26,
-    "TRAP": 3,
-    "SIGNAL": 18,
+    "CLEAN": 34,
+    "TRAP": 6,
+    "SIGNAL": 19,
     "NOISE": 14,
     "ARTEFACT": 9,
     "INCONCLUSIVE": 8
@@ -141,9 +143,9 @@
     },
     "engine": {
       "findings": {
-        "CLEAN": 1,
-        "TRAP": 0,
-        "SIGNAL": 11,
+        "CLEAN": 9,
+        "TRAP": 3,
+        "SIGNAL": 12,
         "NOISE": 11,
         "ARTEFACT": 0,
         "INCONCLUSIVE": 5
@@ -231,6 +233,7 @@
         "name": "hour_of_day of ts as evidence of unusual timing",
         "test": "unrealistically flat time pattern",
         "evidence": {
+          "cycle": "hour_of_day",
           "n_slots": 24,
           "relative_spread": 0.010572,
           "chi2": 10.28608,
@@ -245,6 +248,7 @@
         "name": "day_of_week of ts as evidence of unusual timing",
         "test": "unrealistically flat time pattern",
         "evidence": {
+          "cycle": "day_of_week",
           "n_slots": 7,
           "relative_spread": 0.006515,
           "chi2": 8.592719,
@@ -2049,6 +2053,7 @@
           "name": "hour_of_day of ts as evidence of unusual timing",
           "test": "unrealistically flat time pattern",
           "evidence": {
+            "cycle": "hour_of_day",
             "n_slots": 24,
             "relative_spread": 0.010572,
             "chi2": 10.28608,
@@ -2062,6 +2067,7 @@
           "name": "day_of_week of ts as evidence of unusual timing",
           "test": "unrealistically flat time pattern",
           "evidence": {
+            "cycle": "day_of_week",
             "n_slots": 7,
             "relative_spread": 0.006515,
             "chi2": 8.592719,
@@ -4512,6 +4518,609 @@
       "verdict": "SIGNAL",
       "explanation": "neighbour_risk outliers concentrate in flow_class=send_only: 100.00% of that group against 5.52% overall (18.1x).",
       "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_consistency:is_foreign_ip,is_headless|identical columns",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_consistency:is_foreign_ip,is_headless",
+        "test": "identical columns"
+      },
+      "question": "Does the engine still score is_foreign_ip and is_headless counted as two independent signals?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "is_foreign_ip and is_headless counted as two independent signals",
+          "test": "identical columns"
+        },
+        "features_using_it": [
+          [
+            "device_consistency",
+            "flagged_in_share",
+            "flagged_out_share"
+          ],
+          [
+            "flagged_in_share",
+            "flagged_out_share"
+          ]
+        ],
+        "parameters": [
+          {
+            "parameter": "MP3",
+            "features": [
+              "flagged_in_share",
+              "flagged_out_share"
+            ],
+            "weight": 15,
+            "enabled": true,
+            "gate": null,
+            "gate_status": null,
+            "switched_off": false,
+            "off_because": [],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "flagged_in_share": "one combined edge flag: headless AND foreign IP AND cash-out narration category",
+              "flagged_out_share": "one combined edge flag: headless AND foreign IP AND cash-out narration category"
+            }
+          },
+          {
+            "parameter": "ZP2",
+            "features": [
+              "device_consistency"
+            ],
+            "weight": 0,
+            "enabled": false,
+            "gate": "gate_ip_reuse",
+            "gate_status": "closed",
+            "switched_off": true,
+            "off_because": [
+              "weight 0",
+              "disabled",
+              "gate closed"
+            ],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "device_consistency": "1 when the account sends from exactly one distinct device value and never from a foreign or reserved IP; no per-device share is used"
+            }
+          },
+          {
+            "parameter": "T7",
+            "features": [
+              "device_consistency"
+            ],
+            "weight": 5,
+            "enabled": true,
+            "gate": null,
+            "gate_status": null,
+            "switched_off": false,
+            "off_because": [],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "device_consistency": "1 when the account sends from exactly one distinct device value and never from a foreign or reserved IP; no per-device share is used"
+            }
+          },
+          {
+            "parameter": "MP3",
+            "features": [
+              "flagged_in_share",
+              "flagged_out_share"
+            ],
+            "weight": 15,
+            "enabled": true,
+            "gate": null,
+            "gate_status": null,
+            "switched_off": false,
+            "off_because": [],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "flagged_in_share": "one combined edge flag: headless AND foreign IP AND cash-out narration category",
+              "flagged_out_share": "one combined edge flag: headless AND foreign IP AND cash-out narration category"
+            }
+          }
+        ],
+        "still_scored_by": [
+          "MP3",
+          "T7"
+        ],
+        "indirect_via_scores": [
+          "MP7",
+          "T5"
+        ],
+        "features_without_lineage": []
+      },
+      "verdict": "TRAP",
+      "explanation": "is_foreign_ip and is_headless counted as two independent signals: MP3, T7 count it more than once (weight 15, 5, gate open); MP7, T5 inherit it through neighbours' scores.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_distribution:device|too-even distribution",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_distribution:device",
+        "test": "too-even distribution"
+      },
+      "question": "Does the engine still score device (how often each value occurs)?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "field",
+          "name": "device (how often each value occurs)",
+          "test": "too-even distribution"
+        },
+        "features_using_it": [
+          [
+            "device_consistency"
+          ]
+        ],
+        "parameters": [
+          {
+            "parameter": "ZP2",
+            "features": [
+              "device_consistency"
+            ],
+            "weight": 0,
+            "enabled": false,
+            "gate": "gate_ip_reuse",
+            "gate_status": "closed",
+            "switched_off": true,
+            "off_because": [
+              "weight 0",
+              "disabled",
+              "gate closed"
+            ],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "device_consistency": "1 when the account sends from exactly one distinct device value and never from a foreign or reserved IP; no per-device share is used"
+            }
+          },
+          {
+            "parameter": "T7",
+            "features": [
+              "device_consistency"
+            ],
+            "weight": 5,
+            "enabled": true,
+            "gate": null,
+            "gate_status": null,
+            "switched_off": false,
+            "off_because": [],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "device_consistency": "1 when the account sends from exactly one distinct device value and never from a foreign or reserved IP; no per-device share is used"
+            }
+          }
+        ],
+        "still_scored_by": [
+          "T7"
+        ],
+        "indirect_via_scores": [
+          "MP7",
+          "T5"
+        ],
+        "features_without_lineage": []
+      },
+      "verdict": "TRAP",
+      "explanation": "device (how often each value occurs): T7 still score it (weight 5, gate open); MP7, T5 inherit it through neighbours' scores.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_distribution:device|identical rare counts",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_distribution:device",
+        "test": "identical rare counts"
+      },
+      "question": "Does the engine still score row counts of the rare values of device?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "row counts of the rare values of device",
+          "test": "identical rare counts"
+        },
+        "features_using_it": [
+          [
+            "device_consistency"
+          ]
+        ],
+        "parameters": [
+          {
+            "parameter": "ZP2",
+            "features": [
+              "device_consistency"
+            ],
+            "weight": 0,
+            "enabled": false,
+            "gate": "gate_ip_reuse",
+            "gate_status": "closed",
+            "switched_off": true,
+            "off_because": [
+              "weight 0",
+              "disabled",
+              "gate closed"
+            ],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "device_consistency": "1 when the account sends from exactly one distinct device value and never from a foreign or reserved IP; no per-device share is used"
+            }
+          },
+          {
+            "parameter": "T7",
+            "features": [
+              "device_consistency"
+            ],
+            "weight": 5,
+            "enabled": true,
+            "gate": null,
+            "gate_status": null,
+            "switched_off": false,
+            "off_because": [],
+            "gate_closed_but_weighted": false,
+            "how": {
+              "device_consistency": "1 when the account sends from exactly one distinct device value and never from a foreign or reserved IP; no per-device share is used"
+            }
+          }
+        ],
+        "still_scored_by": [
+          "T7"
+        ],
+        "indirect_via_scores": [
+          "MP7",
+          "T5"
+        ],
+        "features_without_lineage": []
+      },
+      "verdict": "TRAP",
+      "explanation": "row counts of the rare values of device: T7 still score it (weight 5, gate open); MP7, T5 inherit it through neighbours' scores.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_distribution:bank|too-even distribution",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_distribution:bank",
+        "test": "too-even distribution"
+      },
+      "question": "Does the engine still score bank (how often each value occurs)?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "field",
+          "name": "bank (how often each value occurs)",
+          "test": "too-even distribution"
+        },
+        "features_using_it": [
+          []
+        ],
+        "parameters": [],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "bank (how often each value occurs): no parameter of the profile uses it.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_distribution:ifsc_bank|too-even distribution",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_distribution:ifsc_bank",
+        "test": "too-even distribution"
+      },
+      "question": "Does the engine still score ifsc_bank (how often each value occurs)?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "field",
+          "name": "ifsc_bank (how often each value occurs)",
+          "test": "too-even distribution"
+        },
+        "features_using_it": [
+          []
+        ],
+        "parameters": [],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "ifsc_bank (how often each value occurs): no parameter of the profile uses it.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_time_pattern:ts|unrealistically flat time pattern",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_time_pattern:ts",
+        "test": "unrealistically flat time pattern"
+      },
+      "question": "Does the engine still score hour_of_day of ts as evidence of unusual timing?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "hour_of_day of ts as evidence of unusual timing",
+          "test": "unrealistically flat time pattern"
+        },
+        "features_using_it": [
+          [
+            "odd_hour_share"
+          ]
+        ],
+        "parameters": [
+          {
+            "parameter": "ZP4",
+            "features": [
+              "odd_hour_share"
+            ],
+            "weight": 0,
+            "enabled": false,
+            "gate": "gate_hourly_evenness",
+            "gate_status": "closed",
+            "switched_off": true,
+            "off_because": [
+              "weight 0",
+              "disabled",
+              "gate closed"
+            ],
+            "gate_closed_but_weighted": false,
+            "how": {}
+          }
+        ],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "hour_of_day of ts as evidence of unusual timing: switched off in the profile: ZP4 (weight 0, disabled, gate closed).",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_time_pattern:ts|unrealistically flat time pattern",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_time_pattern:ts",
+        "test": "unrealistically flat time pattern"
+      },
+      "question": "Does the engine still score day_of_week of ts as evidence of unusual timing?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "day_of_week of ts as evidence of unusual timing",
+          "test": "unrealistically flat time pattern"
+        },
+        "features_using_it": [
+          []
+        ],
+        "parameters": [],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "day_of_week of ts as evidence of unusual timing: no parameter of the profile uses it.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_row_position:device|unusual rows concentrated by row position",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_row_position:device",
+        "test": "unusual rows concentrated by row position"
+      },
+      "question": "Does the engine still score row position (tx_key order) of rows with a rare device value?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "row position (tx_key order) of rows with a rare device value",
+          "test": "unusual rows concentrated by row position"
+        },
+        "features_using_it": [
+          []
+        ],
+        "parameters": [],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "row position (tx_key order) of rows with a rare device value: no parameter of the profile uses it.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_row_position:is_foreign_ip|unusual rows concentrated by row position",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_row_position:is_foreign_ip",
+        "test": "unusual rows concentrated by row position"
+      },
+      "question": "Does the engine still score row position (tx_key order) of rows with a rare is_foreign_ip value?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "row position (tx_key order) of rows with a rare is_foreign_ip value",
+          "test": "unusual rows concentrated by row position"
+        },
+        "features_using_it": [
+          []
+        ],
+        "parameters": [],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "row position (tx_key order) of rows with a rare is_foreign_ip value: no parameter of the profile uses it.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_row_position:is_headless|unusual rows concentrated by row position",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_row_position:is_headless",
+        "test": "unusual rows concentrated by row position"
+      },
+      "question": "Does the engine still score row position (tx_key order) of rows with a rare is_headless value?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "row position (tx_key order) of rows with a rare is_headless value",
+          "test": "unusual rows concentrated by row position"
+        },
+        "features_using_it": [
+          []
+        ],
+        "parameters": [],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "row position (tx_key order) of rows with a rare is_headless value: no parameter of the profile uses it.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_gate:check_adjacency:dst,src|linked rows adjacent more than chance",
+      "layer": "engine",
+      "tool": "check_gate",
+      "args": {
+        "finding": "check_adjacency:dst,src",
+        "test": "linked rows adjacent more than chance"
+      },
+      "question": "Does the engine still score adjacency in tx_key order of rows linked by dst = next src?",
+      "sql": "SELECT profile_id, definition FROM scoring_profiles WHERE is_active LIMIT 1",
+      "result": {
+        "profile_id": "v1-verified",
+        "do_not_use": {
+          "kind": "pattern",
+          "name": "adjacency in tx_key order of rows linked by dst = next src",
+          "test": "linked rows adjacent more than chance"
+        },
+        "features_using_it": [
+          []
+        ],
+        "parameters": [],
+        "still_scored_by": [],
+        "indirect_via_scores": [],
+        "features_without_lineage": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "adjacency in tx_key order of rows linked by dst = next src: no parameter of the profile uses it.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_scores:final_index",
+      "layer": "engine",
+      "tool": "check_scores",
+      "args": {
+        "score": "final_index",
+        "group": "funnel group"
+      },
+      "question": "How is the final index spread across the funnel's groups, and who sits near the flag threshold?",
+      "sql": "WITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n),\n    member AS (\n        SELECT acct_id, arg_min(grp, rnk) AS grp, count(*) AS n_groups\n        FROM (SELECT acct_id, 'send_only' AS grp, 0 AS rnk FROM send_only UNION ALL SELECT acct_id, 'payees' AS grp, 1 AS rnk FROM payees UNION ALL SELECT acct_id, 'next_hop' AS grp, 2 AS rnk FROM next_hop UNION ALL SELECT acct_id, 'receive_only' AS grp, 3 AS rnk FROM receive_only)\n        GROUP BY 1\n    ),\n    g AS (\n        SELECT coalesce(m.grp, 'no_group') AS grp, s.final_index AS x, s.is_flagged\n        FROM scores s LEFT JOIN member m ON m.acct_id = s.acct_id\n        WHERE s.profile_id = (SELECT profile_id FROM scoring_profiles WHERE is_active LIMIT 1)\n    ),\n    stats AS (\n        SELECT grp, count(*) AS n, count(x) AS n_scored, min(x) AS lo, quantile_cont(x, 0.25) AS q1,\n               median(x) AS med, quantile_cont(x, 0.75) AS q3, max(x) AS hi,\n               count(*) FILTER (is_flagged) AS n_flagged,\n               count(*) FILTER (abs(x - 65.0) <= 5.0 AND NOT is_flagged) AS n_near_not_flagged,\n               count(*) FILTER (abs(x - 65.0) <= 5.0 AND is_flagged) AS n_near_flagged\n        FROM g GROUP BY grp\n    )\n    SELECT * FROM stats ORDER BY grp;\n\nWITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n),\n    member AS (\n        SELECT acct_id, arg_min(grp, rnk) AS grp, count(*) AS n_groups\n        FROM (SELECT acct_id, 'send_only' AS grp, 0 AS rnk FROM send_only UNION ALL SELECT acct_id, 'payees' AS grp, 1 AS rnk FROM payees UNION ALL SELECT acct_id, 'next_hop' AS grp, 2 AS rnk FROM next_hop UNION ALL SELECT acct_id, 'receive_only' AS grp, 3 AS rnk FROM receive_only)\n        GROUP BY 1\n    ),\n    g AS (\n        SELECT coalesce(m.grp, 'no_group') AS grp, s.final_index AS x, s.is_flagged\n        FROM scores s LEFT JOIN member m ON m.acct_id = s.acct_id\n        WHERE s.profile_id = (SELECT profile_id FROM scoring_profiles WHERE is_active LIMIT 1)\n    ),\n    stats AS (\n        SELECT grp, count(*) AS n, count(x) AS n_scored, min(x) AS lo, quantile_cont(x, 0.25) AS q1,\n               median(x) AS med, quantile_cont(x, 0.75) AS q3, max(x) AS hi,\n               count(*) FILTER (is_flagged) AS n_flagged,\n               count(*) FILTER (abs(x - 65.0) <= 5.0 AND NOT is_flagged) AS n_near_not_flagged,\n               count(*) FILTER (abs(x - 65.0) <= 5.0 AND is_flagged) AS n_near_flagged\n        FROM g GROUP BY grp\n    )\n    SELECT a.grp, b.grp, greatest(a.lo, b.lo) AS lo, least(a.hi, b.hi) AS hi,\n           (SELECT count(*) FROM g WHERE g.grp = a.grp AND g.x BETWEEN greatest(a.lo, b.lo) AND least(a.hi, b.hi)),\n           (SELECT count(*) FROM g WHERE g.grp = b.grp AND g.x BETWEEN greatest(a.lo, b.lo) AND least(a.hi, b.hi))\n    FROM stats a JOIN stats b ON a.grp < b.grp\n    WHERE greatest(a.lo, b.lo) <= least(a.hi, b.hi)\n    ORDER BY 1, 2",
+      "result": {
+        "flag_threshold": 65,
+        "near_margin_points": 5.0,
+        "n_near_threshold": 385,
+        "groups": [
+          {
+            "group": "next_hop",
+            "accounts": 559,
+            "scored": 559,
+            "min": 75.0,
+            "q1": 80.0,
+            "median": 80.0,
+            "q3": 80.0,
+            "max": 80.0,
+            "flagged": 559,
+            "near_threshold_not_flagged": 0,
+            "near_threshold_flagged": 0
+          },
+          {
+            "group": "no_group",
+            "accounts": 23500,
+            "scored": 23500,
+            "min": 0.0,
+            "q1": 0.0,
+            "median": 0.0,
+            "q3": 0.0,
+            "max": 0.0,
+            "flagged": 0,
+            "near_threshold_not_flagged": 0,
+            "near_threshold_flagged": 0
+          },
+          {
+            "group": "payees",
+            "accounts": 129,
+            "scored": 129,
+            "min": 85.912129,
+            "q1": 87.449495,
+            "median": 87.449495,
+            "q3": 87.449495,
+            "max": 87.449495,
+            "flagged": 129,
+            "near_threshold_not_flagged": 0,
+            "near_threshold_flagged": 0
+          },
+          {
+            "group": "receive_only",
+            "accounts": 385,
+            "scored": 385,
+            "min": 70.0,
+            "q1": 70.0,
+            "median": 70.0,
+            "q3": 70.0,
+            "max": 70.0,
+            "flagged": 385,
+            "near_threshold_not_flagged": 0,
+            "near_threshold_flagged": 385
+          },
+          {
+            "group": "send_only",
+            "accounts": 300,
+            "scored": 300,
+            "min": 40.0,
+            "q1": 40.0,
+            "median": 40.0,
+            "q3": 40.0,
+            "max": 40.0,
+            "flagged": 0,
+            "near_threshold_not_flagged": 0,
+            "near_threshold_flagged": 0
+          }
+        ],
+        "overlaps": [],
+        "observed_only": true
+      },
+      "verdict": "SIGNAL",
+      "explanation": "Final index by group: next_hop median 80 (75 to 80); no_group median 0 (0 to 0); payees median 87.4495 (85.9121 to 87.4495); receive_only median 70 (70 to 70); send_only median 40 (40 to 40); no two groups share any part of their range; 385 account(s) within 5 points of the flag threshold 65. Observed, not thresholds.",
+      "do_not_use": []
     }
   ],
   "funnel": {
@@ -4565,7 +5174,8 @@
             "sender_group": 300,
             "senders_in_hop": 300,
             "receiver_group": 129,
-            "receivers_in_hop": 129
+            "receivers_in_hop": 129,
+            "receivers_label": "distinct receivers (lifetime)"
           },
           "transfers": {
             "in_hop": 300,
@@ -4578,11 +5188,13 @@
             "n_with_arrival": 0,
             "n_without_arrival": 300
           },
-          "receivers_per_sender": {
+          "distinct_receivers_lifetime": {
+            "label": "distinct receivers (lifetime)",
             "median": 1.0,
             "min": 1,
             "max": 1
           },
+          "arrival_definition": "Arrival = the sender's latest incoming transfer, from any account, at or before the forward; receivers = distinct receivers over the sender's lifetime, not per arrival.",
           "out_in_ratio": {
             "median": null,
             "q1": null,
@@ -4594,7 +5206,7 @@
           "observed_only": true
         },
         "verdict": "SIGNAL",
-        "explanation": "send_only -> payees: 300 of 300 senders reach 129 of 129 receivers in 300 transfers (0 go elsewhere); no earlier arrival (the money starts here); 1 receivers per sender (median, 1 to 1); no inflow, so no out/in ratio. Observed, not thresholds."
+        "explanation": "send_only -> payees: 300 of 300 senders reach 129 of 129 distinct receivers (lifetime) in 300 transfers (0 go elsewhere); no earlier arrival (the money starts here); 1 distinct receivers (lifetime) per sender (median, 1 to 1); no inflow, so no out/in ratio. Observed, not thresholds. Arrival = the sender's latest incoming transfer, from any account, at or before the forward; receivers = distinct receivers over the sender's lifetime, not per arrival."
       },
       {
         "id": "A:payees->next_hop",
@@ -4609,7 +5221,8 @@
             "sender_group": 129,
             "senders_in_hop": 129,
             "receiver_group": 559,
-            "receivers_in_hop": 559
+            "receivers_in_hop": 559,
+            "receivers_label": "distinct receivers (lifetime)"
           },
           "transfers": {
             "in_hop": 1327,
@@ -4622,11 +5235,13 @@
             "n_with_arrival": 1327,
             "n_without_arrival": 0
           },
-          "receivers_per_sender": {
+          "distinct_receivers_lifetime": {
+            "label": "distinct receivers (lifetime)",
             "median": 9.0,
             "min": 3,
             "max": 32
           },
+          "arrival_definition": "Arrival = the sender's latest incoming transfer, from any account, at or before the forward; receivers = distinct receivers over the sender's lifetime, not per arrival.",
           "out_in_ratio": {
             "median": 0.98,
             "q1": 0.98,
@@ -4638,7 +5253,7 @@
           "observed_only": true
         },
         "verdict": "SIGNAL",
-        "explanation": "payees -> next_hop: 129 of 129 senders reach 559 of 559 receivers in 1,327 transfers (0 go elsewhere); forwarded a median 542 s after arrival (180 to 898 s); 9 receivers per sender (median, 3 to 32); out/in ratio median 0.980 (middle half 0.980 to 0.980). Observed, not thresholds."
+        "explanation": "payees -> next_hop: 129 of 129 senders reach 559 of 559 distinct receivers (lifetime) in 1,327 transfers (0 go elsewhere); forwarded a median 542 s after arrival (180 to 898 s); 9 distinct receivers (lifetime) per sender (median, 3 to 32); out/in ratio median 0.980 (middle half 0.980 to 0.980). Observed, not thresholds. Arrival = the sender's latest incoming transfer, from any account, at or before the forward; receivers = distinct receivers over the sender's lifetime, not per arrival."
       },
       {
         "id": "A:next_hop->receive_only",
@@ -4653,7 +5268,8 @@
             "sender_group": 559,
             "senders_in_hop": 559,
             "receiver_group": 385,
-            "receivers_in_hop": 385
+            "receivers_in_hop": 385,
+            "receivers_label": "distinct receivers (lifetime)"
           },
           "transfers": {
             "in_hop": 1327,
@@ -4666,11 +5282,13 @@
             "n_with_arrival": 1327,
             "n_without_arrival": 0
           },
-          "receivers_per_sender": {
+          "distinct_receivers_lifetime": {
+            "label": "distinct receivers (lifetime)",
             "median": 2.0,
             "min": 1,
             "max": 8
           },
+          "arrival_definition": "Arrival = the sender's latest incoming transfer, from any account, at or before the forward; receivers = distinct receivers over the sender's lifetime, not per arrival.",
           "out_in_ratio": {
             "median": 0.96,
             "q1": 0.96,
@@ -4682,7 +5300,7 @@
           "observed_only": true
         },
         "verdict": "SIGNAL",
-        "explanation": "next_hop -> receive_only: 559 of 559 senders reach 385 of 385 receivers in 1,327 transfers (0 go elsewhere); forwarded a median 1,035 s after arrival (123 to 1,799 s); 2 receivers per sender (median, 1 to 8); out/in ratio median 0.960 (middle half 0.960 to 0.960). Observed, not thresholds."
+        "explanation": "next_hop -> receive_only: 559 of 559 senders reach 385 of 385 distinct receivers (lifetime) in 1,327 transfers (0 go elsewhere); forwarded a median 1,035 s after arrival (123 to 1,799 s); 2 distinct receivers (lifetime) per sender (median, 1 to 8); out/in ratio median 0.960 (middle half 0.960 to 0.960). Observed, not thresholds. Arrival = the sender's latest incoming transfer, from any account, at or before the forward; receivers = distinct receivers over the sender's lifetime, not per arrival."
       },
       {
         "id": "B:agreement",
