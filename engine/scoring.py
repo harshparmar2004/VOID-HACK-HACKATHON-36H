@@ -603,14 +603,21 @@ def split_sections(text: str) -> dict[str, str]:
 
 
 def run_pass2(con: duckdb.DuckDBPyConnection, profile_id: str,
-              profile: dict) -> tuple[Builder, list[dict]]:
-    """Build score_roles (temp) from score_pass1 and layer_links."""
+              profile: dict) -> tuple[Builder, list[dict], list[str]]:
+    """Build score_roles (temp) from score_pass1 and layer_links.
+
+    A profile that flags too few accounts proves no layer link. That is a
+    result, not an error: pass 2 runs on 0 links and says so in a warning.
+    """
+    warnings = []
     n_links = con.execute(
         "SELECT count(*) FROM layer_links WHERE profile_id = ?", [profile_id]).fetchone()[0]
     if not n_links:
-        raise SystemExit(
-            f"no layer_links for profile {profile_id} -- run engine\\scoring.py --pass 1 "
-            "and engine\\links.py first")
+        warnings.append(
+            f"profile {profile_id} has 0 layer links, so no role is confirmed by a link: "
+            f"flagged accounts stay {profile['roles']['unclassified_role']} where a "
+            "confirming link is required. If engine\\links.py has not run for this "
+            "profile, run it and score again.")
     # The links must have been proven between accounts THIS pass 1 flags;
     # otherwise the profile or the features changed since links.py ran.
     stale = con.execute(
@@ -640,7 +647,7 @@ def run_pass2(con: duckdb.DuckDBPyConnection, profile_id: str,
     sql2, builder, plan = build_sql(profile, cols2, 2, "features_p2", "score_pass2")
     con.execute(sql2)
     con.execute(build_roles_sql(profile, builder, plan))
-    return builder, plan
+    return builder, plan, warnings
 
 
 def report_roles(con: duckdb.DuckDBPyConnection, profile_id: str) -> None:
@@ -667,7 +674,7 @@ def report_roles(con: duckdb.DuckDBPyConnection, profile_id: str) -> None:
     print("\nfreeze_recommended by role (holding = received - sent; bands are not read):")
     for role, n, fz, held, fz_held in con.execute(
             "SELECT role, count(*), count(*) FILTER (WHERE freeze_recommended),"
-            "       sum(holding_paise) / 100.0,"
+            "       coalesce(sum(holding_paise), 0) / 100.0,"
             "       coalesce(sum(holding_paise) FILTER (WHERE freeze_recommended), 0) / 100.0 "
             "FROM scores WHERE profile_id = ? AND is_flagged GROUP BY ROLLUP (role) "
             "ORDER BY role NULLS LAST", [profile_id]).fetchall():
@@ -747,8 +754,9 @@ def report(con: duckdb.DuckDBPyConnection, profile_id: str, plan: list[dict],
         print(f"    {p['id']:<4} w={w:>4g}  full {full:>6,}  half+ {half:>6,}  >0 {pos:>6,}   {e['state']}")
 
 
-def score(con: duckdb.DuckDBPyConnection, pass_no: int = 2, label: str = "") -> None:
-    """Score the active profile on `con` and refill its `scores` rows.
+def score(con: duckdb.DuckDBPyConnection, pass_no: int = 2, label: str = "") -> list[str]:
+    """Score the active profile on `con` and refill its `scores` rows; returns
+    the warnings of the run (empty when there are none).
 
     The one scoring path. `con` is either the case file (engine runs) or an
     in-memory connection whose `scores`, `features`, `layer_links` and
@@ -785,14 +793,17 @@ def score(con: duckdb.DuckDBPyConnection, pass_no: int = 2, label: str = "") -> 
     # an earlier pass-2 run wrote.
     work = "score_pass1"
     role_cols = ""
+    warnings = []
     if pass_no == 2:
-        builder, plan = run_pass2(con, profile_id, profile)
+        builder, plan, warnings = run_pass2(con, profile_id, profile)
         work = "score_roles"
         role_cols = (", l1_score, l2_score, l3_score, victim_score, role, role_confirmed, "
                      "candidate_roles, upstream_role_share, downstream_role_share, "
                      "holding_paise, freeze_recommended")
     for note in builder.notes:
         print(f"  NOTE       : {note}")
+    for w in warnings:
+        print(f"  WARNING    : {w}")
 
     # Refill this profile only; other profiles' rows are untouched (Section 9).
     con.execute("BEGIN")
@@ -860,6 +871,7 @@ def score(con: duckdb.DuckDBPyConnection, pass_no: int = 2, label: str = "") -> 
 
     print(f"\nsql seconds  : {sql_seconds:.2f}")
     print(f"total seconds: {time.perf_counter() - t0:.2f}")
+    return warnings
 
 
 def main() -> None:

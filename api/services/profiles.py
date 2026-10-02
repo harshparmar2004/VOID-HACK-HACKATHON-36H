@@ -191,8 +191,8 @@ def preview(con, request: PreviewRequest) -> PreviewResponse:
             try:
                 with contextlib.redirect_stdout(io.StringIO()):
                     scoring_engine.score(mem, 1, "preview")
-                    links_engine.build(mem, "preview")
-                    scoring_engine.score(mem, 2, "preview")
+                    engine_warnings = links_engine.build(mem, "preview")
+                    engine_warnings += scoring_engine.score(mem, 2, "preview")
             except (SystemExit, duckdb.Error) as e:   # the engine refused the changed profile
                 raise HTTPException(422, f"Profile cannot be scored: {e}") from e
             preview_repo.compare(mem, profile_id)
@@ -201,7 +201,8 @@ def preview(con, request: PreviewRequest) -> PreviewResponse:
                 raise HTTPException(503, "stored scores do not cover the previewed accounts")
             limit = request.account_limit
             return PreviewResponse(
-                profile_id=profile_id, changes=request.changes, warnings=warnings,
+                profile_id=profile_id, changes=request.changes,
+                warnings=warnings + engine_warnings,
                 seconds=round(time.perf_counter() - t0, 3), accounts=t["accounts"],
                 flagged_count=t["flagged_after"],
                 flagged=CountChange(before=t["flagged_before"], after=t["flagged_after"]),

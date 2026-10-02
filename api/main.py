@@ -1,6 +1,8 @@
 """FastAPI app. Start with:
 
     .venv\\Scripts\\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+
+or run.bat. /api/* is the API; every other path serves the built UI (ui\\dist).
 """
 from __future__ import annotations
 
@@ -8,7 +10,7 @@ import logging
 
 from fastapi import FastAPI
 
-from api import middleware
+from api import middleware, ui
 from api.routers import (
     benchmark, deferred, entities, mules, profiles, scanner, status, templates, trace,
     transactions, victims)
@@ -30,3 +32,4 @@ for _router in (status.router, victims.router, mules.router, entities.router, tr
                 profiles.router, transactions.router, scanner.router, templates.router,
                 benchmark.router, deferred.router):
     app.include_router(_router, prefix=API_PREFIX)
+ui.install(app, API_PREFIX)        # last: the API routes match first

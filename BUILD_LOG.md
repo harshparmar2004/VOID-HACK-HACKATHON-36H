@@ -553,3 +553,55 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - Touched `App.jsx` and `MuleDossierView.jsx` (needed to open a dossier or trace from the preview lists).
 - Checked from `http://localhost:5173`: the server running on 8000 does not yet allow the `127.0.0.1:5173` origin (needs a restart).
 - `two_signal_rule_enabled` is previewable in the API but was not in the task's list, so it is not editable.
+
+## 2026-10-02 — Step 7e: scoring with no layer links
+
+**Step** — a profile that proves 0 layer links is scored, not refused.
+
+**Files** — `engine\scoring.py`, `engine\links.py`, `api\services\profiles.py`.
+
+**Key names** — `score()` and `links.build()` now return `list[str]` warnings; `run_pass2()` returns `(builder, plan, warnings)`; `engine_warnings` (preview service).
+
+**What changed**
+- `run_pass2`: 0 `layer_links` no longer raises; pass 2 runs on 0 links and returns a warning. Roles fall to `roles.unclassified_role` through the existing `has_link` rule (no SQL change). The stale-links check is unchanged.
+- `links.build`: returns a warning when it builds 0 links (it never raised; counts print as 0).
+- `report_roles`: holding total is `coalesce(sum, 0)` — with 0 flagged accounts the ROLLUP total row was NULL and crashed the print.
+- Preview appends the engine warnings to the response `warnings`. Same functions serve the file path; warnings print as `WARNING :`.
+
+**Results** — `audits\check_api.py`: 1281 checks, 0 failed, 19.98 s.
+
+| preview | status | flagged | links | roles after | engine warnings |
+|---|---|---|---|---|---|
+| no changes | 200 | 1,073 -> 1,073 | 2,954 -> 2,954 | identical, 0 final moved | 0 |
+| flag_threshold 85 | 200 (was 422) | 1,073 -> 129 | 2,954 -> 0 | 129 UNCLASSIFIED_MULE | 2 |
+| flag_threshold 90 | 200 (was 422) | 1,073 -> 0 | 2,954 -> 0 | none | 2 |
+
+**Deviations**
+- File path not run end to end: it needs a changed active profile in `data\case.duckdb`. It shares the functions the preview ran.
+- Pass 2 can no longer tell "links.py not run" from "links.py found none"; the warning names both.
+- `engine\rings.py` still raises on 0 layer links (not in this task).
+
+## 2026-10-02 — Step 7e: UI on port 8000, offline run
+
+**Step** — the API serves the built UI; `run.bat`; offline wheels. (The entry above was logged as 7e too: the no-links fix.)
+
+**Files** — new `api\ui.py`, `run.bat`; changed `api\main.py`, `ui\src\config.js`, `ui\index.html` (title); rebuilt `ui\dist`.
+
+**Key names** — `ui.install(app, API_PREFIX)`, `UI_DIST`, `INDEX`; `LOCAL_API_BASE` = `/api` when `import.meta.env.PROD`.
+
+**What changed**
+- Catch-all `GET /{path}` added after the API routers: a file of `ui\dist` if it exists (resolved inside `ui\dist` only), else `index.html` (no-cache). Unknown `/api/*` stays a JSON 404. No `ui\dist` -> API-only.
+- `run.bat`: checks `.venv\Scripts\python.exe`, `data\case.duckdb`, `ui\dist\index.html`; clear ERROR + exit 1; starts uvicorn on 127.0.0.1:8000; opens the browser after ~3 s.
+- No external resource existed in `ui\src` (no fonts, CDN scripts or styles); nothing to bundle.
+
+**Results**
+- `ui\dist` URLs left: `www.w3.org` XML namespaces (21), `react.dev/errors/` (2, text of React error messages), `tailwindcss.com` (1, licence comment). None is loaded.
+- Headless Chrome on `run.bat`'s server: UI loads from port 8000; trace `SBIN10000294` -> 200 and rendered; 26 requests, all to 127.0.0.1:8000; 0 failed, 0 console errors; `/some/client/route` serves the UI.
+- `/api/nope` 404 JSON; `/..%2f..%2frequirements.txt` -> index.html. `audits\check_api.py`: 1281 checks, 0 failed.
+- `run.bat` with the database / the build missing (scratch copy): the right ERROR line, exit 1.
+- `pip download -r requirements.txt -d wheels`: 25 files, 113 MB (117,992,414 bytes); all were already present. Offline dry-run install resolves.
+
+**Deviations**
+- `requirements.txt` does not list `duckdb` or `PyYAML` (both imported by `api\` / `engine\`), so `wheels\` cannot rebuild the venv offline. Not changed.
+- A missing file under `/assets/` gets index.html with 200, not 404.
+- Stopped the old uvicorn on port 8000 (PID 32420) to run `run.bat`; the new one is left running.

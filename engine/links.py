@@ -94,8 +94,9 @@ def link_params(profile: dict) -> dict[str, str]:
     return params
 
 
-def build(con: duckdb.DuckDBPyConnection, label: str = "") -> None:
-    """Prove the layer links of the active profile on `con` and refill its rows.
+def build(con: duckdb.DuckDBPyConnection, label: str = "") -> list[str]:
+    """Prove the layer links of the active profile on `con` and refill its rows;
+    returns the warnings of the run (empty when there are none).
 
     `con` is the case file (engine runs) or an in-memory connection (the API's
     profile preview); the statements are the same.
@@ -189,6 +190,16 @@ def build(con: duckdb.DuckDBPyConnection, label: str = "") -> None:
         print(line)
     print(f"    {'total':<10} {sum(counts.values()):>6,}")
 
+    # Too few flagged accounts to prove a link is a result, not an error:
+    # the profile keeps 0 links and pass 2 leaves its roles unconfirmed.
+    warnings = []
+    if not counts:
+        warnings.append(
+            f"no layer links could be built for profile {profile_id}: pass 1 flags "
+            f"{n_flagged:,} of {n_scores:,} accounts and no transfer "
+            "passes the link checks. Link counts are 0.")
+        print(f"\n  WARNING    : {warnings[0]}")
+
     print("\ntransactions between candidates, by role pair (tx / became links):")
     for a, b, n_tx, n_links in con.execute(sections["PAIRS"]).fetchall():
         print(f"    {a:<18} -> {b:<18} {n_tx:>6,} / {n_links:>6,}")
@@ -208,6 +219,7 @@ def build(con: duckdb.DuckDBPyConnection, label: str = "") -> None:
 
     if outside or no_arrival or differs or bad_share:
         raise SystemExit("layer_links FAILED its timing / amount check (see above)")
+    return warnings
 
 
 def main() -> None:
