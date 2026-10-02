@@ -230,20 +230,20 @@ export default function MuleDossierView({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner / Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* 1. Top Banner / Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E8E2D5] pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#D96B27]"></span>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-              Syndicate Intelligence & Scoring
+            <span className="w-2 h-2 rounded-xs bg-[#D96B27]"></span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              SYNDICATE INTELLIGENCE &amp; SCORING • 2,000,000 TRANSACTIONS
             </span>
           </div>
-          <h2 className="text-2xl font-serif font-bold text-[#2C2623] mt-0.5">
-            Mule Account Dossier & 0–100 Risk Index
+          <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#2C2623] mt-0.5 tracking-tight">
+            Mule Account Dossier &amp; 0–100 Risk Index
           </h2>
-          <p className="text-xs text-[#746D65] mt-1 max-w-2xl">
+          <p className="text-xs text-[#746D65] mt-0.5 max-w-3xl font-sans">
             Vectorized heuristic analysis across 2,000,000 transactions. Parameters P1–P6 compute velocity, dormancy,
             smurfing fan-out, and proxy anomalies with false-positive suppression for genuine merchants.
           </p>
@@ -253,7 +253,7 @@ export default function MuleDossierView({
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#E8E2D5] text-[#2C2623] hover:border-[#D96B27] text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#E8E2D5] text-[#2C2623] hover:border-[#D96B27] text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-[#D96B27]" />
             <span>Export CSV Dossier</span>
@@ -261,7 +261,7 @@ export default function MuleDossierView({
           {onNavigateTab && (
             <button
               onClick={() => onNavigateTab("notices")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#D96B27] text-white hover:bg-[#C25B1D] text-xs font-semibold shadow-sm transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-[#D96B27] text-white hover:bg-[#C25B1D] text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer"
             >
               <Lock className="w-3.5 h-3.5" />
               <span>Issue Freeze Liens</span>
@@ -270,71 +270,89 @@ export default function MuleDossierView({
         </div>
       </div>
 
-      {/* KPI Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-            Flagged Mules
-          </div>
-          <div className="text-xl font-bold font-mono text-[#2C2623] mt-1">
+      {/* 2. Unified Framed Metric Strip with Sharp Dividers */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-[#E8E2D5] bg-white border border-[#E8E2D5] rounded-sm shadow-2xs">
+        {/* Metric 1: Total Mules */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
+            FLAGGED MULES
+          </span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#2C2623] tracking-tight my-0.5 whitespace-nowrap">
             {stats.total.toLocaleString("en-IN")}
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">In current dossier</div>
+          <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
+            In current dossier
+          </p>
         </div>
 
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#DC2626] font-mono">
-            High Confidence (≥90)
-          </div>
-          <div className="text-xl font-bold font-mono text-[#DC2626] mt-1">
+        {/* Metric 2: High Confidence (>=90) */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#DC2626] font-mono block whitespace-nowrap">
+            HIGH CONFIDENCE (≥90)
+          </span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#DC2626] tracking-tight my-0.5 whitespace-nowrap">
             {stats.highRisk.toLocaleString("en-IN")}
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">Criminal ring cores</div>
+          <p className="text-[11px] text-[#DC2626] font-medium whitespace-nowrap font-sans">
+            Criminal ring cores
+          </p>
         </div>
 
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#EA580C] font-mono">
-            L1 Collectors
-          </div>
-          <div className="text-xl font-bold font-mono text-[#EA580C] mt-1">
+        {/* Metric 3: L1 Collectors */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#EA580C] font-mono block whitespace-nowrap">
+            L1 COLLECTORS
+          </span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#EA580C] tracking-tight my-0.5 whitespace-nowrap">
             {stats.l1}
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">Primary intake nodes</div>
+          <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
+            Primary intake nodes
+          </p>
         </div>
 
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#D97706] font-mono">
-            L2 Distributors
-          </div>
-          <div className="text-xl font-bold font-mono text-[#D97706] mt-1">
+        {/* Metric 4: L2 Distributors */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#D97706] font-mono block whitespace-nowrap">
+            L2 DISTRIBUTORS
+          </span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#D97706] tracking-tight my-0.5 whitespace-nowrap">
             {stats.l2}
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">Smurfing fan-out</div>
+          <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
+            Smurfing fan-out
+          </p>
         </div>
 
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#7C3AED] font-mono">
-            L3 Cash-Outs
-          </div>
-          <div className="text-xl font-bold font-mono text-[#7C3AED] mt-1">
+        {/* Metric 5: L3 Cash-Outs */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#7C3AED] font-mono block whitespace-nowrap">
+            L3 CASH-OUTS
+          </span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#7C3AED] tracking-tight my-0.5 whitespace-nowrap">
             {stats.l3}
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">Crypto/ATM exits</div>
+          <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
+            Crypto/ATM exits
+          </p>
         </div>
 
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#059669] font-mono">
-            Actionable Lien Balance
-          </div>
-          <div className="text-lg font-bold font-mono text-[#059669] mt-1 truncate">
+        {/* Metric 6: Actionable Lien Balance */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#059669] font-mono block whitespace-nowrap">
+            ACTIONABLE LIEN
+          </span>
+          <div className="text-base sm:text-lg font-bold font-mono text-[#059669] tracking-tight my-0.5 truncate whitespace-nowrap" title={`₹${stats.totalHolding.toLocaleString("en-IN")}`}>
             ₹{stats.totalHolding.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
           </div>
-          <div className="text-[10px] text-[#746D65] mt-0.5">Eligible for Sec 91 freeze</div>
+          <p className="text-[11px] text-[#059669] font-medium whitespace-nowrap font-sans">
+            Eligible for Sec 91 freeze
+          </p>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-3 shadow-2xs space-y-3">
+      {/* 3. Filter and Search Bar (Sharp Box with Sharp Controls) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-sm p-3 shadow-2xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Search Box */}
           <div className="relative flex-1 min-w-[240px]">
@@ -343,21 +361,21 @@ export default function MuleDossierView({
               placeholder="Search Account ID, IFSC, Bank Name, or Modus Operandi..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl pl-8 pr-3 py-1.5 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+              className="w-full bg-white border border-[#E8E2D5] rounded-sm pl-8 pr-12 py-1.5 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] shadow-2xs transition-all"
             />
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#9E968D]" />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className="absolute right-2.5 top-2 text-[10px] text-[#9E968D] hover:text-[#2C2623]"
+                className="absolute right-2.5 top-2 text-[10px] font-mono uppercase text-[#9E968D] hover:text-[#2C2623] cursor-pointer"
               >
                 Clear
               </button>
             )}
           </div>
 
-          {/* Role Filter Pills */}
-          <div className="flex items-center gap-1 bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-1 text-xs">
+          {/* Role Filter Pills (Sharp Rectangular Tabs) */}
+          <div className="flex items-center gap-1 bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm p-0.5 text-xs">
             {[
               { id: "ALL", label: "ALL MULES", count: stats.total },
               { id: "L1_COLLECTOR", label: "L1 COLLECTOR", count: stats.l1 },
@@ -369,13 +387,13 @@ export default function MuleDossierView({
                 <button
                   key={tab.id}
                   onClick={() => onFilterRole(tab.id === "ALL" ? null : tab.id)}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer text-xs flex items-center gap-1.5 ${
-                    isSelected ? "bg-[#D96B27] text-white shadow-2xs" : "text-[#746D65] hover:text-[#2C2623]"
+                  className={`px-2.5 py-1 rounded-xs font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isSelected ? "bg-[#D96B27] text-white shadow-2xs" : "text-[#746D65] hover:text-[#2C2623] hover:bg-white"
                   }`}
                 >
                   <span>{tab.label}</span>
                   <span
-                    className={`text-[10px] px-1 py-0.2 rounded font-mono ${
+                    className={`text-[10px] px-1 py-0.2 rounded-xs font-mono ${
                       isSelected ? "bg-white/20 text-white" : "bg-[#EAE4D8] text-[#746D65]"
                     }`}
                   >
@@ -388,15 +406,15 @@ export default function MuleDossierView({
         </div>
 
         {/* Secondary Filters: Bank, Min Risk & Sorting */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-[#F2ECE1] text-xs">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-[#E8E2D5] text-xs">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Bank Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-[#746D65] font-medium">Bank:</span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65]">Bank:</span>
               <select
                 value={selectedBank}
                 onChange={(e) => setSelectedBank(e.target.value)}
-                className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+                className="bg-white border border-[#E8E2D5] rounded-sm px-2.5 py-1 text-xs font-mono font-medium text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs"
               >
                 <option value="ALL">All Banks ({stats.total})</option>
                 <option value="SBIN">State Bank of India (SBIN)</option>
@@ -412,11 +430,11 @@ export default function MuleDossierView({
 
             {/* Min Risk Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-[#746D65] font-medium">Min Risk:</span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65]">Min Risk:</span>
               <select
                 value={minRisk}
                 onChange={(e) => setMinRisk(Number(e.target.value))}
-                className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+                className="bg-white border border-[#E8E2D5] rounded-sm px-2.5 py-1 text-xs font-mono font-medium text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs"
               >
                 <option value={0}>Any Risk (0+)</option>
                 <option value={80}>High Confidence (80+)</option>
@@ -426,14 +444,14 @@ export default function MuleDossierView({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Sort Options */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-[#746D65] font-medium">Sort By:</span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65]">Sort By:</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-lg px-2 py-1 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+                className="bg-white border border-[#E8E2D5] rounded-sm px-2.5 py-1 text-xs font-mono font-medium text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs"
               >
                 <option value="risk_desc">Risk Index (High to Low)</option>
                 <option value="holding_desc">Holding Balance (High to Low)</option>
@@ -442,27 +460,27 @@ export default function MuleDossierView({
               </select>
             </div>
 
-            <div className="text-[11px] text-[#746D65] font-mono">
+            <div className="text-[11px] text-[#746D65] font-mono bg-[#FAF6EE] px-2 py-0.5 rounded-xs border border-[#E8E2D5]">
               Showing <span className="font-bold text-[#2C2623]">{filteredMules.length}</span> matching accounts
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Table */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
+      {/* 4. Main Structured Dossier Table */}
+      <div className="bg-white border border-[#E8E2D5] rounded-sm overflow-hidden shadow-2xs">
         <div className="overflow-x-auto max-h-[640px] overflow-y-auto">
           <table className="w-full text-left border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-[#FAF6EE] border-b border-[#E8E2D5] shadow-xs">
-              <tr className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">
-                <th className="py-3 px-4">Account ID & Bank IFSC</th>
-                <th className="py-3 px-3">Role Classification</th>
-                <th className="py-3 px-3">Mule Risk Index</th>
-                <th className="py-3 px-4">Incoming & Outgoing</th>
-                <th className="py-3 px-4">Actionable Holding</th>
-                <th className="py-3 px-4">P1–P6 Heuristic Breakdown</th>
-                <th className="py-3 px-4">Forensic Detection Details</th>
-                <th className="py-3 px-3 text-right">Actions</th>
+            <thead className="sticky top-0 z-10 bg-[#FAF6EE] border-b border-[#E8E2D5]">
+              <tr className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+                <th className="py-2.5 px-4">Account ID &amp; Bank IFSC</th>
+                <th className="py-2.5 px-3">Role Classification</th>
+                <th className="py-2.5 px-3">Mule Risk Index</th>
+                <th className="py-2.5 px-4">Incoming &amp; Outgoing</th>
+                <th className="py-2.5 px-4">Actionable Holding</th>
+                <th className="py-2.5 px-4">P1–P6 Heuristic Breakdown</th>
+                <th className="py-2.5 px-4">Forensic Detection Details</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE1] font-mono">
@@ -483,15 +501,15 @@ export default function MuleDossierView({
 
                   return (
                     <React.Fragment key={`${m.account_id}-${idx}`}>
-                      <tr className="hover:bg-[#FAF6EE] transition-colors group">
+                      <tr className="hover:bg-[#FAF6EE]/80 transition-colors group">
                         {/* Account ID & Bank IFSC */}
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-4">
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold text-[#2C2623] font-mono">{m.account_id}</span>
                             <button
                               onClick={() => handleCopy(m.account_id)}
                               title="Copy Account ID"
-                              className="text-[#9E968D] hover:text-[#D96B27] transition-colors p-0.5 rounded cursor-pointer"
+                              className="text-[#9E968D] hover:text-[#D96B27] transition-colors p-1 rounded-xs hover:bg-[#FAF6EE] border border-transparent hover:border-[#E8E2D5] cursor-pointer"
                             >
                               {isCopied ? <Check className="w-3 h-3 text-[#059669]" /> : <Copy className="w-3 h-3" />}
                             </button>
@@ -499,14 +517,14 @@ export default function MuleDossierView({
                           <div className="text-[11px] text-[#746D65] font-sans flex items-center gap-1 mt-0.5">
                             <span className="font-mono text-[#D96B27] font-semibold">{m.ifsc}</span>
                             <span className="text-[#B5ACA0]">•</span>
-                            <span className="truncate max-w-[120px]">{m.bankName}</span>
+                            <span className="truncate max-w-[130px]">{m.bankName}</span>
                           </div>
                         </td>
 
                         {/* Role Classification */}
-                        <td className="py-3 px-3 font-sans">
+                        <td className="py-2.5 px-3">
                           <span
-                            className={`px-2.5 py-1 rounded-lg font-bold text-[10px] tracking-wide inline-flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded-xs font-mono font-bold text-[10px] tracking-wider inline-flex items-center gap-1.5 uppercase ${
                               m.role === "L1_COLLECTOR"
                                 ? "bg-[#FFEDD5] text-[#EA580C] border border-[#FDBA74]"
                                 : m.role === "L2_DISTRIBUTOR"
@@ -514,16 +532,16 @@ export default function MuleDossierView({
                                 : "bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]"
                             }`}
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            <span className="w-1.5 h-1.5 rounded-xs bg-current"></span>
                             {m.role.replace("_", " ")}
                           </span>
                         </td>
 
                         {/* Risk Index */}
-                        <td className="py-3 px-3">
+                        <td className="py-2.5 px-3">
                           <div className="flex items-baseline gap-1">
                             <span
-                              className={`font-bold text-sm font-mono ${
+                              className={`font-bold text-xs font-mono ${
                                 m.risk_index >= 90
                                   ? "text-[#DC2626]"
                                   : m.risk_index >= 80
@@ -535,9 +553,9 @@ export default function MuleDossierView({
                             </span>
                             <span className="text-[10px] text-[#9E968D]">/ 100</span>
                           </div>
-                          <div className="w-16 bg-[#EAE4D8] h-1.5 rounded-full overflow-hidden mt-1">
+                          <div className="w-16 bg-[#E8E2D5] h-1.5 rounded-xs overflow-hidden mt-1">
                             <div
-                              className={`h-full rounded-full ${
+                              className={`h-full rounded-xs ${
                                 m.risk_index >= 90
                                   ? "bg-[#DC2626]"
                                   : m.risk_index >= 80
@@ -550,7 +568,7 @@ export default function MuleDossierView({
                         </td>
 
                         {/* Inflow & Outflow */}
-                        <td className="py-3 px-4 font-mono text-[11px]">
+                        <td className="py-2.5 px-4 font-mono text-[11px] whitespace-nowrap">
                           <div className="text-[#059669] font-medium flex items-center gap-1">
                             <ArrowDownLeft className="w-3 h-3 text-[#059669] shrink-0" />
                             <span>₹{m.total_incoming_amt?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
@@ -562,7 +580,7 @@ export default function MuleDossierView({
                         </td>
 
                         {/* Actionable Holding Balance */}
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-4 whitespace-nowrap">
                           <div
                             className={`font-bold text-xs font-mono ${
                               m.current_holding_balance > 0 ? "text-[#059669]" : "text-[#9E968D]"
@@ -571,25 +589,25 @@ export default function MuleDossierView({
                             ₹{m.current_holding_balance?.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                           </div>
                           {m.current_holding_balance > 50000 && (
-                            <span className="inline-block mt-0.5 text-[9px] font-sans font-bold text-[#059669] bg-[#D1FAE5] px-1.5 py-0.2 rounded">
+                            <span className="inline-block mt-0.5 text-[9px] font-mono font-bold text-[#059669] bg-[#D1FAE5] px-1.5 py-0.5 rounded-xs border border-[#A7F3D0]">
                               Target for Lien
                             </span>
                           )}
                         </td>
 
                         {/* P1-P6 Breakdown */}
-                        <td className="py-3 px-4 text-[10px] font-mono text-[#746D65]">
+                        <td className="py-2.5 px-4 text-[10px] font-mono text-[#746D65]">
                           <div className="flex flex-wrap gap-1">
-                            <span className="bg-[#FAF6EE] px-1 py-0.5 rounded border border-[#E8E2D5]" title="P1 Pass-Through Velocity (wt 30)">
+                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P1 Pass-Through Velocity (wt 30)">
                               P1:<strong className="text-[#2C2623]">{m.p1_score}</strong>
                             </span>
-                            <span className="bg-[#FAF6EE] px-1 py-0.5 rounded border border-[#E8E2D5]" title="P2 Fan-In Centrality (wt 15)">
+                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P2 Fan-In Centrality (wt 15)">
                               P2:<strong className="text-[#2C2623]">{m.p2_score}</strong>
                             </span>
-                            <span className="bg-[#FAF6EE] px-1 py-0.5 rounded border border-[#E8E2D5]" title="P3 Fan-Out Split (wt 15)">
+                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P3 Fan-Out Split (wt 15)">
                               P3:<strong className="text-[#2C2623]">{m.p3_score}</strong>
                             </span>
-                            <span className="bg-[#FAF6EE] px-1 py-0.5 rounded border border-[#E8E2D5]" title="P4 Cash-Out / Proxy (wt 25)">
+                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P4 Cash-Out / Proxy (wt 25)">
                               P4:<strong className="text-[#2C2623]">{m.p4_score}</strong>
                             </span>
                           </div>
@@ -597,18 +615,18 @@ export default function MuleDossierView({
 
                         {/* Forensic Reason */}
                         <td
-                          className="py-3 px-4 font-sans text-[11px] text-[#746D65] max-w-xs truncate"
+                          className="py-2.5 px-4 font-sans text-[11px] text-[#746D65] max-w-xs truncate"
                           title={m.forensic_reason}
                         >
                           {m.forensic_reason}
                         </td>
 
                         {/* Action Buttons */}
-                        <td className="py-3 px-3 text-right font-sans">
+                        <td className="py-2.5 px-3 text-right font-sans">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => setExpandedAccount(isExpanded ? null : m.account_id)}
-                              className="p-1 rounded-lg border border-[#E8E2D5] hover:border-[#D96B27] text-[#746D65] hover:text-[#2C2623] transition-colors cursor-pointer"
+                              className="p-1 rounded-sm border border-[#E8E2D5] bg-white hover:border-[#D96B27] text-[#746D65] hover:text-[#2C2623] transition-all cursor-pointer shadow-2xs"
                               title="Toggle Dossier Details"
                             >
                               {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -621,18 +639,18 @@ export default function MuleDossierView({
                       {isExpanded && (
                         <tr className="bg-[#FAF6EE]">
                           <td colSpan={8} className="p-4 border-b border-[#E8E2D5]">
-                            <div className="bg-white border border-[#E8E2D5] rounded-xl p-4 shadow-sm font-sans space-y-4">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F2ECE1] pb-3">
+                            <div className="bg-white border border-[#E8E2D5] rounded-sm p-4 shadow-2xs font-sans space-y-4">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8E2D5] pb-3">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center font-bold text-[#D96B27] font-mono text-sm">
+                                  <div className="w-9 h-9 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center font-bold text-[#D96B27] font-mono text-xs shadow-2xs">
                                     {m.bankCode}
                                   </div>
                                   <div>
-                                    <h4 className="font-bold text-sm text-[#2C2623]">
+                                    <h4 className="font-bold text-sm text-[#2C2623] font-serif">
                                       Comprehensive Dossier: Account #{m.account_id}
                                     </h4>
                                     <p className="text-xs text-[#746D65]">
-                                      {m.bankName} • Branch IFSC: <span className="font-mono text-[#D96B27]">{m.ifsc}</span>
+                                      {m.bankName} • Branch IFSC: <span className="font-mono text-[#D96B27] font-semibold">{m.ifsc}</span>
                                     </p>
                                   </div>
                                 </div>
@@ -644,7 +662,7 @@ export default function MuleDossierView({
                                         onSelectCase(m.account_id);
                                         if (onNavigateTab) onNavigateTab("trail");
                                       }}
-                                      className="flex items-center gap-1 px-3 py-1 rounded-lg border border-[#E8E2D5] hover:border-[#D96B27] text-xs font-semibold text-[#2C2623] cursor-pointer"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-[#E8E2D5] bg-white hover:border-[#D96B27] text-xs font-mono font-bold text-[#2C2623] shadow-2xs transition-all cursor-pointer"
                                     >
                                       <Activity className="w-3.5 h-3.5 text-[#D96B27]" />
                                       <span>Trace Hop Flow</span>
@@ -653,7 +671,7 @@ export default function MuleDossierView({
                                   {onNavigateTab && (
                                     <button
                                       onClick={() => onNavigateTab("notices")}
-                                      className="flex items-center gap-1 px-3 py-1 rounded-lg bg-[#D96B27] text-white hover:bg-[#C25B1D] text-xs font-semibold cursor-pointer"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#D96B27] text-white hover:bg-[#C25B1D] text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer"
                                     >
                                       <Lock className="w-3.5 h-3.5" />
                                       <span>Section 91 Freeze Order</span>
@@ -663,13 +681,13 @@ export default function MuleDossierView({
                               </div>
 
                               {/* Detailed Parameter Grid */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                                <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#E8E2D5] space-y-2">
-                                  <div className="font-bold text-[#2C2623] flex items-center justify-between">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                                <div className="bg-[#FAF6EE] p-3 rounded-sm border border-[#E8E2D5] space-y-2">
+                                  <div className="font-bold text-[#2C2623] flex items-center justify-between font-mono text-xs">
                                     <span>P1 Velocity (3–15m Drain)</span>
-                                    <span className="font-mono text-[#D96B27]">{m.p1_score} / 30</span>
+                                    <span className="text-[#D96B27]">{m.p1_score} / 30</span>
                                   </div>
-                                  <p className="text-[11px] text-[#746D65]">
+                                  <p className="text-[11px] text-[#746D65] font-sans">
                                     90%+ of tainted inflow drained to downstream layers in under 15 minutes.
                                   </p>
                                   <div className="pt-1 text-[11px] font-mono text-[#2C2623]">
@@ -677,12 +695,12 @@ export default function MuleDossierView({
                                   </div>
                                 </div>
 
-                                <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#E8E2D5] space-y-2">
-                                  <div className="font-bold text-[#2C2623] flex items-center justify-between">
+                                <div className="bg-[#FAF6EE] p-3 rounded-sm border border-[#E8E2D5] space-y-2">
+                                  <div className="font-bold text-[#2C2623] flex items-center justify-between font-mono text-xs">
                                     <span>P2/P3 Topology Split</span>
-                                    <span className="font-mono text-[#D96B27]">P2:{m.p2_score} | P3:{m.p3_score}</span>
+                                    <span className="text-[#D96B27]">P2:{m.p2_score} | P3:{m.p3_score}</span>
                                   </div>
-                                  <p className="text-[11px] text-[#746D65]">
+                                  <p className="text-[11px] text-[#746D65] font-sans">
                                     Inflow fan-in: {m.distinct_senders} senders • Outflow fan-out: {m.distinct_receivers} receivers.
                                   </p>
                                   <div className="pt-1 text-[11px] font-mono text-[#2C2623]">
@@ -690,12 +708,12 @@ export default function MuleDossierView({
                                   </div>
                                 </div>
 
-                                <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#E8E2D5] space-y-2">
-                                  <div className="font-bold text-[#2C2623] flex items-center justify-between">
+                                <div className="bg-[#FAF6EE] p-3 rounded-sm border border-[#E8E2D5] space-y-2">
+                                  <div className="font-bold text-[#2C2623] flex items-center justify-between font-mono text-xs">
                                     <span>P4 Digital Footprint</span>
-                                    <span className="font-mono text-[#D96B27]">{m.p4_score} / 25</span>
+                                    <span className="text-[#D96B27]">{m.p4_score} / 25</span>
                                   </div>
-                                  <p className="text-[11px] text-[#746D65]">
+                                  <p className="text-[11px] text-[#746D65] font-sans">
                                     Foreign IP address (185/194 CIDR block) and headless automated script signatures.
                                   </p>
                                   <div className="pt-1 text-[11px] font-mono text-[#DC2626]">
@@ -704,11 +722,11 @@ export default function MuleDossierView({
                                 </div>
                               </div>
 
-                              <div className="bg-[#FBF7EE] p-3 rounded-xl border border-[#E8E2D5] text-xs">
-                                <div className="font-bold text-[#2C2623] mb-1 font-mono text-[11px] uppercase tracking-wide">
+                              <div className="bg-[#FBF7EE] p-3 rounded-sm border border-[#E8E2D5] text-xs">
+                                <div className="font-bold text-[#2C2623] mb-1 font-mono text-[10px] uppercase tracking-wider">
                                   Forensic Analysis Summary for Police Case Diary:
                                 </div>
-                                <p className="text-[#746D65] italic leading-relaxed">
+                                <p className="text-[#746D65] italic leading-relaxed font-sans">
                                   "{m.forensic_reason}. The account demonstrates zero commercial rationale and satisfies
                                   all 6 forensic parameters for synthetic mule classification. Statutory notice under Section
                                   91 Cr.P.C. / Section 94 BNSS is recommended for immediate debit freeze."
@@ -728,7 +746,7 @@ export default function MuleDossierView({
 
         {/* Pagination Bar (Sets of 50) */}
         {filteredMules.length > itemsPerPage && (
-          <div className="flex items-center justify-between px-4 py-3 bg-[#FAF6EE] border-t border-[#E8E2D5] text-xs">
+          <div className="flex items-center justify-between px-4 py-2.5 bg-[#FAF6EE] border-t border-[#E8E2D5] text-xs">
             <div className="text-[#746D65] font-mono text-[11px]">
               Showing <span className="font-bold text-[#2C2623]">{(currentPage - 1) * itemsPerPage + 1}</span>–
               <span className="font-bold text-[#2C2623]">{Math.min(currentPage * itemsPerPage, filteredMules.length)}</span> of{" "}
@@ -738,10 +756,10 @@ export default function MuleDossierView({
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-sm border text-xs font-mono font-bold transition-all ${
                   currentPage === 1
                     ? "border-[#E8E2D5] text-[#9E968D] bg-white/40 cursor-not-allowed"
-                    : "border-[#E8E2D5] text-[#2C2623] bg-white hover:bg-[#F2ECE1] shadow-2xs"
+                    : "border-[#E8E2D5] text-[#2C2623] bg-white hover:bg-[#F2ECE1] shadow-2xs cursor-pointer"
                 }`}
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
@@ -753,10 +771,10 @@ export default function MuleDossierView({
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`w-7 h-7 rounded-lg font-semibold flex items-center justify-center transition-all ${
+                    className={`w-7 h-7 rounded-sm font-semibold flex items-center justify-center transition-all cursor-pointer ${
                       currentPage === pageNum
-                        ? "bg-[#D96B27] text-white shadow-2xs"
-                        : "text-[#746D65] hover:bg-[#F2ECE1]"
+                        ? "bg-[#D96B27] text-white shadow-2xs font-bold"
+                        : "text-[#746D65] hover:bg-[#F2ECE1] hover:text-[#2C2623]"
                     }`}
                   >
                     {pageNum}
@@ -767,10 +785,10 @@ export default function MuleDossierView({
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-sm border text-xs font-mono font-bold transition-all ${
                   currentPage === totalPages
                     ? "border-[#E8E2D5] text-[#9E968D] bg-white/40 cursor-not-allowed"
-                    : "border-[#E8E2D5] text-[#2C2623] bg-white hover:bg-[#F2ECE1] shadow-2xs"
+                    : "border-[#E8E2D5] text-[#2C2623] bg-white hover:bg-[#F2ECE1] shadow-2xs cursor-pointer"
                 }`}
               >
                 Next 50

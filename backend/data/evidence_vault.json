@@ -1,5 +1,18 @@
 [
   {
+    "id": "CUST-007",
+    "artifactName": "Synthetic_MuleAccount_2M_Transactions.csv",
+    "category": "Bank Statement / Ledger Transaction Export",
+    "sha256": "008AC594EC85005693C17329A154F2108B0DCBBCD70FBA877F9C7682020FFA02",
+    "filePath": "E:\\VOID-HACK-HACKATHON-36H-main\\backend\\data\\uploads\\Synthetic_MuleAccount_2M_Transactions.csv",
+    "timestamp": "2026-10-02 11:51:55 IST",
+    "ingestedBy": "IO Inspector Rajesh Sharma (Cyber Branch)",
+    "recordsCount": "2,000,000 Transactions",
+    "fileSize": "290.59 MB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 Bharatiya Sakshya Adhiniyam (BSA), 2023"
+  },
+  {
     "id": "CUST-001",
     "artifactName": "transactions_2m.parquet",
     "category": "Core Banking Transaction Export",
