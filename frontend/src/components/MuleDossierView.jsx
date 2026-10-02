@@ -24,6 +24,19 @@ import {
   Shield
 } from "lucide-react";
 import { DEFAULT_MULES } from "../mockData";
+import { fetchMules } from "../api";
+
+// Canonical role normalizer to guarantee exact matching regardless of backend or mock label variant
+const canonicalRole = (r, hop) => {
+  const s = String(r || "").toUpperCase();
+  if (s.includes("L1") || s.includes("COLLECTOR")) return "L1_COLLECTOR";
+  if (s.includes("L2") || s.includes("DISTRIBUTOR") || s.includes("LAYER")) return "L2_DISTRIBUTOR";
+  if (s.includes("L3") || s.includes("CASHOUT") || s.includes("EXIT") || s.includes("CRYPTO")) return "L3_CASHOUT";
+  if (hop === 1) return "L1_COLLECTOR";
+  if (hop === 2) return "L2_DISTRIBUTOR";
+  if (hop === 3) return "L3_CASHOUT";
+  return "L1_COLLECTOR";
+};
 
 export default function MuleDossierView({
   mules,
@@ -33,6 +46,8 @@ export default function MuleDossierView({
   onSelectCase,
   forensicParams
 }) {
+  const [internalMules, setInternalMules] = useState(() => (Array.isArray(mules) && mules.length > 0 ? mules : []));
+  const [isLoadingMules, setIsLoadingMules] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBank, setSelectedBank] = useState(() => forensicParams?.bankFilter || "ALL");
   const [minRisk, setMinRisk] = useState(() => forensicParams?.minRisk || 0);
@@ -43,6 +58,34 @@ export default function MuleDossierView({
   const itemsPerPage = 50;
 
   const drawerMuleRef = useRef(null);
+
+  // Sync internal state whenever parent passes a non-empty array
+  useEffect(() => {
+    if (Array.isArray(mules) && mules.length > 0) {
+      setInternalMules(mules);
+    }
+  }, [mules]);
+
+  // Self-healing: auto-fetch full 2,000 scored mules on mount if missing or fallback
+  const reloadMasterDossier = async () => {
+    setIsLoadingMules(true);
+    try {
+      const data = await fetchMules(2000);
+      if (Array.isArray(data) && data.length > 0) {
+        setInternalMules(data);
+      }
+    } catch (err) {
+      console.warn("Could not auto-fetch mules in MuleDossierView:", err);
+    } finally {
+      setIsLoadingMules(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!mules || mules.length <= 6) {
+      reloadMasterDossier();
+    }
+  }, []);
 
   // Close drawer on ESC key
   useEffect(() => {
@@ -60,8 +103,13 @@ export default function MuleDossierView({
     if (forensicParams?.minRisk !== undefined) setMinRisk(forensicParams.minRisk);
   }, [forensicParams]);
 
-  // Normalize list defensively
-  const rawList = Array.isArray(mules) && mules.length > 0 ? mules : DEFAULT_MULES;
+  // Normalize list defensively from live internal state, incoming prop, or default mules
+  const rawList =
+    internalMules.length > 0
+      ? internalMules
+      : Array.isArray(mules) && mules.length > 0
+      ? mules
+      : DEFAULT_MULES;
   
   const normalizedMules = useMemo(() => {
     return rawList
@@ -69,7 +117,7 @@ export default function MuleDossierView({
       .map((m, idx) => {
         const account_id = String(m.account_id || m.account || m.id || `2000000000${idx + 10}`);
         const ifsc = String(m.ifsc || m.bank_ifsc || "SBIN0001000");
-        const role = m.role || (m.hop === 1 ? "L1_COLLECTOR" : m.hop === 2 ? "L2_DISTRIBUTOR" : "L3_CASHOUT");
+        const role = canonicalRole(m.role, m.hop);
         const risk_index = Math.round(Number(m.risk_index ?? m.risk_score ?? 88));
         const total_incoming_amt = Number(m.total_incoming_amt ?? m.tainted_received ?? 99642.85);
         const total_outgoing_amt = Number(m.total_outgoing_amt ?? m.tainted_forwarded ?? (role === "L3_CASHOUT" ? 0 : 10000));
@@ -131,6 +179,21 @@ export default function MuleDossierView({
       });
   }, [rawList]);
 
+  // Dynamically extract bank options with real live account counts
+  const bankOptions = useMemo(() => {
+    const map = {};
+    normalizedMules.forEach((m) => {
+      const code = m.bankCode;
+      if (code) {
+        if (!map[code]) {
+          map[code] = { code, name: m.bankName, count: 0 };
+        }
+        map[code].count += 1;
+      }
+    });
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [normalizedMules]);
+
   // Selected mule resolution for Right-Side Glassmorphic Drawer
   const selectedMule = useMemo(() => {
     if (!expandedAccount) return null;
@@ -146,7 +209,7 @@ export default function MuleDossierView({
   const displayedMule = selectedMule || drawerMuleRef.current;
   const isDrawerOpen = Boolean(selectedMule);
 
-  // Overall Statistics calculated from normalized dataset
+  // Overall Statistics calculated from normalized master dataset (immune to filter clipping)
   const stats = useMemo(() => {
     const total = normalizedMules.length;
     const l1 = normalizedMules.filter((m) => m.role === "L1_COLLECTOR").length;
@@ -158,12 +221,12 @@ export default function MuleDossierView({
     return { total, l1, l2, l3, highRisk, totalHolding, totalInflow };
   }, [normalizedMules]);
 
-  // Filtered & Sorted list
+  // Filtered & Sorted list for the table
   const filteredMules = useMemo(() => {
     return normalizedMules
       .filter((m) => {
-        // Role Filter
-        const matchesRole = !activeFilter || m.role === activeFilter;
+        // Role Filter (matches canonical role)
+        const matchesRole = !activeFilter || activeFilter === "ALL" || m.role === canonicalRole(activeFilter);
 
         // Search Filter (Account, IFSC, Bank, Reason)
         const term = searchTerm.trim().toLowerCase();
@@ -180,11 +243,7 @@ export default function MuleDossierView({
         // Min Risk Filter
         const matchesRisk = m.risk_index >= minRisk;
 
-        // Min Amount Filter from forensicParams
-        const minAmt = Number(forensicParams?.minAmount) || 0;
-        const matchesAmount = minAmt === 0 || m.total_incoming_amt >= minAmt || m.current_holding_balance >= minAmt;
-
-        return matchesRole && matchesSearch && matchesBank && matchesRisk && matchesAmount;
+        return matchesRole && matchesSearch && matchesBank && matchesRisk;
       })
       .sort((a, b) => {
         if (sortBy === "risk_desc") return b.risk_index - a.risk_index;
@@ -193,7 +252,7 @@ export default function MuleDossierView({
         if (sortBy === "incoming_desc") return b.total_incoming_amt - a.total_incoming_amt;
         return 0;
       });
-  }, [normalizedMules, activeFilter, searchTerm, selectedBank, minRisk, sortBy, forensicParams?.minAmount]);
+  }, [normalizedMules, activeFilter, searchTerm, selectedBank, minRisk, sortBy]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -281,6 +340,15 @@ export default function MuleDossierView({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={reloadMasterDossier}
+            disabled={isLoadingMules}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#E8E2D5] text-[#2C2623] hover:border-[#D96B27] text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+            title="Reload live dataset from DuckDB"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#D96B27] ${isLoadingMules ? "animate-spin" : ""}`} />
+            <span>{isLoadingMules ? "Syncing..." : "Refresh Dossier"}</span>
+          </button>
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#E8E2D5] text-[#2C2623] hover:border-[#D96B27] text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer"
@@ -466,15 +534,12 @@ export default function MuleDossierView({
                 onChange={(e) => setSelectedBank(e.target.value)}
                 className="bg-white/90 border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
               >
-                <option value="ALL">All Banks ({stats.total})</option>
-                <option value="SBIN">State Bank of India (SBIN)</option>
-                <option value="HDFC">HDFC Bank (HDFC)</option>
-                <option value="ICIC">ICICI Bank (ICIC)</option>
-                <option value="UTIB">Axis Bank (UTIB)</option>
-                <option value="PUNB">Punjab National Bank (PUNB)</option>
-                <option value="UBIN">Union Bank of India (UBIN)</option>
-                <option value="BARB">Bank of Baroda (BARB)</option>
-                <option value="KKBK">Kotak Mahindra Bank (KKBK)</option>
+                <option value="ALL">All Banks ({stats.total.toLocaleString("en-IN")})</option>
+                {bankOptions.map((b) => (
+                  <option key={b.code} value={b.code}>
+                    {b.name} ({b.code}) — {b.count.toLocaleString("en-IN")}
+                  </option>
+                ))}
               </select>
             </div>
 

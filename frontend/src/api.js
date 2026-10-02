@@ -35,7 +35,7 @@ export async function simulateParameters(payload) {
   return res.json();
 }
 
-export async function fetchMules(limit = 100, role = null, minRisk = 0, minAmount = 0, bankFilter = null) {
+export async function fetchMules(limit = 2000, role = null, minRisk = 0, minAmount = 0, bankFilter = null) {
   let url = `${API_BASE}/mules?limit=${limit}`;
   if (role) url += `&role_filter=${role}`;
   if (minRisk > 0) url += `&min_risk=${minRisk}`;

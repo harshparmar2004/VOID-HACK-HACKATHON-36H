@@ -126,16 +126,6 @@ export default function App() {
 
     // Reload active case trail with new parameters
     loadCaseData(activeCase, newParams);
-
-    // Reload mules with new parameters
-    try {
-      const muleList = await fetchMules(100, muleFilter, newParams.minRisk, newParams.minAmount, newParams.bankFilter);
-      if (muleList && Array.isArray(muleList)) {
-        setMules(muleList);
-      }
-    } catch (e) {
-      console.warn("Could not reload mules with new parameters:", e);
-    }
   };
 
   const handleTabChange = (tab) => {
@@ -177,7 +167,8 @@ export default function App() {
           loadCaseData(activeCase, forensicParams);
         }
         
-        const muleList = await fetchMules(100, muleFilter, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
+        // Load master syndicate mule dataset (up to 2,000 flagged mules)
+        const muleList = await fetchMules(2000);
         if (muleList && Array.isArray(muleList) && muleList.length > 0) {
           setMules(muleList);
         }
@@ -189,16 +180,8 @@ export default function App() {
     loadInitial();
   }, []);
 
-  const handleFilterMuleRole = async (role) => {
+  const handleFilterMuleRole = (role) => {
     setMuleFilter(role);
-    try {
-      const muleList = await fetchMules(100, role, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
-      if (muleList && Array.isArray(muleList) && muleList.length > 0) {
-        setMules(muleList);
-      }
-    } catch (err) {
-      console.warn("Using active mules for filter:", role);
-    }
   };
 
   const loadCaseData = async (victimId, params = forensicParams) => {
@@ -255,7 +238,7 @@ export default function App() {
         loadCaseData(targetVictim, forensicParams);
       }
       
-      const muleList = await fetchMules(100, muleFilter, forensicParams.minRisk, forensicParams.minAmount, forensicParams.bankFilter);
+      const muleList = await fetchMules(2000);
       if (muleList?.length) setMules(muleList);
     } catch (err) {
       console.warn("Refresh error:", err.message);

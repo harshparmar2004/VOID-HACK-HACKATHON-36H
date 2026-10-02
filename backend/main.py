@@ -460,7 +460,7 @@ def trace_victim_flow(
 
 @app.get("/api/mules")
 def get_flagged_mules(
-    limit: int = 100, 
+    limit: int = 2000, 
     role_filter: Optional[str] = None,
     min_risk: float = 0.0,
     min_amount: float = 0.0,
