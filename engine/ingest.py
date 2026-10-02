@@ -14,32 +14,35 @@ Rules this script obeys (PROJECT_CONTEXT.md Sections 8 and 9):
   * Account numbers stay text, amounts become integer paise, timestamps are
     parsed with an explicit format.
   * tx.tx_id is the ORIGINAL Transaction_ID from the file -- never regenerated.
+    It is NOT unique in this dataset (2,250 IDs repeat over 4,502 rows), so
+    tx.tx_key is the primary key and the only safe join column (guardrail 10).
   * Derived tables use CREATE OR REPLACE, so the script is safe to rerun.
 """
 
 from __future__ import annotations
 
 import hashlib
-import os
 import time
 from datetime import datetime
+from pathlib import Path
 
 import duckdb
 
 # ---------------------------------------------------------------------------
-# Paths. Resolved from this file's location, so there are no hard-coded
-# personal paths and the script works from any working directory.
-# DuckDB SQL wants forward slashes, including on Windows.
+# Paths are derived from this file's location, never from the current working
+# directory, so the script behaves the same however it is launched
+# (guardrail 17: no hard-coded personal paths).
+# DuckDB SQL string paths use forward slashes, including on Windows.
 # ---------------------------------------------------------------------------
-ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(ENGINE_DIR)
+ENGINE_DIR = Path(__file__).resolve().parent
+ROOT = ENGINE_DIR.parent
 
 CSV_NAME = "VoidHacks8_MuleAccount_2M_Transactions.csv"
-CSV_PATH = os.path.join(ROOT, "data", CSV_NAME)
-DB_PATH = os.path.join(ROOT, "data", "case.duckdb")
-SCHEMA_PATH = os.path.join(ENGINE_DIR, "sql", "schema.sql")
+CSV_PATH = ROOT / "data" / CSV_NAME
+DB_PATH = ROOT / "data" / "case.duckdb"
+SCHEMA_PATH = ENGINE_DIR / "sql" / "schema.sql"
 
-CSV_SQL = CSV_PATH.replace("\\", "/")
+CSV_SQL = CSV_PATH.as_posix()
 
 MEMORY_LIMIT = "3GB"
 HASH_CHUNK = 1 << 20  # 1 MiB
@@ -47,26 +50,41 @@ HASH_CHUNK = 1 << 20  # 1 MiB
 # ---------------------------------------------------------------------------
 # Validation rules (Section 9).
 #
-# Account numbers: the spec calls them "12-digit", but every row in the
-# supplied dataset is a 12-CHARACTER identifier shaped as a 4-letter bank
-# prefix + 8 digits (e.g. KKBK10000000). A literal ^[0-9]{12}$ rule would
-# reject the entire file. The rule below therefore enforces "exactly 12
-# characters of uppercase letters/digits", which keeps the intent (fixed
-# 12-wide text, leading zeros preserved, never padded) and still accepts a
-# plain 12-digit number if a future dataset uses one.
+# Accounts are 12 characters: a 4-letter bank code + 8 digits (e.g.
+# HDFC10000336), NOT 12 digits as the problem statement says -- verified on the
+# real file (Section 3b). The rule is spelled out exactly rather than loosened
+# to "12 alphanumerics", so a differently shaped account is quarantined instead
+# of silently accepted.
 # ---------------------------------------------------------------------------
-RE_ACCT = r"[A-Z0-9]{12}"
+RE_ACCT = r"[A-Z]{4}[0-9]{8}"
 RE_IFSC = r"[A-Z]{4}0[A-Z0-9]{6}"
 TS_FORMAT = "%Y-%m-%d %H:%M:%S"
 MODES = "('UPI', 'IMPS', 'NEFT', 'RTGS')"
 
-# Per-row reason list. A row that breaks several rules is quarantined once,
-# with every reason joined by ';', so the reject counts never double-count.
+# Reserved / non-routable sender IPs. 172.16.0.0-172.31.255.255 is the RFC 1918
+# /12 block, so the second octet is range-checked rather than prefix-matched.
+IP_RESERVED_SQL = """(
+       {ip} = '0.0.0.0'
+    OR starts_with({ip}, '10.')
+    OR starts_with({ip}, '127.')
+    OR starts_with({ip}, '192.168.')
+    OR (starts_with({ip}, '172.')
+        AND TRY_CAST(split_part({ip}, '.', 2) AS INTEGER) BETWEEN 16 AND 31)
+)"""
+
+# tx_key is the 1-based index of the row in the source CSV, excluding the
+# header. row_number() OVER () assigns it in table-scan order, which equals
+# file order because preserve_insertion_order is on -- so the same file always
+# produces the same tx_key. rejects.row_number uses the same numbering, and it
+# matches `file_row_number` in the audit scripts (audits/_common.py).
+#
+# A row that breaks several rules is quarantined once, with every reason joined
+# by ';', so the reject counts never double-count.
 STAGE_SQL = f"""
 CREATE OR REPLACE TEMP TABLE stage AS
 WITH src AS (
     SELECT
-        row_number() OVER () AS row_number,   -- 1-based index of the DATA row
+        CAST(row_number() OVER () AS BIGINT) AS tx_key,
         *
     FROM read_csv(
         '{CSV_SQL}',
@@ -76,7 +94,7 @@ WITH src AS (
 ),
 parsed AS (
     SELECT
-        row_number,
+        tx_key,
         Transaction_ID, Sender_Account, Receiver_Account,
         Sender_IFSC, Receiver_IFSC, Amount, "Timestamp",
         Payment_Mode, Narration, IP_Address, Device_Type,
@@ -125,21 +143,25 @@ FROM parsed
 REJECTS_SQL = """
 CREATE OR REPLACE TABLE rejects AS
 SELECT
-    row_number,
+    tx_key AS row_number,
     Transaction_ID, Sender_Account, Receiver_Account,
     Sender_IFSC, Receiver_IFSC, Amount, "Timestamp",
     Payment_Mode, Narration, IP_Address, Device_Type,
     reason
 FROM stage
 WHERE reason IS NOT NULL
-ORDER BY row_number
+ORDER BY tx_key
 """
 
-# Valid rows only, with types converted once.
+# Valid rows only, with types converted once. is_dup_tx_id marks EVERY row
+# whose Transaction_ID is shared with another loaded row; both rows are kept,
+# never merged or rejected (Section 9 note).
 VALID_SQL = """
 CREATE OR REPLACE TEMP TABLE valid AS
 SELECT
+    tx_key,
     Transaction_ID                          AS tx_id,
+    count(*) OVER (PARTITION BY Transaction_ID) > 1 AS is_dup_tx_id,
     Sender_Account                          AS src_no,
     Receiver_Account                        AS dst_no,
     Sender_IFSC                             AS src_ifsc,
@@ -182,27 +204,51 @@ SELECT
 FROM agg
 """
 
-# narr_flags and utr are declared now and filled by a later step; they are
-# left NULL rather than guessed at.
-TX_SQL = """
-CREATE OR REPLACE TABLE tx AS
+# tx is declared explicitly (not CREATE ... AS SELECT) so tx_key can carry a
+# PRIMARY KEY. CREATE OR REPLACE still makes the step safe to rerun.
+# narr_flags and utr are declared now and filled by a later step; they are left
+# NULL rather than guessed at.
+TX_DDL = """
+CREATE OR REPLACE TABLE tx (
+    tx_key         BIGINT  NOT NULL,
+    tx_id          VARCHAR NOT NULL,
+    is_dup_tx_id   BOOLEAN NOT NULL,
+    src            INTEGER NOT NULL,
+    dst            INTEGER NOT NULL,
+    amount_paise   BIGINT  NOT NULL,
+    ts             TIMESTAMP NOT NULL,
+    ts_sec         INTEGER NOT NULL,
+    mode           VARCHAR,
+    narration      VARCHAR,
+    ip             VARCHAR,
+    device         VARCHAR,
+    is_foreign_ip  BOOLEAN,
+    is_reserved_ip BOOLEAN,
+    is_headless    BOOLEAN,
+    narr_flags     INTEGER,
+    utr            VARCHAR,
+    PRIMARY KEY (tx_key)
+)
+"""
+
+TX_INSERT_SQL = f"""
+INSERT INTO tx
 SELECT
-    v.tx_id                                  AS tx_id,
+    v.tx_key,
+    v.tx_id,
+    v.is_dup_tx_id,
     s.acct_id                                AS src,
     r.acct_id                                AS dst,
-    v.amount_paise                           AS amount_paise,
-    v.ts                                     AS ts,
+    v.amount_paise,
+    v.ts,
     CAST(epoch(v.ts) AS INTEGER)             AS ts_sec,
-    v.mode                                   AS mode,
-    v.narration                              AS narration,
-    v.ip                                     AS ip,
-    v.device                                 AS device,
-    (starts_with(v.ip, '185.') OR starts_with(v.ip, '194.'))  AS is_foreign_ip,
-    (v.ip = '0.0.0.0'
-     OR starts_with(v.ip, '10.')
-     OR starts_with(v.ip, '192.168.')
-     OR starts_with(v.ip, '127.'))                            AS is_reserved_ip,
-    (v.device IN ('Web_Emulator', 'Linux_Script'))             AS is_headless,
+    v.mode,
+    v.narration,
+    v.ip,
+    v.device,
+    (starts_with(v.ip, '185.') OR starts_with(v.ip, '194.')) AS is_foreign_ip,
+    {IP_RESERVED_SQL.format(ip='v.ip')}      AS is_reserved_ip,
+    (v.device IN ('Web_Emulator', 'Linux_Script'))           AS is_headless,
     CAST(NULL AS INTEGER)                    AS narr_flags,
     CAST(NULL AS VARCHAR)                    AS utr
 FROM valid v
@@ -211,10 +257,10 @@ JOIN accounts r ON r.acct_no = v.dst_no
 """
 
 
-def sha256_of(path: str) -> str:
+def sha256_of(path: Path) -> str:
     """Stream the file in 1 MiB chunks -- never loads 287 MB into memory."""
     h = hashlib.sha256()
-    with open(path, "rb") as fh:
+    with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(HASH_CHUNK), b""):
             h.update(chunk)
     return h.hexdigest()
@@ -223,17 +269,18 @@ def sha256_of(path: str) -> str:
 def main() -> None:
     t0 = time.perf_counter()
 
-    if not os.path.isfile(CSV_PATH):
+    if not CSV_PATH.is_file():
         raise SystemExit(f"source CSV not found: {CSV_PATH}")
-    if not os.path.isfile(SCHEMA_PATH):
+    if not SCHEMA_PATH.is_file():
         raise SystemExit(f"schema not found: {SCHEMA_PATH}")
 
-    con = duckdb.connect(DB_PATH)
+    con = duckdb.connect(str(DB_PATH))
     try:
         con.execute(f"SET memory_limit='{MEMORY_LIMIT}'")
+        # Required for tx_key to equal the physical CSV row number.
+        con.execute("SET preserve_insertion_order=true")
 
-        with open(SCHEMA_PATH, "r", encoding="utf-8") as fh:
-            con.execute(fh.read())
+        con.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
 
         file_sha256 = sha256_of(CSV_PATH)
 
@@ -241,12 +288,15 @@ def main() -> None:
         con.execute(REJECTS_SQL)
         con.execute(VALID_SQL)
         con.execute(ACCOUNTS_SQL)
-        con.execute(TX_SQL)
+        con.execute(TX_DDL)
+        con.execute(TX_INSERT_SQL)
 
         rows_total = con.execute("SELECT count(*) FROM stage").fetchone()[0]
         rows_loaded = con.execute("SELECT count(*) FROM tx").fetchone()[0]
         rows_rejected = con.execute("SELECT count(*) FROM rejects").fetchone()[0]
         n_accounts = con.execute("SELECT count(*) FROM accounts").fetchone()[0]
+        n_dup = con.execute(
+            "SELECT count(*) FROM tx WHERE is_dup_tx_id").fetchone()[0]
         by_reason = con.execute(
             "SELECT reason, count(*) AS n FROM rejects "
             "GROUP BY reason ORDER BY n DESC, reason"
@@ -281,6 +331,7 @@ def main() -> None:
         else:
             print("    (no rejected rows)")
         print(f"accounts        : {n_accounts:,}")
+        print(f"dup tx_id rows  : {n_dup:,}  (kept, flagged is_dup_tx_id)")
         print(f"seconds         : {load_seconds:.2f}")
     finally:
         con.close()

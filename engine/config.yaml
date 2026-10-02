@@ -1,0 +1,497 @@
+# engine/config.yaml -- default scoring profile for Operation "Abhedya-Chakra".
+#
+# This file is the AUTHORED source of truth for every weight and threshold.
+# engine/seed_profile.py loads it and writes it verbatim into
+# scoring_profiles.definition (JSON) as profile_id 'v1-verified'.
+# Nothing in engine/, api/ or legal/ may hard-code a weight or threshold
+# (PROJECT_CONTEXT.md Section 8 rule 5): read them from the active profile.
+#
+# Weights were fixed after profiling the real dataset (Section 3b) and the
+# verified victim-chain structure (reports/victim_chain_report.md).
+# Scoring shape for every parameter: 0 below "half", half points at "half",
+# full points at "full", linear in between.
+
+profile_id: v1-verified
+version: 1
+is_active: true
+is_locked: true
+
+# The dataset these weights were verified against (ingest_meta.file_sha256).
+verified_on_dataset_sha256: "2c9f81fd34f728c0b7c1e803cb49e1e231c1d9204a77badfcb737f50adf73101"
+verified_on_rows: 2000000
+
+description: >
+  Verified v1 profile. Mule parameters MP1-MP8 sum to 100; Trust T1-T7 sum to
+  100; each role score sums to 100. Parameters that the generator makes
+  uninformative on this dataset are kept at weight 0 so the UI can re-enable
+  them on a different file without a schema change.
+
+# ---------------------------------------------------------------------------
+# Shared windows (Section 4.1 / 4.3). Minutes.
+# ---------------------------------------------------------------------------
+windows:
+  split_forward_minutes: {min: 3, max: 15}   # L1-style: one inflow -> 3-6 outflows
+  single_forward_max_minutes: 60             # L2-style: one inflow -> one outflow
+  notes: >
+    Verified lags: L1->L2 3-15 min (no 0-3 min forwards), L2->L3 2-57 min.
+    Sub-3-minute forwards are normal background on this file (23,502 rows) and
+    must never score on their own.
+
+# ---------------------------------------------------------------------------
+# Commission (out/in) ranges (Section 4.1 MP2, Section 4.3b role scores).
+# ---------------------------------------------------------------------------
+commission_ranges:
+  MP2: {min: 0.94, max: 0.99}   # either layer
+  L1:  {min: 0.97, max: 0.99}   # verified exactly 0.98
+  L2:  {min: 0.94, max: 0.97}   # verified approx 0.96
+
+# Narration categories that count as cash-out / layering markers.
+# Taken from narration segment 2 of `<RAIL>/<CATEGORY>/<DETAIL>#n`.
+cashout_categories: [P2A, WALLET_LOAD, P2P_CRYPTO]
+
+# ---------------------------------------------------------------------------
+# Mule Index -- MP1..MP8 (Section 4.1). Weights sum to 100.
+# ---------------------------------------------------------------------------
+mule_index:
+  total_weight: 100
+  parameters:
+    - id: MP1
+      name: Pass-through velocity
+      index: mule
+      features: [pass_through_share]
+      rule: {type: threshold_desc, feature: pass_through_share, full_at: 0.90, half_at: 0.60}
+      rule_text: "pass_through_share >= 0.90 full, >= 0.60 half"
+      weight: 20
+      enabled: true
+      windows: {split_forward_minutes: {min: 3, max: 15}, single_forward_max_minutes: 60}
+      notes: >
+        One-to-one allocation of each inflow to the outflows that follow it;
+        overlapping outflows must not be double-counted and the share stays
+        within 0-100% (guardrail 16).
+
+    - id: MP2
+      name: Split and commission
+      index: mule
+      features: [split_count_median, commission_ratio_median]
+      rule:
+        type: compound
+        full:
+          any_of:
+            - {feature: split_count_median, min: 3, max: 6}
+            - {single_forward: true}
+          and: {feature: commission_ratio_median, min: 0.94, max: 0.99}
+        half:
+          {feature: commission_ratio_median, min: 0.90, max: 0.99}
+      rule_text: "full: split 3-6 or single forward AND ratio 0.94-0.99; half: ratio 0.90-0.99"
+      weight: 15
+      enabled: true
+      notes: "Injected L1 splits are 3-6 ways; file-wide 2-way splits are background."
+
+    - id: MP3
+      name: Layering-edge flags
+      index: mule
+      features: [flagged_out_share, flagged_in_share]
+      rule:
+        type: threshold_desc
+        feature: flagged_out_share
+        receive_only_feature: flagged_in_share
+        full_at: 0.50
+        half_at: 0.20
+      rule_text: "flagged_out_share >= 0.50 full, >= 0.20 half; receive-only accounts use flagged_in_share"
+      weight: 15
+      enabled: true
+      notes: >
+        ONE signal, counted once: headless device AND foreign IP (185/194) AND
+        a cashout_categories narration on the same edge. Never counted as three
+        separate proofs, and never used without agreeing flow structure. It
+        marks layering EDGES, so it is measured on the SENDER's outgoing edges;
+        true L3 accounts never send, so they are scored on incoming edges.
+
+    - id: MP4
+      name: Low lifetime activity
+      index: mule
+      features: [tx_count]
+      rule:
+        type: ratio_to_population_median_asc
+        feature: tx_count
+        full_at_max: 0.30
+        half_at_max: 0.50
+      rule_text: "tx_count <= 0.30x population median full, <= 0.50x half"
+      weight: 15
+      enabled: true
+      notes: >
+        Genuine behaviour (dedicated mule accounts, L1 lifetime median 11 tx vs
+        169 for normal accounts), but the perfect split on this file is a
+        generator artefact: strong signal, never the only rule.
+
+    - id: MP5
+      name: Victim-sourced inflow
+      index: mule
+      features: [victim_inflow_share]
+      rule: {type: threshold_desc, feature: victim_inflow_share, full_at: 0.80, half_at: 0.40}
+      rule_text: "victim_inflow_share >= 0.80 full, >= 0.40 half"
+      weight: 10
+      enabled: true
+      notes: "victim-like is a behavioural judgement (send-only payer), never a ground-truth label (guardrail 9)."
+
+    - id: MP6
+      name: One-way flow
+      index: mule
+      features: [reciprocity]
+      rule:
+        type: compound
+        full: {feature: reciprocity, equals: 0, and_one_directional: true}
+        half: {feature: reciprocity, max: 0.10}
+      rule_text: "full: reciprocity 0 and one-directional (send-only or receive-only); half: reciprocity <= 0.10"
+      weight: 10
+      enabled: true
+
+    - id: MP7
+      name: Neighbour risk
+      index: mule
+      features: [neighbour_risk]
+      rule: {type: threshold_desc, feature: neighbour_risk, full_at: 60, half_at: 40}
+      rule_text: "neighbour_risk >= 60 full, >= 40 half"
+      weight: 10
+      enabled: true
+      pass: 2
+      notes: "Second pass only, computed from pass-1 scores of counterparties."
+
+    - id: MP8
+      name: Amount anomaly
+      index: mule
+      features: [amount_vs_population]
+      rule: {type: threshold_desc, feature: amount_vs_population, full_at: 20, half_at: 5}
+      rule_text: "amount_vs_population >= 20x full, >= 5x half"
+      weight: 5
+      enabled: true
+
+  # Computed and editable, but weight 0 on this dataset. Kept in the profile so
+  # a different file can re-enable them without a schema change.
+  zero_weight_parameters:
+    - id: ZP1
+      name: Burst fan-in
+      index: mule
+      features: [burst_fan_in]
+      rule: {type: threshold_desc, feature: burst_fan_in, full_at: null, half_at: null}
+      weight: 0
+      enabled: false
+      disabled_reason: >
+        Generator activity is flat (every minute has >= 50 senders), so burst
+        fan-in fires on roughly 23,500 of 24,873 accounts: no discriminative
+        power. Thresholds left null until measured on a file where it varies.
+
+    - id: ZP2
+      name: Shared IP / device cluster
+      index: mule
+      features: [shared_ip_cluster_size, device_consistency]
+      rule: {type: threshold_desc, feature: shared_ip_cluster_size, full_at: null, half_at: null}
+      weight: 0
+      enabled: false
+      gate: gate_ip_reuse
+      disabled_reason: "Gate gate_ip_reuse is closed: max 5 distinct senders per IP, and every headless transaction uses a unique IP."
+
+    - id: ZP3
+      name: Structuring
+      index: mule
+      features: [structuring_share]
+      rule: {type: threshold_desc, feature: structuring_share, full_at: null, half_at: null}
+      weight: 0
+      enabled: false
+      disabled_reason: >
+        Round amounts, equal splits and just-below-limit amounts are nearly
+        absent on this file (Section 3b). Not yet measured as a numeric rate;
+        the Data Audit module will record one in audit_results.
+
+    - id: ZP4
+      name: Bot timing / odd hours / IP switching
+      index: mule
+      features: [timing_regularity, odd_hour_share, ip_churn]
+      rule: {type: threshold_desc, feature: odd_hour_share, full_at: null, half_at: null}
+      weight: 0
+      enabled: false
+      gate: gate_hourly_evenness
+      disabled_reason: "Gate gate_hourly_evenness is closed: hourly activity is flat (max/min 1.0106) and domestic<->foreign IP switching never happens on this file."
+
+    - id: ZP5
+      name: Cycle participation
+      index: mule
+      features: [in_cycle]
+      rule: {type: threshold_desc, feature: in_cycle, full_at: null, half_at: null}
+      weight: 0
+      enabled: false
+      disabled_reason: >
+        The verified structure is a downward DAG (Victim -> L1 -> L2 -> L3, no
+        hop 4), so there are no cycles to score. Compute on a candidate
+        subgraph if re-enabled, never on final flags.
+
+  # Signals that must never be scored, whatever the dataset (Section 4.1).
+  never_score:
+    - id: NS1
+      name: Rail mismatch (narration prefix vs Payment_Mode)
+      reason: "Narration rail is generated independently of Payment_Mode; measured mismatch 48.90%. Zero signal."
+    - id: NS2
+      name: Amount vs payment-mode limits
+      reason: "Real rail limits are not respected by the generator (59,747 of 59,823 RTGS rows are below 2 lakh)."
+    - id: NS3
+      name: Duplicate Transaction_ID
+      reason: "2,250 IDs repeat over 4,502 rows as random collisions: 0 share sender, receiver or amount. Not a fraud pattern."
+    - id: NS4
+      name: Sub-3-minute forwards alone
+      reason: "23,502 sub-3-min forwards are normal background; the injected chains use 3-15 min."
+    - id: NS5
+      name: Generator fingerprints (leakage)
+      reason: >
+        Headless senders' account tails clustering in 10000303-10001099, the
+        exact 1,327/1,327 device counts and the device-thirds split are
+        artefacts of the generator, not behaviour. Forbidden in scoring, role
+        assignment and tracing.
+
+# ---------------------------------------------------------------------------
+# Trust Index -- T1..T7 (Section 4.2). Weights sum to 100.
+# The spec states ONE threshold per Trust parameter (the "full" point), so
+# half_at is null: scoring.py must treat a null half_at as a step function
+# (full at/above the threshold, 0 below) until these are tuned.
+# ---------------------------------------------------------------------------
+trust_index:
+  total_weight: 100
+  min_tx_for_trust: 5          # fewer than 5 transactions -> trust_index = 0
+  measure_before_burst: true   # use the period before any suspicious burst
+  parameters:
+    - id: T1
+      name: Activity spread
+      index: trust
+      features: [days_active]
+      rule: {type: threshold_asc, feature: days_active, full_at: 12, half_at: null}
+      rule_text: "days_active >= 12 -> full"
+      weight: 25
+      enabled: true
+
+    - id: T2
+      name: Two-way relationships
+      index: trust
+      features: [reciprocity]
+      rule: {type: threshold_asc, feature: reciprocity, full_at: 0.30, half_at: null}
+      rule_text: "reciprocity >= 0.30 -> full"
+      weight: 20
+      enabled: true
+
+    - id: T3
+      name: Balance retention
+      index: trust
+      features: [median_hold_hours]
+      rule: {type: threshold_asc, feature: median_hold_hours, full_at: 24, half_at: null}
+      rule_text: "median_hold_hours >= 24 -> full"
+      weight: 15
+      enabled: true
+
+    - id: T4
+      name: Organic amounts
+      index: trust
+      features: [amount_diversity, amount_vs_population]
+      rule:
+        type: compound
+        full:
+          all_of:
+            - {feature: amount_diversity, min: 0.90}
+            - {feature: amount_vs_population, max: 2}
+        half: null
+      rule_text: "amount_diversity >= 0.90 AND amount_vs_population <= 2x -> full"
+      weight: 15
+      enabled: true
+
+    - id: T5
+      name: Clean neighbourhood
+      index: trust
+      features: [neighbour_risk]
+      rule: {type: threshold_asc, feature: neighbour_risk, transform: "100 - neighbour_risk", full_at: 80, half_at: null}
+      rule_text: "100 - neighbour_risk >= 80 -> full"
+      weight: 15
+      enabled: true
+
+    - id: T6
+      name: Recurring inflows
+      index: trust
+      features: [recurring_sender_share]
+      rule: {type: threshold_asc, feature: recurring_sender_share, full_at: 0.30, half_at: null}
+      rule_text: "recurring_sender_share >= 0.30 -> full"
+      weight: 5
+      enabled: true
+
+    - id: T7
+      name: Device / network consistency
+      index: trust
+      features: [device_consistency]
+      rule: {type: threshold_asc, feature: device_consistency, full_at: null, half_at: null}
+      rule_text: "device/network consistency -- threshold NOT specified in the spec"
+      weight: 5
+      enabled: true
+      notes: >
+        The spec gives T7 a weight but no threshold. full_at is left null
+        deliberately rather than inventing a number; set it when the
+        device_consistency feature is defined, or T7 contributes 0.
+
+# ---------------------------------------------------------------------------
+# Final index and the flag decision (Section 4.3).
+# ---------------------------------------------------------------------------
+final:
+  formula: "final_index = mule_index * (1 - trust_discount_factor * trust_index / 100)"
+  trust_discount_factor: 0.5
+
+  override:
+    floor: 70
+    rule_text: >
+      >= 90% of an inflow forwarded within 3-15 min as a 3-6 way split, or as a
+      single forward with commission 0.94-0.99 -> final_index >= 70
+    conditions:
+      forwarded_share_min: 0.90
+      window_minutes: {min: 3, max: 15}
+      any_of:
+        - {split_count: {min: 3, max: 6}}
+        - {single_forward: true, commission_ratio: {min: 0.94, max: 0.99}}
+    sets_column: override_applied
+
+  flag:
+    threshold: 65
+    two_signal_rule:
+      enabled: true
+      always_on: true           # Section 10: may never be switched off
+      min_parameters_at_half: 2
+      over: [MP1, MP2, MP3, MP4, MP5, MP6, MP7, MP8]
+    rule_text: "flag only if final_index >= 65 AND >= 2 of MP1-MP8 scored at least half points"
+
+  # Boundaries are expressed min-inclusive / max-exclusive so a fractional
+  # final_index cannot fall between two bands. "65-84" in the spec means < 85.
+  bands:
+    - {name: high_confidence, min_inclusive: 85}
+    - {name: suspected, min_inclusive: 65, max_exclusive: 85}
+    - {name: clean, max_exclusive: 65}
+
+  # Not a flag: a watch list for an officer to look at by hand.
+  review_rule:
+    mule_index_min: 65
+    trust_index_min: 60
+    rule_text: "mule_index >= 65 AND trust_index >= 60 -> review list"
+
+# ---------------------------------------------------------------------------
+# Layer role scores (Section 4.3b). Each role's weights sum to 100.
+# Role scores decide WHICH layer and never change the flag.
+# ---------------------------------------------------------------------------
+roles:
+  role_threshold: 50          # top role score must reach this
+  tie_margin: 10              # top two within this -> UNCLASSIFIED_MULE
+  victim_threshold: 60        # victim_score >= this -> role VICTIM
+  requires_confirming_link: true
+  unclassified_role: UNCLASSIFIED_MULE
+  allowed_roles: [L1, L2, L3, UNCLASSIFIED_MULE, VICTIM]
+  decision_steps:
+    - "pass 1: behaviour-only candidate roles for flagged accounts"
+    - "build layer_links between victims and candidates"
+    - "pass 2: upstream/downstream role share -> final role scores"
+    - "assign the top role score if >= role_threshold AND >= 1 confirming layer_link to the layer above or below"
+    - "otherwise, or if the top two are within tie_margin -> UNCLASSIFIED_MULE, keeping both candidate_roles"
+    - "many flagged accounts low on all three role scores = a pattern outside L1/L2/L3"
+  never: "roles are never assigned by hop number (guardrail 11)"
+
+  scores:
+    L1:
+      applies_to: flagged_accounts
+      total_weight: 100
+      weights:
+        victim_sourced_inflow: 30
+        split_3_to_6_per_inflow: 25
+        commission_in_range: 20       # commission_ranges.L1 = 0.97-0.99
+        lag_in_split_window: 15       # windows.split_forward_minutes = 3-15 min
+        flagged_outgoing_edges: 10
+
+    L2:
+      applies_to: flagged_accounts
+      total_weight: 100
+      weights:
+        inflow_from_l1_candidates: 30
+        single_forward_per_inflow: 25
+        commission_in_range: 20       # commission_ranges.L2 = 0.94-0.97
+        lag_within_single_window: 15  # windows.single_forward_max_minutes = 60 min
+        flagged_outgoing_edges: 10
+
+    L3:
+      applies_to: flagged_accounts
+      total_weight: 100
+      weights:
+        receive_only: 40
+        inflow_from_l2_candidates: 30
+        flagged_incoming_edges: 20
+        low_activity: 10
+      notes: "True L3 accounts never send, so never require cash-out narration on the ACCOUNT -- only on its incoming edges."
+
+    VICTIM:
+      applies_to: unflagged_accounts_only
+      total_weight: 100
+      weights:
+        send_only: 35
+        outflow_vs_population_median: 30   # single/few outflows >= 5x median
+        payee_has_high_l1_score: 25
+        low_activity: 10
+      outflow_multiple_min: 5
+      notes: >
+        VICTIM is a role, not a mule band: it never contributes to the flag and
+        is only considered for accounts that were NOT flagged. Reported
+        separately so either reading of the organisers' "1,500 mules" count
+        works.
+
+# ---------------------------------------------------------------------------
+# Reliability gates (Section 10). A gated parameter is scored ONLY if the
+# loaded dataset shows the field is informative. Gate thresholds live here;
+# measured values are recomputed per dataset by the Data Audit module into
+# table audit_results. The measurements below were taken on the dataset named
+# in verified_on_dataset_sha256 -- all four gates are CLOSED.
+# ---------------------------------------------------------------------------
+reliability_gates:
+  - id: gate_rail_mismatch
+    gates: [NS1]
+    test: rail_mismatch_rate
+    description: "share of rows where the narration rail prefix differs from Payment_Mode"
+    opens_when: {operator: "<", threshold: 0.05}
+    measured: 0.489029
+    status: closed
+    reason: "48.90% mismatch (978,058 / 2,000,000). The narration rail is generated independently of Payment_Mode, so the field carries no signal."
+
+  - id: gate_amount_limits
+    gates: [NS2]
+    test: amount_limit_violation_rate
+    description: "share of rows breaking a real rail limit (UPI > 1 lakh, IMPS > 5 lakh, RTGS < 2 lakh)"
+    opens_when: {operator: "<", threshold: 0.01}
+    measured: 0.030051
+    status: closed
+    reason: "3.01% violations (60,102 / 2,000,000), almost all of them the 59,747 RTGS rows below 2 lakh. The generator ignores rail limits."
+
+  - id: gate_hourly_evenness
+    gates: [ZP4]
+    test: hour_max_min_ratio
+    description: "busiest hour-of-day row count divided by the quietest"
+    opens_when: {operator: ">=", threshold: 1.5}
+    measured: 1.010611
+    measured_extra: {hour_cv: 0.002268, min_hour_rows: 83025, max_hour_rows: 83906}
+    status: closed
+    reason: "Hourly activity is flat (ratio 1.0106, cv 0.0023), so odd-hour and bot-timing parameters cannot discriminate."
+
+  - id: gate_ip_reuse
+    gates: [ZP2]
+    test: max_senders_per_ip
+    description: "largest number of distinct sender accounts sharing one IP"
+    opens_when: {operator: ">=", threshold: 10}
+    measured: 5
+    measured_extra: {distinct_ips: 1875319, ips_with_multiple_senders: 119387, share_ips_reused: 0.0637}
+    status: closed
+    reason: "At most 5 distinct senders per IP and a unique IP per headless transaction, so no shared-infrastructure cluster exists."
+
+# ---------------------------------------------------------------------------
+# Profile validation (Section 10). seed_profile.py enforces these.
+# ---------------------------------------------------------------------------
+validation:
+  no_negative_weights: true
+  min_enabled_parameters: 2
+  two_signal_rule_always_on: true
+  mule_weights_must_sum_to: 100
+  trust_weights_must_sum_to: 100
+  role_weights_must_sum_to: 100

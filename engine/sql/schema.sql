@@ -38,32 +38,33 @@ CREATE TABLE IF NOT EXISTS scoring_profiles (
 );
 
 -- 7. scores -- one row per account per profile.
---    Four separate scores (Section 4.3b):
+--    Separate scores (Section 4.3b):
 --      mule_index  -- does it behave like a mule?      (all accounts)
 --      trust_index -- does it behave like a normal?    (all accounts)
 --      final_index -- flag or not?                     (all accounts)
 --      l1/l2/l3_score -- WHICH layer?                  (flagged accounts only)
+--      victim_score   -- is it a victim?               (UNFLAGGED accounts only)
 --    final_index decides WHETHER; the role scores decide WHICH LAYER and never
---    change the flag. role stays NULL for accounts that are not flagged, so the
---    role CHECK must admit NULL. A role is only written once a confirming
---    layer_link exists; roles are never inferred from hop number (guardrail 11).
+--    change the flag. role stays NULL for accounts that are neither flagged nor
+--    victims, so the role CHECK must admit NULL. A mule role is only written
+--    once a confirming layer_link exists; roles are never inferred from hop
+--    number (guardrail 11).
 CREATE TABLE IF NOT EXISTS scores (
     acct_id    INTEGER NOT NULL,
     profile_id VARCHAR NOT NULL,
 
-    -- Mule Index parameters M1..M10 (Section 4.1), each a 0..weight contribution.
-    m1  DOUBLE,
-    m2  DOUBLE,
-    m3  DOUBLE,
-    m4  DOUBLE,
-    m5  DOUBLE,
-    m6  DOUBLE,
-    m7  DOUBLE,
-    m8  DOUBLE,
-    m9  DOUBLE,
-    m10 DOUBLE,
+    -- Mule parameters MP1..MP8 (Section 4.1), each a 0..weight contribution.
+    -- Parameters added to a later profile go in param_points, not new columns.
+    mp1 DOUBLE,
+    mp2 DOUBLE,
+    mp3 DOUBLE,
+    mp4 DOUBLE,
+    mp5 DOUBLE,
+    mp6 DOUBLE,
+    mp7 DOUBLE,
+    mp8 DOUBLE,
 
-    -- Trust Index parameters T1..T7 (Section 4.2).
+    -- Trust parameters T1..T7 (Section 4.2).
     t1 DOUBLE,
     t2 DOUBLE,
     t3 DOUBLE,
@@ -78,10 +79,18 @@ CREATE TABLE IF NOT EXISTS scores (
     band        VARCHAR,
     is_flagged  BOOLEAN,
 
+    -- TRUE when the pass-through override lifted final_index to the floor
+    -- (Section 4.3), so a reviewer can see the score was not purely additive.
+    override_applied BOOLEAN,
+
     -- Layer role scores, 0-100 each; populated for flagged accounts only.
     l1_score DOUBLE,
     l2_score DOUBLE,
     l3_score DOUBLE,
+
+    -- Victim score, 0-100; populated for UNFLAGGED accounts only. VICTIM is a
+    -- role, not a mule band -- it never contributes to the flag.
+    victim_score DOUBLE,
 
     role            VARCHAR,
     role_confirmed  BOOLEAN,
@@ -92,16 +101,22 @@ CREATE TABLE IF NOT EXISTS scores (
     upstream_role_share   JSON,
     downstream_role_share JSON,
 
+    -- Points per parameter ID: {"MP1": 20.0, "MP3": 7.5, "ZP2": 0.0, ...}.
+    -- The authoritative per-parameter breakdown, so a profile may add or rename
+    -- parameters without a schema change; mp1..mp8 stay for fast SQL filtering.
+    param_points JSON,
+
     reasons VARCHAR[],
     ring_id INTEGER,
 
     PRIMARY KEY (acct_id, profile_id),
 
-    -- NULL = not flagged, so it must pass. UNCLASSIFIED_MULE = flagged but the
-    -- layer could not be confirmed (Section 4.3b steps 4-5).
+    -- NULL = neither flagged nor a victim, so it must pass.
+    -- UNCLASSIFIED_MULE = flagged but the layer could not be confirmed
+    -- (Section 4.3b steps 4-5). VICTIM = unflagged payer into the chain.
     CONSTRAINT scores_role_valid
         CHECK (role IS NULL
-               OR role IN ('L1', 'L2', 'L3', 'UNCLASSIFIED_MULE'))
+               OR role IN ('L1', 'L2', 'L3', 'UNCLASSIFIED_MULE', 'VICTIM'))
 );
 
 -- 8. layer_links -- one row per PROVEN inter-layer transfer, per profile.
@@ -112,9 +127,14 @@ CREATE TABLE IF NOT EXISTS scores (
 --    and are what the trace follows first.
 --    link_type is NOT NULL because a bare IN-list CHECK would otherwise let a
 --    NULL through (SQL three-valued logic) and admit an untyped link.
+--    The key is (profile_id, tx_key), never tx_id: Transaction_ID repeats in
+--    this dataset, so keying on it would reject the second of two unrelated
+--    transfers that happen to share an ID (guardrail 10). tx_id is carried
+--    alongside purely so notices and the UI can display the real ID.
 CREATE TABLE IF NOT EXISTS layer_links (
     profile_id      VARCHAR NOT NULL,
-    tx_id           VARCHAR NOT NULL,   -- ORIGINAL Transaction_ID (guardrail 10)
+    tx_key          BIGINT  NOT NULL,   -- joins tx.tx_key
+    tx_id           VARCHAR NOT NULL,   -- ORIGINAL Transaction_ID, display only
     from_acct       INTEGER,
     to_acct         INTEGER,
     from_role       VARCHAR,
@@ -125,7 +145,7 @@ CREATE TABLE IF NOT EXISTS layer_links (
     share_of_inflow DOUBLE,             -- fraction of the inflow being forwarded
     ring_id         INTEGER,
 
-    PRIMARY KEY (profile_id, tx_id),
+    PRIMARY KEY (profile_id, tx_key),
 
     CONSTRAINT layer_links_type_valid
         CHECK (link_type IN ('VICTIM_L1', 'L1_L2', 'L2_L2', 'L2_L3'))
