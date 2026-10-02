@@ -14,6 +14,7 @@ import Section91NoticesView from "./components/Section91NoticesView";
 import CaseDiaryView from "./components/CaseDiaryView";
 import JuryBenchmarkView from "./components/JuryBenchmarkView";
 import RealtimeFraudScannerView from "./components/RealtimeFraudScannerView";
+import ForensicParametersView from "./components/ForensicParametersView";
 import RegisterFIRModal from "./components/RegisterFIRModal";
 import SettingsModal from "./components/SettingsModal";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -372,6 +373,19 @@ export default function App() {
           <div className={activeTab === "vault" ? "block" : "hidden"}>
             <ErrorBoundary name="Evidence Vault">
               <EvidenceVaultView />
+            </ErrorBoundary>
+          </div>
+
+          {/* TAB: Forensic Parameters & PRD P1-P10 Heuristics Setup */}
+          <div className={activeTab === "parameters" ? "block" : "hidden"}>
+            <ErrorBoundary name="Forensic Parameters Setup">
+              <ForensicParametersView
+                forensicParams={forensicParams}
+                onSaveParams={handleSaveParams}
+                activeCase={activeCase}
+                onNavigateTab={handleTabChange}
+                onSelectCase={handleSelectCase}
+              />
             </ErrorBoundary>
           </div>
 
