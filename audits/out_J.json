@@ -1,0 +1,279 @@
+{
+  "section": "J",
+  "written_at": "2026-10-02T08:12:50",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 3.633,
+  "checks": [
+    {
+      "id": "J1",
+      "result": "values=[{'device': 'Windows_Browser', 'n': 666004}, {'device': 'iOS', 'n': 665917}, {'device': 'Android', 'n': 665425}, {'device': 'Web_Emulator', 'n': 1327}, {'device': 'Linux_Script', 'n': 1327}]; other/whitespace=0; Linux_Script=1327 Web_Emulator=1327",
+      "count": 0,
+      "examples": [
+        {
+          "device": "Windows_Browser",
+          "n": 666004
+        },
+        {
+          "device": "iOS",
+          "n": 665917
+        },
+        {
+          "device": "Android",
+          "n": 665425
+        },
+        {
+          "device": "Web_Emulator",
+          "n": 1327
+        },
+        {
+          "device": "Linux_Script",
+          "n": 1327
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Exact 5 labels; headless pair 1327/1327 confirmed. Do not case-fold.",
+      "extra": {
+        "values": [
+          {
+            "device": "Windows_Browser",
+            "n": 666004
+          },
+          {
+            "device": "iOS",
+            "n": 665917
+          },
+          {
+            "device": "Android",
+            "n": 665425
+          },
+          {
+            "device": "Web_Emulator",
+            "n": 1327
+          },
+          {
+            "device": "Linux_Script",
+            "n": 1327
+          }
+        ]
+      }
+    },
+    {
+      "id": "J2",
+      "result": "accounts=24488; multi-device=23500; mix phone+headless=0; max distinct devices=3",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Phone+headless mixing on one sender is an M9/M5 feature.",
+      "extra": {}
+    },
+    {
+      "id": "J3",
+      "result": "headless tx=2654 distinct senders=688; amount min/p50/avg/max=(96.85, 41164.62547590721, 61348.936744536484, 452221.09); distinct IPs=2654 foreign_rows=2654; cats=[('P2A', 1327), ('WALLET_LOAD', 1327)]",
+      "count": 688,
+      "examples": [],
+      "verdict": "SIGNAL",
+      "handling": "Headless senders are a small account set \u2014 core L3 signal (M4/M9). See hour plot.",
+      "extra": {
+        "hours": [
+          {
+            "h": 0,
+            "n": 119
+          },
+          {
+            "h": 1,
+            "n": 107
+          },
+          {
+            "h": 2,
+            "n": 98
+          },
+          {
+            "h": 3,
+            "n": 105
+          },
+          {
+            "h": 4,
+            "n": 75
+          },
+          {
+            "h": 5,
+            "n": 120
+          },
+          {
+            "h": 6,
+            "n": 103
+          },
+          {
+            "h": 7,
+            "n": 137
+          },
+          {
+            "h": 8,
+            "n": 132
+          },
+          {
+            "h": 9,
+            "n": 55
+          },
+          {
+            "h": 10,
+            "n": 108
+          },
+          {
+            "h": 11,
+            "n": 106
+          },
+          {
+            "h": 12,
+            "n": 70
+          },
+          {
+            "h": 13,
+            "n": 141
+          },
+          {
+            "h": 14,
+            "n": 102
+          },
+          {
+            "h": 15,
+            "n": 142
+          },
+          {
+            "h": 16,
+            "n": 163
+          },
+          {
+            "h": 17,
+            "n": 87
+          },
+          {
+            "h": 18,
+            "n": 87
+          },
+          {
+            "h": 19,
+            "n": 72
+          },
+          {
+            "h": 20,
+            "n": 150
+          },
+          {
+            "h": 21,
+            "n": 142
+          },
+          {
+            "h": 22,
+            "n": 119
+          },
+          {
+            "h": 23,
+            "n": 114
+          }
+        ],
+        "cats": [
+          {
+            "cat": "P2A",
+            "n": 1327
+          },
+          {
+            "cat": "WALLET_LOAD",
+            "n": 1327
+          }
+        ]
+      }
+    },
+    {
+      "id": "J4",
+      "result": "headless AND foreign=2654; headless not foreign=0; foreign not headless=0; all-four (headless\u00d7foreign\u00d7odd-hour\u00d7cashout-kw)=198. matrix=[{'headless': True, 'foreign': True, 'odd_hour': True, 'cashout_kw': True, 'n': 198}, {'headless': True, 'foreign': True, 'odd_hour': True, 'cashout_kw': False, 'n': 187}, {'headless': True, 'foreign': True, 'odd_hour': False, 'cashout_kw': True, 'n': 1129}, {'headless': True, 'foreign': True, 'odd_hour': False, 'cashout_kw': False, 'n': 1140}, {'headless': False, 'foreign': False, 'odd_hour': True, 'cashout_kw': False, 'n': 332558}, {'headless': False, 'foreign': False, 'odd_hour': False, 'cashout_kw': False, 'n': 1664788}]",
+      "count": 2654,
+      "examples": [
+        {
+          "headless": true,
+          "foreign": true,
+          "odd_hour": true,
+          "cashout_kw": true,
+          "n": 198
+        },
+        {
+          "headless": true,
+          "foreign": true,
+          "odd_hour": true,
+          "cashout_kw": false,
+          "n": 187
+        },
+        {
+          "headless": true,
+          "foreign": true,
+          "odd_hour": false,
+          "cashout_kw": true,
+          "n": 1129
+        },
+        {
+          "headless": true,
+          "foreign": true,
+          "odd_hour": false,
+          "cashout_kw": false,
+          "n": 1140
+        },
+        {
+          "headless": false,
+          "foreign": false,
+          "odd_hour": true,
+          "cashout_kw": false,
+          "n": 332558
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Headless and foreign almost perfectly co-occur \u2014 treat as one injected L3 signature, not two independent proofs.",
+      "extra": {
+        "matrix": [
+          {
+            "headless": true,
+            "foreign": true,
+            "odd_hour": true,
+            "cashout_kw": true,
+            "n": 198
+          },
+          {
+            "headless": true,
+            "foreign": true,
+            "odd_hour": true,
+            "cashout_kw": false,
+            "n": 187
+          },
+          {
+            "headless": true,
+            "foreign": true,
+            "odd_hour": false,
+            "cashout_kw": true,
+            "n": 1129
+          },
+          {
+            "headless": true,
+            "foreign": true,
+            "odd_hour": false,
+            "cashout_kw": false,
+            "n": 1140
+          },
+          {
+            "headless": false,
+            "foreign": false,
+            "odd_hour": true,
+            "cashout_kw": false,
+            "n": 332558
+          },
+          {
+            "headless": false,
+            "foreign": false,
+            "odd_hour": false,
+            "cashout_kw": false,
+            "n": 1664788
+          }
+        ]
+      }
+    }
+  ],
+  "extra": {}
+}

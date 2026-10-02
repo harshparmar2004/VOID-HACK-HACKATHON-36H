@@ -1,0 +1,14 @@
+{
+  "_doc": "Domain reference, not auditor code: payment-rail amount limits in paise (TRAP_CHECKLIST E8). Passed to auditor\\run_audit.py with --limits; the auditor itself holds no such values.",
+  "ranges": {
+    "amount_paise": {
+      "min": 1,
+      "by": "mode",
+      "limits": {
+        "UPI": {"max": 10000000},
+        "IMPS": {"max": 50000000},
+        "RTGS": {"min": 20000000}
+      }
+    }
+  }
+}

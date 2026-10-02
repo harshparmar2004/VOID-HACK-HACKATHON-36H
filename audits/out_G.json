@@ -1,0 +1,209 @@
+{
+  "section": "G",
+  "written_at": "2026-10-02T08:10:29",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 1.57,
+  "checks": [
+    {
+      "id": "G1",
+      "result": "distinct modes=[{'mode': 'UPI', 'n': 1299844, 'spaced': 0}, {'mode': 'IMPS', 'n': 441199, 'spaced': 0}, {'mode': 'NEFT', 'n': 199134, 'spaced': 0}, {'mode': 'RTGS', 'n': 59823, 'spaced': 0}]; other-than-4=0",
+      "count": 0,
+      "examples": [
+        {
+          "mode": "UPI",
+          "n": 1299844,
+          "spaced": 0
+        },
+        {
+          "mode": "IMPS",
+          "n": 441199,
+          "spaced": 0
+        },
+        {
+          "mode": "NEFT",
+          "n": 199134,
+          "spaced": 0
+        },
+        {
+          "mode": "RTGS",
+          "n": 59823,
+          "spaced": 0
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Exact set UPI/IMPS/NEFT/RTGS, no case variants. Reject anything else.",
+      "extra": {
+        "values": [
+          {
+            "mode": "UPI",
+            "n": 1299844,
+            "spaced": 0
+          },
+          {
+            "mode": "IMPS",
+            "n": 441199,
+            "spaced": 0
+          },
+          {
+            "mode": "NEFT",
+            "n": 199134,
+            "spaced": 0
+          },
+          {
+            "mode": "RTGS",
+            "n": 59823,
+            "spaced": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "G2",
+      "result": "per-mode rail shares=[{'mode': 'IMPS', 'n': 441199, 'p_upi': 0.7129299930416887, 'p_imps': 0.14476914045589406, 'p_neft': 0.14230086650241727, 'p_rtgs': 0.0, 'p_other': 0.0}, {'mode': 'NEFT', 'n': 199134, 'p_upi': 0.7135597135597136, 'p_imps': 0.143270360661665, 'p_neft': 0.14316992577862142, 'p_rtgs': 0.0, 'p_other': 0.0}, {'mode': 'RTGS', 'n': 59823, 'p_upi': 0.7188539524931883, 'p_imps': 0.14138374872540663, 'p_neft': 0.13976229878140514, 'p_rtgs': 0.0, 'p_other': 0.0}, {'mode': 'UPI', 'n': 1299844, 'p_upi': 0.7151319696825158, 'p_imps': 0.14272712725527062, 'p_neft': 0.1421409030622136, 'p_rtgs': 0.0, 'p_other': 0.0}]; max-min UPI-rail share=0.0059",
+      "count": 0,
+      "examples": [
+        {
+          "mode": "IMPS",
+          "n": 441199,
+          "p_upi": 0.7129299930416887,
+          "p_imps": 0.14476914045589406,
+          "p_neft": 0.14230086650241727,
+          "p_rtgs": 0.0,
+          "p_other": 0.0
+        },
+        {
+          "mode": "NEFT",
+          "n": 199134,
+          "p_upi": 0.7135597135597136,
+          "p_imps": 0.143270360661665,
+          "p_neft": 0.14316992577862142,
+          "p_rtgs": 0.0,
+          "p_other": 0.0
+        },
+        {
+          "mode": "RTGS",
+          "n": 59823,
+          "p_upi": 0.7188539524931883,
+          "p_imps": 0.14138374872540663,
+          "p_neft": 0.13976229878140514,
+          "p_rtgs": 0.0,
+          "p_other": 0.0
+        },
+        {
+          "mode": "UPI",
+          "n": 1299844,
+          "p_upi": 0.7151319696825158,
+          "p_imps": 0.14272712725527062,
+          "p_neft": 0.1421409030622136,
+          "p_rtgs": 0.0,
+          "p_other": 0.0
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Rail vs Payment_Mode mismatch is generator noise \u2014 do not score it (Section 3b).",
+      "extra": {
+        "cells": [
+          {
+            "mode": "IMPS",
+            "rail": "UPI",
+            "n": 314544
+          },
+          {
+            "mode": "IMPS",
+            "rail": "IMPS",
+            "n": 63872
+          },
+          {
+            "mode": "IMPS",
+            "rail": "NEFT",
+            "n": 62783
+          },
+          {
+            "mode": "NEFT",
+            "rail": "UPI",
+            "n": 142094
+          },
+          {
+            "mode": "NEFT",
+            "rail": "IMPS",
+            "n": 28530
+          },
+          {
+            "mode": "NEFT",
+            "rail": "NEFT",
+            "n": 28510
+          },
+          {
+            "mode": "RTGS",
+            "rail": "UPI",
+            "n": 43004
+          },
+          {
+            "mode": "RTGS",
+            "rail": "IMPS",
+            "n": 8458
+          },
+          {
+            "mode": "RTGS",
+            "rail": "NEFT",
+            "n": 8361
+          },
+          {
+            "mode": "UPI",
+            "rail": "UPI",
+            "n": 929560
+          },
+          {
+            "mode": "UPI",
+            "rail": "IMPS",
+            "n": 185523
+          },
+          {
+            "mode": "UPI",
+            "rail": "NEFT",
+            "n": 184761
+          }
+        ],
+        "shares": [
+          {
+            "mode": "IMPS",
+            "n": 441199,
+            "p_upi": 0.7129299930416887,
+            "p_imps": 0.14476914045589406,
+            "p_neft": 0.14230086650241727,
+            "p_rtgs": 0.0,
+            "p_other": 0.0
+          },
+          {
+            "mode": "NEFT",
+            "n": 199134,
+            "p_upi": 0.7135597135597136,
+            "p_imps": 0.143270360661665,
+            "p_neft": 0.14316992577862142,
+            "p_rtgs": 0.0,
+            "p_other": 0.0
+          },
+          {
+            "mode": "RTGS",
+            "n": 59823,
+            "p_upi": 0.7188539524931883,
+            "p_imps": 0.14138374872540663,
+            "p_neft": 0.13976229878140514,
+            "p_rtgs": 0.0,
+            "p_other": 0.0
+          },
+          {
+            "mode": "UPI",
+            "n": 1299844,
+            "p_upi": 0.7151319696825158,
+            "p_imps": 0.14272712725527062,
+            "p_neft": 0.1421409030622136,
+            "p_rtgs": 0.0,
+            "p_other": 0.0
+          }
+        ]
+      }
+    }
+  ],
+  "extra": {}
+}
