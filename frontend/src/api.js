@@ -75,6 +75,12 @@ export async function uploadBankStatement(file) {
   return res.json();
 }
 
+export async function fetchScannerSummary() {
+  const res = await fetch(`${API_BASE}/scanner/summary`);
+  if (!res.ok) throw new Error("Failed to fetch scanner summary");
+  return res.json();
+}
+
 export async function run60sFraudBenchmark() {
   const res = await fetch(`${API_BASE}/scanner/run-60s-benchmark`, { method: "POST" });
   if (!res.ok) throw new Error("Failed to execute 60-second 2M fraud scan benchmark");

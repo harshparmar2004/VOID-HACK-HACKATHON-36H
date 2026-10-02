@@ -22,6 +22,23 @@ from typing import Dict, List, Any, Optional
 class FraudScanner:
     def __init__(self, con: duckdb.DuckDBPyConnection):
         self.con = con
+        try:
+            self.con.execute("""
+                CREATE TABLE IF NOT EXISTS scored_mules (
+                    account_id VARCHAR,
+                    role VARCHAR,
+                    risk_index DOUBLE,
+                    current_holding_balance DOUBLE,
+                    p1_score DOUBLE,
+                    p2_score DOUBLE,
+                    p3_score DOUBLE,
+                    p4_score DOUBLE,
+                    p5_score DOUBLE,
+                    p6_score DOUBLE
+                );
+            """)
+        except Exception:
+            pass
         self._seed_heavy_whales_if_needed()
 
     def _seed_heavy_whales_if_needed(self):
