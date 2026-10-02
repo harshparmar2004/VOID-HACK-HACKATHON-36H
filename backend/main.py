@@ -20,7 +20,6 @@ from mule_scorer import MuleScorer
 from graph_engine import GraphEngine
 from legal_generator import LegalGenerator
 from fraud_scanner import FraudScanner
-from hami_hopping_engine import HAMIHoppingEngine
 from vault_engine import EvidenceVaultEngine
 
 app = FastAPI(
@@ -47,13 +46,12 @@ engine = IngestionEngine()
 scorer = None
 graph = None
 scanner = None
-hami_engine = None
 legal = LegalGenerator()
 vault_engine = EvidenceVaultEngine(DATA_DIR)
 is_initialized = False
 
 def initialize_core():
-    global scorer, graph, scanner, hami_engine, is_initialized
+    global scorer, graph, scanner, is_initialized
     if not is_initialized:
         print("[*] Initializing Abhedya-Chakra Forensics Core...")
         cyber_crime_csv = os.path.join(DATA_DIR, "cyber_crime_sample.csv")
@@ -64,7 +62,6 @@ def initialize_core():
             scorer.compute_all_scores()
             graph = GraphEngine(engine.con)
             scanner = FraudScanner(engine.con)
-            hami_engine = HAMIHoppingEngine(engine.con)
         is_initialized = True
         print(f"[+] Core Forensics Engine initialized with {os.path.basename(target_dataset)} ({engine.total_records} records)!")
 
@@ -114,13 +111,12 @@ def upload_bank_statement(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
             
-        global scorer, graph, scanner, hami_engine
+        global scorer, graph, scanner
         res = engine.load_dataset(file_path)
         scorer = MuleScorer(engine.con)
         score_res = scorer.compute_all_scores()
         graph = GraphEngine(engine.con)
         scanner = FraudScanner(engine.con)
-        hami_engine = HAMIHoppingEngine(engine.con)
         victims = engine.detect_victims(limit=5)
         
         # Cryptographic Chain-of-Custody Logging (Sec. 63 BSA / Sec. 65B IEA)
@@ -181,14 +177,13 @@ def ingest_from_url(payload: IngestUrlPayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data from URL: {str(e)}")
         
-    global scorer, graph, scanner, hami_engine
+    global scorer, graph, scanner
     try:
         res = engine.load_dataset(file_path)
         scorer = MuleScorer(engine.con)
         score_res = scorer.compute_all_scores()
         graph = GraphEngine(engine.con)
         scanner = FraudScanner(engine.con)
-        hami_engine = HAMIHoppingEngine(engine.con)
         victims = engine.detect_victims(limit=5)
         
         # Cryptographic Chain-of-Custody Logging (Sec. 63 BSA / Sec. 65B IEA)
@@ -461,45 +456,7 @@ def trace_victim_flow(
     if not res.get("found", True):
         raise HTTPException(status_code=404, detail="Victim account has no outgoing transactions.")
     
-    # Enrich with HAMI AML Hopping & Pattern Analysis
-    if hami_engine:
-        try:
-            hami_res = hami_engine.analyze_victim_hopping(victim_account, max_hops=max_hops, time_window_minutes=time_window)
-            res["hami_analysis"] = hami_res
-            res["topological_pattern"] = hami_res.get("topological_pattern", "Scatter-Gather")
-            res["has_cycle"] = hami_res.get("has_cycle", False)
-            res["cluster_fingerprint"] = hami_res.get("cluster_fingerprint", "")
-        except Exception as e:
-            print(f"[-] HAMI enrichment warning: {e}")
-            
     return res
-
-@app.get("/api/hami/hopping/{victim_account}")
-def get_hami_hopping_analysis(victim_account: str, max_hops: int = 4, time_window: int = 180):
-    """
-    HAMI AML Detector: Multi-Hop Topological Hopping & GAT Attention Analysis
-    Direct integration of Ymak7/HAMI-AML-DETECTOR from Hugging Face.
-    Classifies Fan-Out, Fan-In, Cycle, Scatter-Gather, Gather-Scatter, and Rapid Pass-Through.
-    """
-    if not is_initialized:
-        initialize_core()
-    global hami_engine
-    if hami_engine is None:
-        hami_engine = HAMIHoppingEngine(engine.con)
-    analysis = hami_engine.analyze_account_hopping(victim_account, max_hops=max_hops, time_window_minutes=time_window)
-    return analysis
-
-@app.get("/api/hami/clusters")
-def get_top_hami_hopping_clusters(limit: int = 30):
-    """
-    Returns top detected HAMI multi-hop laundering clusters and rings across 2M transactions.
-    """
-    if not is_initialized:
-        initialize_core()
-    global hami_engine
-    if hami_engine is None:
-        hami_engine = HAMIHoppingEngine(engine.con)
-    return hami_engine.scan_top_hopping_clusters(limit=limit)
 
 @app.get("/api/mules")
 def get_flagged_mules(

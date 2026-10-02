@@ -108,18 +108,6 @@ export async function executeEmergencyFreeze(accountIds) {
   return res.json();
 }
 
-export async function fetchHamiHopping(victimAccount, maxHops = 4, timeWindow = 180) {
-  const res = await fetch(`${API_BASE}/hami/hopping/${victimAccount}?max_hops=${maxHops}&time_window=${timeWindow}`);
-  if (!res.ok) throw new Error("Failed to fetch HAMI AML hopping analysis");
-  return res.json();
-}
-
-export async function fetchHamiClusters(limit = 30) {
-  const res = await fetch(`${API_BASE}/hami/clusters?limit=${limit}`);
-  if (!res.ok) throw new Error("Failed to fetch HAMI hopping clusters");
-  return res.json();
-}
-
 export async function fetchFrozenAccounts() {
   const res = await fetch(`${API_BASE}/scanner/frozen-accounts`);
   if (!res.ok) throw new Error("Failed to fetch frozen accounts registry");

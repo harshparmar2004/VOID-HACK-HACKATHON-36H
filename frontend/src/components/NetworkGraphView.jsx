@@ -407,12 +407,6 @@ export default function NetworkGraphView({ traceData }) {
               <GitBranch className="w-3 h-3 text-[#D96B27]" />
               BRANCHING TREE GRAPH
             </span>
-            {traceData?.topological_pattern && (
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] border border-[#7C3AED]/30 font-mono flex items-center gap-1">
-                <Layers className="w-3 h-3 text-[#7C3AED]" />
-                HAMI: {traceData.topological_pattern}
-              </span>
-            )}
           </div>
           <p className="text-xs text-[#746D65] mt-0.5">
             Dendrogram-style branching graph showing fund fan-out from Victim Root to Terminal Exit leaves with transaction details written on each branch.

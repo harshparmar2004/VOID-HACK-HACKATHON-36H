@@ -11,7 +11,6 @@ import {
   Award,
   Settings,
   Zap,
-  Network,
   SlidersHorizontal
 } from "lucide-react";
 
@@ -40,7 +39,6 @@ export default function Sidebar({
           badge: Number(forensicParams?.minAmount) > 0 || forensicParams?.bankFilter !== "ALL" ? "Active" : "P1–P10"
         },
         { id: "scanner", label: "Real-Time 60s Scanner", icon: Zap, badge: "60s / 2M" },
-        { id: "hami", label: "HAMI AML Hopping", icon: Network, badge: "GAT / HF" },
         { id: "entities", label: "Entity Directory", icon: Users, badge: counts?.totalAccounts || "24,368" },
         { id: "dossier", label: "Mule Dossier", icon: UserX, badge: counts?.flaggedMules || "333" },
         { id: "graph", label: "Mule Network Graph", icon: Share2, badge: "WebGL" },

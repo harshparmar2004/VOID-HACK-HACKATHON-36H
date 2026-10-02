@@ -315,12 +315,6 @@ export default function EndpointTrailView({
               <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-mono">
                 HOP 0 → HOP 3
               </span>
-              {traceData?.topological_pattern && (
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] border border-[#7C3AED]/30 font-mono flex items-center gap-1">
-                  <Layers className="w-3 h-3" />
-                  HAMI: {traceData.topological_pattern}
-                </span>
-              )}
             </div>
             <p className="text-xs text-[#746D65] mt-1">
               Interactive zoomable forensic canvas showing end-to-end multi-tier fund dispersion across 2,000,000 transactions.
