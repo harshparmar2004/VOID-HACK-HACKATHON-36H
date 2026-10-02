@@ -216,7 +216,11 @@ export default function App() {
         p.narrationKeyword,
         p.customRules
       );
-      if (trace && Array.isArray(trace.nodes)) setTraceData(trace);
+      if (trace && Array.isArray(trace.nodes) && trace.nodes.length > 0) {
+        setTraceData(trace);
+      } else {
+        console.warn("Trace returned 0 nodes for victim:", victimId, "- preserving current trace data");
+      }
     } catch (err) {
       console.warn("Using active trace for victim:", victimId, err.message);
     }

@@ -23,6 +23,7 @@ import {
   Copy,
   Check
 } from "lucide-react";
+import { DEFAULT_TRACE } from "../mockData";
 
 export default function EndpointTrailView({
   victimAccount,
@@ -69,23 +70,27 @@ export default function EndpointTrailView({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
+  const effectiveTrace = (traceData && Array.isArray(traceData.nodes) && traceData.nodes.length > 0)
+    ? traceData
+    : DEFAULT_TRACE;
+
   // Group nodes by hop level (0: Victim, 1: L1 Collector, 2: L2 Distributors, 3: L3 Cashout, 4: L4 Terminal)
   const hopGroups = React.useMemo(() => {
     const groups = { 0: [], 1: [], 2: [], 3: [], 4: [] };
-    if (traceData && traceData.nodes) {
-      traceData.nodes.forEach((n) => {
+    if (effectiveTrace && effectiveTrace.nodes) {
+      effectiveTrace.nodes.forEach((n) => {
         const h = Math.min(n.hop ?? 0, 4);
         if (!groups[h]) groups[h] = [];
         groups[h].push(n);
       });
     }
     return groups;
-  }, [traceData]);
+  }, [effectiveTrace]);
 
   // Synthesize or extract multi-hop links to guarantee 100% graph connectivity
   const effectiveLinks = React.useMemo(() => {
-    if (traceData && traceData.links && traceData.links.length > 0) {
-      return traceData.links;
+    if (effectiveTrace && effectiveTrace.links && effectiveTrace.links.length > 0) {
+      return effectiveTrace.links;
     }
     const generated = [];
     const h0 = hopGroups[0] || [];
@@ -99,7 +104,7 @@ export default function EndpointTrailView({
         txn_id: "TXN-HOP1-01",
         source: h0[0].id,
         target: h1[0].id,
-        amount: h1[0].tainted_received || traceData?.total_siphoned_inr || 1478894.0,
+        amount: h1[0].tainted_received || effectiveTrace?.total_siphoned_inr || 1478894.0,
         payment_mode: "RTGS",
         narration: "DIGITAL-ARREST-TRANSFER",
         hop: 1

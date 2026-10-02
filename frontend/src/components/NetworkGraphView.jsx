@@ -22,6 +22,7 @@ import {
   Share2,
   Move
 } from "lucide-react";
+import { DEFAULT_TRACE } from "../mockData";
 
 export default function NetworkGraphView({ traceData }) {
   const [treeOrientation, setTreeOrientation] = useState("horizontal"); // "horizontal" (L->R) or "vertical" (T->B)
@@ -47,8 +48,13 @@ export default function NetworkGraphView({ traceData }) {
   wheelModeRef.current = wheelMode;
   const wheelTimeoutRef = useRef(null);
 
-  const nodes = traceData?.nodes || [];
-  const rawLinks = traceData?.links || [];
+  // Guaranteed non-empty nodes and links to prevent graph disappearance
+  const nodes = (Array.isArray(traceData?.nodes) && traceData.nodes.length > 0)
+    ? traceData.nodes
+    : DEFAULT_TRACE.nodes;
+  const rawLinks = (Array.isArray(traceData?.links) && traceData.links.length > 0)
+    ? traceData.links
+    : DEFAULT_TRACE.links;
 
   // Temporal link slicing for 15-day slider
   const visibleLinksCount = Math.max(1, Math.floor((rawLinks.length * timeProgress) / 100));
@@ -355,8 +361,10 @@ export default function NetworkGraphView({ traceData }) {
       }
     });
 
-    const maxX = Math.max(...positionedNodes.map((n) => n.x + n.width), 1500) + 120;
-    const maxY = Math.max(...positionedNodes.map((n) => n.y + n.height), 900) + 120;
+    const validXs = positionedNodes.map((n) => Number(n.x) + Number(n.width)).filter(Number.isFinite);
+    const validYs = positionedNodes.map((n) => Number(n.y) + Number(n.height)).filter(Number.isFinite);
+    const maxX = Math.max(...validXs, 1500) + 120;
+    const maxY = Math.max(...validYs, 900) + 120;
 
     return {
       positionedNodes,
