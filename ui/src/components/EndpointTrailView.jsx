@@ -1,26 +1,31 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, Zap, Lock, ZoomIn, ZoomOut, Maximize2, Share2, Copy, Check } from "lucide-react";
+import { Search, Zap, Lock, Share2, Copy, Check } from "lucide-react";
 import { DASH, inr, num, text } from "../format";
 import { EmptyState, ErrorState, LoadingState } from "./States";
 import {
+  AccountColumns,
   DENSE_FROM,
   EvidencePanels,
   LinkCard,
+  MIN_ZOOM,
   NodePanel,
+  READABLE_ZOOM,
   ROLE_KEYS,
   RoleLegend,
+  ScoreBar,
   TrimBadge,
+  ZoomBar,
+  clampZoom,
   hopsShown,
   riskOf,
   roleKey,
-  roleTheme
+  roleTheme,
+  traceTime
 } from "./TraceEvidence";
 
 const EMPTY_TRACE = { nodes: [], links: [] };
 const WIDE_LANE_FROM = 4; // a lane with more accounts than this may use two columns
 const DENSE_LANE_ROWS = 24; // accounts per column in a lane of a large trace
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 2.0;
 
 export default function EndpointTrailView({
   victimAccount,
@@ -226,28 +231,26 @@ export default function EndpointTrailView({
     return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
   }, []);
 
-  // Zoom controls
-  const handleZoomIn = () => {
-    setZoom((z) => Math.min(MAX_ZOOM, Number((z + 0.15).toFixed(2))));
-  };
-
-  const handleZoomOut = () => {
-    setZoom((z) => Math.max(MIN_ZOOM, Number((z - 0.15).toFixed(2))));
-  };
-
-  const handleResetZoom = () => {
-    setZoom(0.85);
-    setPan({ x: 20, y: 20 });
-  };
-
-  const handleFitView = () => {
+  // Fit the lanes to the canvas width; the opening view passes a floor so card text stays readable.
+  const handleFitView = (floor = MIN_ZOOM) => {
     if (viewportRef.current && lanesRef.current) {
       const vWidth = viewportRef.current.clientWidth - 40;
       const cWidth = lanesRef.current.offsetWidth + 80; // lanes plus canvas padding, before zoom
-      const autoZoom = Math.min(1.0, Math.max(MIN_ZOOM, Number((vWidth / cWidth).toFixed(2))));
-      setZoom(autoZoom);
+      setZoom(Math.min(1.0, Math.max(floor, Number((vWidth / cWidth).toFixed(2)))));
       setPan({ x: 10, y: 15 });
     }
+  };
+
+  // Bring one account to the middle of the canvas.
+  const centreOn = (id) => {
+    const el = nodeRefs.current[id];
+    if (!viewportRef.current || !canvasRef.current || !el) return;
+    const canvas = canvasRef.current.getBoundingClientRect();
+    const card = el.getBoundingClientRect();
+    setPan({
+      x: Math.round(viewportRef.current.clientWidth / 2 - (card.left + card.width / 2 - canvas.left)),
+      y: Math.round(viewportRef.current.clientHeight / 2 - (card.top + card.height / 2 - canvas.top))
+    });
   };
 
   // A new trace opens fitted to the canvas (once the tab is visible, so the canvas has a size).
@@ -255,16 +258,24 @@ export default function EndpointTrailView({
   useEffect(() => {
     if (!isActive || !hasTrace || fittedFor.current === traceData) return;
     fittedFor.current = traceData;
-    handleFitView();
+    handleFitView(READABLE_ZOOM);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, hasTrace, traceData]);
 
-  // Wheel zoom handler
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.08 : -0.08;
-    setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((z + delta).toFixed(2)))));
-  };
+  // Mouse wheel zooms in steps and moves the slider. Pinch and trackpad gesture zoom
+  // (ctrl+wheel) is swallowed. Native listener: a React wheel handler cannot preventDefault.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) return;
+      const delta = e.deltaY < 0 ? 0.08 : -0.08;
+      setZoom((z) => clampZoom(Number((z + delta).toFixed(2))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [hasTrace]);
 
   // Highlight: the hovered or pinned transfer, else the transfers of the active account.
   const activeId = hoveredNodeId || selectedNode?.id || null;
@@ -282,6 +293,13 @@ export default function EndpointTrailView({
   const touchesActive = (l) => !activeId || l.source === activeId || l.target === activeId;
   const isLinkActive = (l) => (shownLink ? sameLink(l, shownLink) : touchesActive(l));
   const isNodeActive = (nodeId) => !activeSet || activeSet.has(nodeId);
+
+  // Score bar: the hovered account, else the pinned one, else the victim.
+  const scoreNode =
+    (hoveredNodeId && effectiveTrace.nodes.find((n) => n.id === hoveredNodeId)) ||
+    selectedNode ||
+    effectiveTrace.nodes.find((n) => n.role === "VICTIM") ||
+    null;
 
   return (
     <div className="space-y-4 select-none">
@@ -366,7 +384,7 @@ export default function EndpointTrailView({
               TRACE TIME (SERVER)
             </span>
             <div className="text-lg sm:text-xl font-bold font-mono text-[#059669] tracking-tight my-0.5 whitespace-nowrap">
-              {trace?.serverMs == null ? DASH : `${trace.serverMs} ms`}
+              {traceTime(traceData, trace?.serverMs)}
             </div>
             <p className="text-[11px] text-[#059669] font-medium whitespace-nowrap font-sans">
               {text(fullHops)} hops{traceData.display_trimmed ? `, ${hopsShown(effectiveTrace.nodes)} shown` : ""} •{" "}
@@ -442,48 +460,13 @@ export default function EndpointTrailView({
             Graph Canvas Controls:
           </span>
           <span className="text-[11px] text-[#9E968D] hidden sm:inline font-sans">
-            Drag canvas to pan • Scroll or buttons to zoom
+            Drag canvas to pan • Slider or mouse wheel to zoom
           </span>
           <RoleLegend nodes={effectiveTrace.nodes} />
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Zoom Percentage */}
-          <div className="px-2.5 py-1 rounded-sm bg-white border border-[#E8E2D5] font-mono text-[11px] font-bold text-[#2C2623] shadow-2xs">
-            {Math.round(zoom * 100)}%
-          </div>
-
-          {/* Zoom Buttons */}
-          <div className="flex items-center bg-white border border-[#E8E2D5] rounded-sm overflow-hidden shadow-2xs">
-            <button
-              onClick={handleZoomIn}
-              title="Zoom In"
-              className="p-1.5 hover:bg-[#FAF6EE] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleZoomOut}
-              title="Zoom Out"
-              className="p-1.5 hover:bg-[#FAF6EE] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleResetZoom}
-              title="Reset 100%"
-              className="px-2 py-1 hover:bg-[#FAF6EE] text-[#2C2623] font-mono text-[11px] font-bold border-r border-[#E8E2D5] transition-colors cursor-pointer"
-            >
-              1:1
-            </button>
-            <button
-              onClick={handleFitView}
-              title="Fit to Screen"
-              className="p-1.5 hover:bg-[#FAF6EE] text-[#2C2623] transition-colors cursor-pointer"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ZoomBar zoom={zoom} onZoom={(z) => setZoom(clampZoom(z))} onFit={() => handleFitView()} />
 
           {/* Hop 2 Layout Toggle */}
           <div className="flex items-center bg-white border border-[#E8E2D5] rounded-sm overflow-hidden shadow-2xs text-[11px] font-mono">
@@ -529,8 +512,9 @@ export default function EndpointTrailView({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
       <div className="space-y-4 min-w-0">
+      <ScoreBar node={scoreNode} />
       {/* MAIN GRAPH CANVAS VIEWPORT */}
       <div
         ref={viewportRef}
@@ -539,11 +523,11 @@ export default function EndpointTrailView({
         onMouseUp={handleMouseUp}
         onMouseLeave={() => setIsDragging(false)}
         onDragStart={(e) => e.preventDefault()}
-        onWheel={handleWheel}
         className={`relative w-full h-[620px] bg-[#FAF7F0] rounded-sm border border-[#E8E2D5] overflow-hidden shadow-inner select-none ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{
+          touchAction: "none",
           backgroundImage: `
             radial-gradient(circle, #D5CCC0 1.2px, transparent 1.2px),
             linear-gradient(to right, rgba(232, 226, 213, 0.4) 1px, transparent 1px),
@@ -805,7 +789,19 @@ export default function EndpointTrailView({
       )}
       </div>
 
-      <EvidencePanels traceData={traceData} />
+      <div className="space-y-3 min-w-0">
+        <AccountColumns
+          nodes={effectiveTrace.nodes}
+          activeId={activeId}
+          pinnedId={selectedNode?.id ?? null}
+          onHover={setHoveredNodeId}
+          onPin={(node) => {
+            setSelectedNode(node);
+            centreOn(node.id);
+          }}
+        />
+        <EvidencePanels traceData={traceData} />
+      </div>
       </div>
         </>
       )}

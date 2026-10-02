@@ -468,3 +468,64 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - CORS allows only `http://localhost:5173`; the dev server opened as `127.0.0.1:5173` gets no data.
 - No real trace with a fallback link or over 14 accounts exists in this load, so `via` = fallback and the dense layout are unverified on real data.
 - Bank names, per-node first / last activity time, and trace time in the body are still absent.
+
+## 2026-10-02 — Step 7b+: score bar, account columns, zoom slider
+
+**Step** — `ui\src\` only; `api\`, `engine\` and the database untouched.
+
+**Files** — changed `ui\src\components\TraceEvidence.jsx`, `NetworkGraphView.jsx`, `EndpointTrailView.jsx`.
+
+**Key names** — `ScoreBar`, `AccountColumns`, `ZoomBar`, `MIN_ZOOM` (25%), `MAX_ZOOM` (200%), `READABLE_ZOOM` (60%), `clampZoom` (TraceEvidence); `scoreNode`, `centreOn`, `handleFitView(floor)` (graph and trail).
+
+**What changed** (both trace views)
+- Score bar above the canvas: account number, role, "Mule score N/100", "Trust score N/100", and "Final N/100" ("Victim score N/100" for VICTIM). Shows the hovered account, else the pinned one, else the victim; a null value is a dash.
+- "Accounts by role" panel at the top of the right column, above the summary: Victims | L1 | L2 | L3 with a count in each header and account number + holding per row. Hovering a row highlights its node and drives the score bar; clicking pins it (node panel opens) and centres the canvas on it.
+- Zoom: slider 25% to 200% with - / + and Fit in the toolbar, replacing the old zoom buttons and 1:1. One zoom state feeds the slider and the canvas. Pinch / trackpad gesture zoom (ctrl+wheel) is swallowed and `touch-action: none` is set; plain mouse-wheel zoom stays (graph: only in the Wheel "Zoom" mode) and moves the slider. Opening zoom is Fit with a 60% floor; the Fit button is a true fit.
+- Right column widened from 320px to 380px to hold four account columns.
+
+**Results** — `npm run build` compiles; `oxlint` 0 errors. Headless Chrome, SBIN10000294, live API, both views, no console errors: bar starts on the victim (40 / 0 / Victim score 100); hovering three nodes gave IPOS10000334 L1 87.5 / 0 / 87.5, AIRP10000925 L2 80 / 0 / 80, HDFC10001146 L3 55 / 0 / 70, then back to the victim. Columns list 1 victim, 1 L1, 5 L2, 5 L3. Row hover dims 10 of 12 cards; row click pins and lands the card 0 px from the canvas centre. Slider 150 / 25 / 200 and + / - move the canvas scale to match; ctrl+wheel leaves zoom unchanged; wheel zoom moves the slider; Fit gives 56% (graph) and 44% (trail).
+
+**Deviations** — Applied to the trail view as well as the graph view (shared components). With the 60% floor the opening view of a 3-hop trace cuts the last column slightly (true fit is 56% / 44%); Fit or panning shows it.
+
+**What the UI needs that the API lacks** — nothing new for this step.
+
+## 2026-10-02 — Step 7c1: bank names, trace elapsed_ms, second CORS origin
+
+**Step** — engine + API only; no UI change. The API stays read-only.
+
+**Files** — new `engine\seed_banks.py`, `api\repositories\banks.py`; changed `api\middleware.py`, `api\routers\trace.py`, `api\repositories\{victims,mules,entities}.py`, `api\services\{victims,mules,entities,trace}.py`, `api\schemas\{victims,mules,entities,trace}.py`, `audits\check_api.py`.
+
+**Key names** — `BANK_NAMES`, `seed()` (seed_banks); `banks.JOIN`, `banks.names()`; `bank_name` on `VictimItem`, `MuleItem`, `EntityItem`, `TraceNode`, `FreezeCandidate`, `BatchVictim`, `CellVictim`, `FreezeAccount`, `ReverseVictim`; `elapsed_ms` on `TraceResponse`, `BatchResponse`, `NotFound`; `_elapsed_ms`, `_named` (trace service); `ALLOWED_ORIGINS` (two origins); `table_counts`, `expected_banks`, `named`, `DEV_ORIGINS`, `BANK_NAME_PLACES` (check_api).
+
+**What changed**
+- `seed_banks.py --db`: upserts the 10 named banks into `bank_directory` (only `bank_name`; `nodal_officer_title` and `address_block` stay NULL and a rerun does not touch them). An account prefix with no name stops the run before anything is written.
+- `bank_name` is returned beside `bank` in /victims, /mules, /entities (bank_stats `name` now filled), trace nodes and freeze list, and also the batch trace and both cell endpoints (those two now take a read-only connection).
+- `elapsed_ms` in /trace and /trace/batch answers, including found=false: measured in the service around the engine call and the mapping, so it is a little under the `X-Process-Time-Ms` header.
+- CORS allows `http://127.0.0.1:5173` as well as `http://localhost:5173`.
+
+**Results** — `seed_banks.py`: 0.83 s, 10 prefixes in accounts, 10 rows, 24,873 accounts all named, officer / address filled 0; an unknown prefix (scratch database) is refused with 0 rows written. `check_api.py`: 30.4 s, 1281 checks, 0 failed: bank_name equals the directory name for all 24,873 accounts (entities) and in 11 places in total, bank_stats names all filled, elapsed_ms within the request time, both origins allowed, file size / modified time / row count of every table unchanged by the API run.
+
+**Deviations** — `bank_name` also added to batch and cell responses (not listed in the task, same "bank" field). Not added to rows that carry two banks under other names (transaction search `source_bank` / `target_bank`, scanner `sender_bank` / `receiver_bank`, preview). `API_CONTRACT.md` not updated. The API server that was already running still serves the old code until it is restarted.
+
+## 2026-10-02 — Step 7c2: score breakdown, bank names, full-trace labels, elapsed_ms
+
+**Step** — `ui\src\` only; no API, engine or database change.
+
+**Files** — changed `ui\src\components\MuleDossierView.jsx`, `EntityDirectoryView.jsx`, `TraceEvidence.jsx`, and one line each in `NetworkGraphView.jsx`, `EndpointTrailView.jsx` (the two places trace time is shown).
+
+**Key names** — `breakdown`, `ParameterRow`, `reasonTag`, `ANY_TAG`, `profile` / `showAll` state, `openRows`, `hiddenRows`, `otherReasons` (dossier); `Panel` `note` prop, `traceTime` (TraceEvidence).
+
+**What changed**
+- Mule dossier drawer: one row per parameter of the active profile (`GET /profiles/active`: id, name, weight), grouped Mule index / Trust index, with points from `param_points` as "N of weight", a bar, and the reason the engine tagged with that id. A line "Final N = Mule N reduced by Trust N" with the profile's formula and trust_discount_factor. Parameters with weight 0 or `scored: false` are hidden behind "Show all (+n)" and show the profile's reason for being off. Untagged reasons stay under "Other reasons". No weight is written in the UI; if the profile cannot be loaded the rows show ids and points with a dash for name and weight.
+- Entity directory: bank name on the tiles (code beneath), in the dropdown, and in each row (name, then code and IFSC); search also matches the name. The dossier drawer header shows the name too.
+- Trace side panels: with `display_trimmed` true, Summary, Reconciliation, Per hop, Findings and Freeze list carry a "Full trace (all N hops)" tag (N = `full_hops`).
+- Trace time on the graph header and the trail tile is `elapsed_ms` from the response; the timing header is used only when the body lacks the field.
+
+**Results** — `npm run build` compiles; `oxlint` 0 errors. Headless Chrome, no console errors, against the current API code on port 8001 (the server already running on 8000 predates 7c1 and was left alone). Dossier PYTM10000444: 12 rows by default (MP1-MP8, T1, T4, T5, T7), "Show all (+8)" adds ZP1-ZP5, T2, T3, T6; "Final 87.4 = Mule 87.4 reduced by Trust 0". Entities: 10 tiles and 10 dropdown entries named, 0 of 500 rows without a name. Trace with max 2 hops: all five panels tagged "Full trace (all 3 hops)"; untagged when not trimmed. Trace time shown from elapsed_ms.
+
+**Deviations** — Touched `NetworkGraphView.jsx` and `EndpointTrailView.jsx` (not in the task's file list) because that is where latency is displayed.
+
+**Still missing**
+- A parameter that scored 0 has no reason text (the engine records reasons only for points earned), so MP6 and all trust rows show a dash on flagged accounts.
+- `param_points` and reasons are on /mules only: trace nodes and /entities carry no `param_points`, so the breakdown cannot be shown from the graph's node panel.
+- The dossier table and its bank filter still show bank codes (only the drawer shows the name).

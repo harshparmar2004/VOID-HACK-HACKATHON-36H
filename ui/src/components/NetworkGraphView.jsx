@@ -1,24 +1,28 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Play, Pause, RotateCcw, ZoomIn, ZoomOut, Maximize2, ArrowRight, ArrowDown, GitBranch, Copy, Check, Move } from "lucide-react";
+import { Play, Pause, RotateCcw, ZoomIn, ArrowRight, ArrowDown, GitBranch, Copy, Check, Move } from "lucide-react";
 import { DASH, inr, num, text } from "../format";
 import {
+  AccountColumns,
   DENSE_FROM,
   EvidencePanels,
   LinkCard,
+  MIN_ZOOM,
   NodePanel,
+  READABLE_ZOOM,
   ROLE_KEYS,
   RoleLegend,
+  ScoreBar,
   TrimBadge,
+  ZoomBar,
+  clampZoom,
   endId,
   layeredLayout,
   linkGeometry,
   riskOf,
   roleKey,
-  roleTheme
+  roleTheme,
+  traceTime
 } from "./TraceEvidence";
-
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 2.5;
 
 export default function NetworkGraphView({ traceData, serverMs, isActive = true }) {
   const [treeOrientation, setTreeOrientation] = useState("horizontal"); // "horizontal" (L->R) or "vertical" (T->B)
@@ -175,7 +179,9 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
 
       const currentZoom = zoomRef.current;
       const currentPan = panRef.current;
-      const isZoomAction = e.ctrlKey || e.metaKey || wheelModeRef.current === "zoom";
+      // Pinch and trackpad gesture zoom arrive as ctrl+wheel: swallowed, zoom is on the slider.
+      if (e.ctrlKey || e.metaKey) return;
+      const isZoomAction = wheelModeRef.current === "zoom";
 
       if (isZoomAction) {
         // CURSOR-CENTERED ZOOM: Point under mouse cursor remains locked in place
@@ -184,16 +190,15 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
         const cursorY = e.clientY - rect.top;
 
         // Damped exponential factor prevents jumpy scaling
-        const zoomDelta = e.ctrlKey ? -e.deltaY * 0.005 : -e.deltaY * 0.0016;
-        const factor = Math.exp(zoomDelta);
-        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, currentZoom * factor));
+        const factor = Math.exp(-e.deltaY * 0.0016);
+        const newZoom = clampZoom(currentZoom * factor);
 
         if (Math.abs(newZoom - currentZoom) > 0.001) {
           const scaleRatio = newZoom / currentZoom;
           const newPanX = cursorX - (cursorX - currentPan.x) * scaleRatio;
           const newPanY = cursorY - (cursorY - currentPan.y) * scaleRatio;
 
-          setZoom(Number(newZoom.toFixed(3)));
+          setZoom(Number(newZoom.toFixed(2)));
           setPan({ x: Math.round(newPanX), y: Math.round(newPanY) });
         }
       } else {
@@ -236,22 +241,27 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
     setZoom(Number(targetZoom.toFixed(2)));
   };
 
-  const handleZoomIn = () => zoomToTarget(Math.min(MAX_ZOOM, Number((zoom + 0.15).toFixed(2))));
-  const handleZoomOut = () => zoomToTarget(Math.max(MIN_ZOOM, Number((zoom - 0.15).toFixed(2))));
-  const handleResetZoom = () => {
-    zoomToTarget(0.85);
-  };
-
-  const handleFitView = () => {
+  // Fit the whole trace; the opening view passes a floor so card text stays readable.
+  const handleFitView = (floor = MIN_ZOOM) => {
     if (viewportRef.current) {
       const vWidth = viewportRef.current.clientWidth - 40;
       const vHeight = viewportRef.current.clientHeight - 40;
       const cWidth = treeLayout.canvasBounds.width;
       const cHeight = treeLayout.canvasBounds.height;
-      const autoZoom = Math.min(1.0, Math.max(MIN_ZOOM, Math.min(vWidth / cWidth, vHeight / cHeight)));
+      const autoZoom = Math.min(1.0, Math.max(floor, Math.min(vWidth / cWidth, vHeight / cHeight)));
       setZoom(Number(autoZoom.toFixed(2)));
       setPan({ x: 20, y: 20 });
     }
+  };
+
+  // Bring one account to the middle of the canvas.
+  const centreOn = (id) => {
+    const pos = layout.positions[id];
+    if (!viewportRef.current || !pos) return;
+    setPan({
+      x: Math.round(viewportRef.current.clientWidth / 2 - (pos.x + pos.width / 2) * zoom),
+      y: Math.round(viewportRef.current.clientHeight / 2 - (pos.y + pos.height / 2) * zoom)
+    });
   };
 
   const handleCopy = (text, e) => {
@@ -266,7 +276,7 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
   useEffect(() => {
     if (!isActive || fittedFor.current === treeOrientation) return;
     fittedFor.current = treeOrientation;
-    handleFitView();
+    handleFitView(READABLE_ZOOM);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, treeOrientation]);
 
@@ -276,6 +286,10 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
   const touchesActive = (l) => !activeId || l.sourceId === activeId || l.targetId === activeId;
   const isLinkActive = (l) => (shownLink ? sameLink(l, shownLink) : touchesActive(l));
   const isNodeActive = (nodeId) => !activeSet || activeSet.has(nodeId);
+
+  // Score bar: the hovered account, else the pinned one, else the victim.
+  const scoreNode =
+    (hoveredNodeId && nodes.find((n) => n.id === hoveredNodeId)) || selectedNode || nodes.find((n) => n.role === "VICTIM") || null;
 
   return (
     <div className="space-y-4 select-none">
@@ -293,7 +307,7 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
             <TrimBadge traceData={traceData} />
             <span className="text-[11px] font-mono text-[#746D65]" title="Time the API spent on this trace">
               {text(traceData.full_hops)} hops • {num(nodes.length)} accounts • {num(rawLinks.length)} transfers • trace time{" "}
-              {serverMs == null ? DASH : `${serverMs} ms`}
+              {traceTime(traceData, serverMs)}
             </span>
           </div>
           <p className="text-xs text-[#746D65] mt-0.5">
@@ -355,7 +369,7 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
                   ? "bg-[#D96B27] text-white shadow-2xs"
                   : "text-[#746D65] hover:text-[#2C2623]"
               }`}
-              title="Scroll wheel smoothly pans the canvas (Hold Ctrl/Pinch to zoom)"
+              title="Scroll wheel pans the canvas"
             >
               <Move className="w-3 h-3" />
               <span>Pan</span>
@@ -367,52 +381,20 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
                   ? "bg-[#D96B27] text-white shadow-2xs"
                   : "text-[#746D65] hover:text-[#2C2623]"
               }`}
-              title="Scroll wheel zooms at cursor position with zero drift"
+              title="Scroll wheel zooms at the cursor and moves the slider"
             >
               <ZoomIn className="w-3 h-3" />
               <span>Zoom</span>
             </button>
           </div>
 
-          <div className="px-2.5 py-1 rounded-lg bg-white border border-[#E8E2D5] font-mono text-[11px] font-bold text-[#2C2623] shadow-2xs">
-            {Math.round(zoom * 100)}%
-          </div>
-
-          <div className="flex items-center bg-white border border-[#E8E2D5] rounded-lg overflow-hidden shadow-2xs">
-            <button
-              onClick={handleZoomIn}
-              title="Zoom In"
-              className="p-1.5 hover:bg-[#F3EDE2] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleZoomOut}
-              title="Zoom Out"
-              className="p-1.5 hover:bg-[#F3EDE2] text-[#2C2623] border-r border-[#E8E2D5] transition-colors cursor-pointer"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleResetZoom}
-              title="Reset 100%"
-              className="px-2 py-1 hover:bg-[#F3EDE2] text-[#2C2623] font-mono text-[11px] font-bold border-r border-[#E8E2D5] transition-colors cursor-pointer"
-            >
-              1:1
-            </button>
-            <button
-              onClick={handleFitView}
-              title="Fit to Screen"
-              className="p-1.5 hover:bg-[#F3EDE2] text-[#2C2623] transition-colors cursor-pointer"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          <ZoomBar zoom={zoom} onZoom={zoomToTarget} onFit={() => handleFitView()} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
       <div className="space-y-4 min-w-0">
+      <ScoreBar node={scoreNode} />
       {/* GRAPH CANVAS VIEWPORT */}
       <div
         ref={viewportRef}
@@ -422,6 +404,7 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{
+          touchAction: "none",
           backgroundImage: `
             radial-gradient(circle, #D5CCC0 1.2px, transparent 1.2px),
             linear-gradient(to right, rgba(232, 226, 213, 0.4) 1px, transparent 1px),
@@ -643,7 +626,19 @@ export default function NetworkGraphView({ traceData, serverMs, isActive = true 
       </div>
       </div>
 
-      <EvidencePanels traceData={traceData} />
+      <div className="space-y-3 min-w-0">
+        <AccountColumns
+          nodes={nodes}
+          activeId={activeId}
+          pinnedId={selectedNode?.id ?? null}
+          onHover={setHoveredNodeId}
+          onPin={(node) => {
+            setSelectedNode(node);
+            centreOn(node.id);
+          }}
+        />
+        <EvidencePanels traceData={traceData} />
+      </div>
       </div>
     </div>
   );

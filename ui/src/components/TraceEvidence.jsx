@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, Copy, Layers, X } from "lucide-react";
+import { Check, Copy, Layers, Maximize2, Minus, Plus, X } from "lucide-react";
 import { DASH, dateTime, inr, num, text } from "../format";
 
 // Shared pieces for the two trace views (network graph and endpoint trail):
@@ -17,6 +17,14 @@ const NO_ROLE_THEME = { color: "#746D65", soft: "#F3EDE2", border: "#E8E2D5", te
 const ROLE_ORDER = ["VICTIM", "L1", "L2", "L3"];
 
 export const DENSE_FROM = 60; // more accounts than this: compact cards, plain links
+
+// Zoom range of the slider, and the smallest opening zoom at which card text is still readable.
+export const MIN_ZOOM = 0.25;
+export const MAX_ZOOM = 2;
+export const READABLE_ZOOM = 0.6;
+const ZOOM_STEP = 0.1;
+
+export const clampZoom = (z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(z)));
 
 export function roleTheme(role) {
   return ROLE_THEMES[role] || NO_ROLE_THEME;
@@ -42,6 +50,12 @@ export function rolesPresent(nodes) {
 export function riskOf(node) {
   if (node.role === "VICTIM") return { label: "Victim score", value: node.victim_score ?? null };
   return { label: "Final index", value: node.final_index ?? null };
+}
+
+// Trace time: elapsed_ms measured by the API; the request's timing header only if the body lacks it.
+export function traceTime(traceData, headerMs) {
+  const ms = traceData?.elapsed_ms ?? headerMs;
+  return ms === null || ms === undefined ? DASH : `${num(ms, 1)} ms`;
 }
 
 export const endId = (end) => (end !== null && typeof end === "object" ? end.id : end);
@@ -331,11 +345,18 @@ export function LinkCard({ link, pinned, onClose }) {
   );
 }
 
-function Panel({ title, count, children }) {
+function Panel({ title, count, note, children }) {
   return (
     <div className="bg-white border border-[#E8E2D5] rounded-xl p-3.5 shadow-2xs">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono">{title}</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2">
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono">{title}</span>
+          {note && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] font-bold font-mono">
+              {note}
+            </span>
+          )}
+        </span>
         {count != null && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FAF6EE] border border-[#E8E2D5] font-bold font-mono text-[#D96B27]">
             {count}
@@ -394,10 +415,12 @@ export function EvidencePanels({ traceData }) {
   const rec = traceData.reconcile || null;
   const fingerprint = traceData.fingerprint || null;
   const offBy = rec && rec.difference != null && Number(rec.difference) !== 0;
+  // With a display filter on, the graph is trimmed but these panels still describe the whole trace.
+  const full = traceData.display_trimmed ? `Full trace (all ${text(traceData.full_hops)} hops)` : null;
 
   return (
     <div className="space-y-3 select-text">
-      <Panel title="Summary">
+      <Panel title="Summary" note={full}>
         <div className="space-y-2">
           {SUMMARY_PARTS.map(([key, label]) => (
             <div key={key}>
@@ -408,7 +431,7 @@ export function EvidencePanels({ traceData }) {
         </div>
       </Panel>
 
-      <Panel title="Reconciliation">
+      <Panel title="Reconciliation" note={full}>
         {rec ? (
           <>
             <p className="text-xs font-mono text-[#2C2623] leading-relaxed">
@@ -424,7 +447,7 @@ export function EvidencePanels({ traceData }) {
         )}
       </Panel>
 
-      <Panel title="Per hop" count={perHop.length}>
+      <Panel title="Per hop" count={perHop.length} note={full}>
         {perHop.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-[11px] font-mono">
@@ -462,7 +485,7 @@ export function EvidencePanels({ traceData }) {
         )}
       </Panel>
 
-      <Panel title="Findings" count={findings.length}>
+      <Panel title="Findings" count={findings.length} note={full}>
         {findings.length ? (
           <div className="space-y-3">
             {findings.map((f, i) => (
@@ -492,7 +515,7 @@ export function EvidencePanels({ traceData }) {
         )}
       </Panel>
 
-      <Panel title="Freeze list" count={freeze.length}>
+      <Panel title="Freeze list" count={freeze.length} note={full}>
         {freeze.length ? (
           <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
             {freeze.map((c, i) => (
@@ -528,5 +551,140 @@ export function EvidencePanels({ traceData }) {
         </div>
       </Panel>
     </div>
+  );
+}
+
+// Zoom slider with - / + and Fit. The parent owns the zoom, so the slider and the view cannot drift apart.
+export function ZoomBar({ zoom, onZoom, onFit }) {
+  const percent = Math.round(zoom * 100);
+  const button =
+    "p-1.5 hover:bg-[#F3EDE2] text-[#2C2623] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+  return (
+    <div className="flex items-center gap-1.5 bg-white border border-[#E8E2D5] rounded-lg px-1.5 py-0.5 shadow-2xs">
+      <button onClick={() => onZoom(clampZoom(zoom - ZOOM_STEP))} disabled={zoom <= MIN_ZOOM} title="Zoom out" className={button}>
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+      <input
+        type="range"
+        min={MIN_ZOOM * 100}
+        max={MAX_ZOOM * 100}
+        step="1"
+        value={percent}
+        onChange={(e) => onZoom(clampZoom(Number(e.target.value) / 100))}
+        title="Zoom"
+        aria-label="Zoom"
+        className="w-32 accent-[#D96B27] cursor-pointer"
+      />
+      <button onClick={() => onZoom(clampZoom(zoom + ZOOM_STEP))} disabled={zoom >= MAX_ZOOM} title="Zoom in" className={button}>
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+      <span className="w-10 text-right font-mono text-[11px] font-bold text-[#2C2623]">{percent}%</span>
+      <button
+        onClick={onFit}
+        title="Fit the whole trace in the canvas"
+        className="flex items-center gap-1 px-2 py-1 rounded border-l border-[#E8E2D5] hover:bg-[#F3EDE2] text-[#2C2623] text-[11px] font-bold cursor-pointer"
+      >
+        <Maximize2 className="w-3 h-3" />
+        <span>Fit</span>
+      </button>
+    </div>
+  );
+}
+
+const outOf100 = (value) => (value === null || value === undefined ? DASH : `${num(value, 1)}/100`);
+
+function Score({ label, value, tone }) {
+  return (
+    <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono">{label}</span>
+      <span style={{ color: tone }} className="text-sm font-bold font-mono">
+        {outOf100(value)}
+      </span>
+    </div>
+  );
+}
+
+// Scores of one account: the hovered one, else the pinned one, else the victim.
+export function ScoreBar({ node }) {
+  const theme = roleTheme(node?.role);
+  const victim = node?.role === "VICTIM";
+  return (
+    <div className="bg-white border border-[#E8E2D5] rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center gap-x-5 gap-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-sm font-bold text-[#2C2623]">{text(node?.id)}</span>
+        <span
+          style={{ backgroundColor: theme.soft, color: theme.text, borderColor: theme.border }}
+          className="text-[11px] px-2 py-0.5 rounded-full font-bold border"
+        >
+          {node ? node.role || "No role" : DASH}
+        </span>
+      </div>
+      <Score label="Mule score" value={node?.mule_index} tone="#DC2626" />
+      <Score label="Trust score" value={node?.trust_index} tone="#059669" />
+      {victim ? (
+        <Score label="Victim score" value={node.victim_score} tone="#2C2623" />
+      ) : (
+        <Score label="Final" value={node?.final_index} tone="#2C2623" />
+      )}
+    </div>
+  );
+}
+
+const ACCOUNT_COLUMNS = [
+  ["VICTIM", "Victims"],
+  ["L1", "L1"],
+  ["L2", "L2"],
+  ["L3", "L3"]
+];
+
+// The accounts of this trace by role. Hover highlights the node; click pins it.
+export function AccountColumns({ nodes, activeId, pinnedId, onHover, onPin }) {
+  return (
+    <Panel title="Accounts by role" count={nodes.length}>
+      <div className="grid grid-cols-4 gap-1.5">
+        {ACCOUNT_COLUMNS.map(([role, label]) => {
+          const theme = roleTheme(role);
+          const rows = nodes.filter((n) => n.role === role);
+          return (
+            <div key={role} className="min-w-0">
+              <div
+                style={{ backgroundColor: theme.soft, color: theme.text, borderColor: theme.border }}
+                className="border rounded px-1.5 py-1 text-[10px] font-bold font-mono flex items-center justify-between gap-1"
+              >
+                <span className="truncate">{label}</span>
+                <span>{rows.length}</span>
+              </div>
+              <div className="mt-1 space-y-1 max-h-64 overflow-y-auto">
+                {rows.length ? (
+                  rows.map((n) => {
+                    const pinned = pinnedId === n.id;
+                    return (
+                      <button
+                        key={n.id}
+                        type="button"
+                        data-account={n.id}
+                        onMouseEnter={() => onHover(n.id)}
+                        onMouseLeave={() => onHover(null)}
+                        onClick={() => onPin(n)}
+                        title={`${n.id} • holding ${inr(n.holding_amount)}`}
+                        style={pinned ? { borderColor: theme.color } : undefined}
+                        className={`w-full text-left rounded border px-1 py-0.5 cursor-pointer ${
+                          pinned ? "bg-[#FAF6EE]" : activeId === n.id ? "bg-[#FAF6EE] border-[#D4CEBF]" : "bg-white border-[#F0EAE1] hover:bg-[#FAF6EE]"
+                        }`}
+                      >
+                        <span className="block font-mono text-[9px] font-bold text-[#2C2623] truncate">{n.id}</span>
+                        <span className="block font-mono text-[9px] text-[#059669] truncate">{inr(n.holding_amount, 0)}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <span className="block font-mono text-[10px] text-[#9E968D] px-1">{DASH}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }

@@ -9,6 +9,7 @@ class EntityItem(ApiModel):
     # Names the UI reads.
     account: str
     bank: str
+    bank_name: str | None         # bank_directory name
     ifsc: str
     type: str                     # label of the engine role
     totalIn: float                # rupees
@@ -35,7 +36,7 @@ class EntityItem(ApiModel):
 
 class BankStat(ApiModel):
     code: str
-    name: str | None              # bank_directory name; null until that table is filled
+    name: str | None              # bank_directory name
     count: int
     share: float                  # percent of all accounts
 

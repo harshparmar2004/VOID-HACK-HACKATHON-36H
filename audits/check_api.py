@@ -3,6 +3,13 @@ audits/check_api.py -- checks the Step 6 API (batches B1, B2, B3, B4a, B4b) agai
 
 Read-only. Uses FastAPI's TestClient (no server, no network).
 
+Checked (7c1): every account the API returns with a bank also carries the
+bank_directory name of that bank (entities for ALL accounts, victims, mules,
+trace nodes and freeze list, batch, cell summaries); bank_stats names are all
+filled; trace answers carry elapsed_ms, no larger than the request's timing
+header; both dev-server origins pass CORS; every table has the same row count
+after the run as before it.
+
 Checked (B4b): the benchmark's ingest and graph times equal ingest_meta and
 the graph manifest, its trace sample is measured and no speed-up is claimed; the
 blind test marks every VICTIM account correct, agrees with GET /trace on what
@@ -101,6 +108,8 @@ SAMPLE_VICTIM = "SBIN10000294"     # the trace the task names; 11 accounts, 11 t
 SAMPLE_ACCOUNTS = 11
 SAMPLE_LINKS = 11
 UNKNOWN_ACCOUNT = "NOSUCHACCOUNT0000"
+BANK_NAME_PLACES = 11             # the places below that return a bank with its name
+DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]   # the Vite dev server
 READ_ONLY_POSTS = ["POST /api/profiles/preview", "POST /api/trace/batch",
                    "POST /api/scanner/run-60s-benchmark", "POST /api/jury/blind-test"]
 BENCHMARK_TRACES = 20             # the sample size the task names
@@ -153,6 +162,35 @@ def same(name: str, got, want) -> None:
 def file_state(path: Path) -> tuple[int, int]:
     st = path.stat()
     return st.st_size, st.st_mtime_ns
+
+
+def table_counts(db: Path) -> dict[str, int]:
+    """Row count of every table: the content the API run must leave as it found it."""
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        tables = [r[0] for r in con.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'main' AND table_type = 'BASE TABLE' ORDER BY 1").fetchall()]
+        return {t: con.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] for t in tables}
+    finally:
+        con.close()
+
+
+def expected_banks(db: Path) -> dict:
+    """Bank names from SQL written here: per bank code and per account."""
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        return {
+            "directory": dict(con.execute(
+                "SELECT bank_prefix, bank_name FROM bank_directory").fetchall()),
+            "codes": [r[0] for r in con.execute(
+                "SELECT DISTINCT bank FROM accounts ORDER BY 1").fetchall()],
+            "of_account": dict(con.execute(
+                "SELECT a.acct_no, d.bank_name FROM accounts a "
+                "LEFT JOIN bank_directory d ON d.bank_prefix = a.bank").fetchall()),
+        }
+    finally:
+        con.close()
 
 
 def expected(db: Path) -> dict:
@@ -370,6 +408,17 @@ def main() -> None:
     t0 = time.perf_counter()
     db = db_path()
     before = file_state(db)
+    counts_before = table_counts(db)
+    banks = expected_banks(db)
+    unnamed: dict[str, list] = {}
+
+    def named(where: str, rows: list[dict], acct: str, code: str = "bank") -> None:
+        """Every row carries its bank's directory name (collected, reported once per place)."""
+        bad = [r[acct] for r in rows
+               if r.get("bank_name") is None
+               or r["bank_name"] != banks["directory"].get(r[code])
+               or r["bank_name"] != banks["of_account"].get(r[acct])]
+        unnamed.setdefault(where, []).extend(bad)
     wal = db.with_name(db.name + ".wal")
     wal_before = wal.exists()
     e = expected(db)
@@ -406,12 +455,14 @@ def main() -> None:
         same("victims amount total (paise)",
              round(sum(x["amount"] or 0 for x in v["items"]) * 100), e["victim_paid_paise"])
         check("victims accounts unique", len(set(v["victims"])) == len(v["victims"]))
+        named("victims", v["items"], "account")
 
         # /mules
         m = get(client, "/api/mules", limit=100000)
         samples["/api/mules"] = m
         same("mules count", len(m), e["flagged"])
         check("mules accounts unique", len({x["account"] for x in m}) == len(m))
+        named("mules", m, "account")
         same("mules holding total (paise)",
              round(sum(x["holding_amount"] or 0 for x in m) * 100), e["holding_paise"])
         check("mules in - out = holding", all(
@@ -453,6 +504,15 @@ def main() -> None:
               all(x["bank"] == e["bank"] for x in eb["entities"]))
         ea = get(client, "/api/entities", limit=100000)
         same("entities all returned", len(ea["entities"]), e["accounts"])
+        named("entities (all accounts)", ea["entities"], "account")
+        same("bank directory covers every bank code in accounts",
+             [c for c in banks["codes"] if not banks["directory"].get(c)], [])
+        same("entities bank_name present for every account",
+             sum(1 for x in ea["entities"] if x["bank_name"]), e["accounts"])
+        same("entities bank_stats names = bank_directory",
+             {b["code"]: b["name"] for b in en["bank_stats"]},
+             {c: banks["directory"].get(c) for c in banks["codes"]})
+        check("entities bank_stats names all filled", all(b["name"] for b in en["bank_stats"]))
         same("entities flagged", sum(1 for x in ea["entities"] if x["is_flagged"]), e["flagged"])
 
         # /trace/{victim}
@@ -465,6 +525,12 @@ def main() -> None:
                          [n["id"] for n in nodes])
         roots = [n for n in nodes if n["hop"] == 0]
         check("trace found", tr["found"] is True)
+        named("trace nodes", nodes, "id")
+        named("trace freeze list", tr["freeze_candidates"], "acct_no")
+        r = client.get(url)
+        check("trace elapsed_ms measured, within the request time",
+              0 < r.json()["elapsed_ms"] <= float(r.headers[TIMING_HEADER]),
+              f"elapsed_ms {r.json()['elapsed_ms']} / header {r.headers[TIMING_HEADER]}")
         same("trace traced accounts (nodes without the victim root)",
              len(nodes) - len(roots), SAMPLE_ACCOUNTS)
         check("trace one victim root node", [n["id"] for n in roots] == [SAMPLE_VICTIM])
@@ -532,6 +598,7 @@ def main() -> None:
 
         # unknown account
         unknown = get(client, f"/api/trace/{UNKNOWN_ACCOUNT}", "not_found")
+        check("trace unknown elapsed_ms measured", (unknown.pop("elapsed_ms") or 0) > 0)
         same("trace unknown account", unknown,
              {"found": False, "message": "No transaction graph found"})
 
@@ -551,6 +618,10 @@ def main() -> None:
         singles = {a: get(client, f"/api/trace/{a}", "trace") for a in picked}
         bt = post_batch(picked + [UNKNOWN_ACCOUNT], "batch")
         same("batch not_found", bt["not_found"], [UNKNOWN_ACCOUNT])
+        named("batch nodes", bt["nodes"], "id")
+        named("batch victims", bt["victims"], "acct_no")
+        named("batch freeze list", bt["freeze_candidates"], "acct_no")
+        check("batch elapsed_ms measured", bt["elapsed_ms"] > 0, str(bt["elapsed_ms"]))
         same("batch per-victim paid (paise)",
              {x["acct_no"]: paise(x["paid"]) for x in bt["victims"]},
              {a: paise(s_["total_siphoned_inr"]) for a, s_ in singles.items()})
@@ -568,7 +639,9 @@ def main() -> None:
         same("batch merged nodes = union of single traces",
              sorted(n["id"] for n in bt["nodes"]),
              sorted({n["id"] for s_ in singles.values() for n in s_["nodes"]}))
-        same("batch unknown only", post_batch([UNKNOWN_ACCOUNT], "batch_not_found"),
+        unknown_batch = post_batch([UNKNOWN_ACCOUNT], "batch_not_found")
+        check("batch unknown elapsed_ms measured", (unknown_batch.pop("elapsed_ms") or 0) > 0)
+        same("batch unknown only", unknown_batch,
              {"found": False, "message": "No transaction graph found",
               "not_found": [UNKNOWN_ACCOUNT]})
         r = client.post("/api/trace/batch", json={"victims": []})
@@ -593,7 +666,10 @@ def main() -> None:
                     or got["victim_count"] != want["victim_count"]
                     or got["victim_count"] != b2["cells"][cid]):
                 mismatched.append(cid)
+            named("cell reverse-trace victims", got["victims"], "acct_no")
             cs = get(client, f"/api/cells/{cid}", "cell")
+            named("cell victims", cs["victims"], "acct_no")
+            named("cell freeze accounts", cs["freeze_accounts"], "acct_no")
             if (cs["victim_count"] != b2["cells"][cid]
                     or [x["acct_no"] for x in cs["victims"]] != [x["acct_no"] for x in want["victims"]]
                     or cs["total_in"] != rupees(want["total_in"])):
@@ -959,10 +1035,11 @@ def main() -> None:
               and "detail" in r.json(), r.text[:120])
         r = client.get("/api/mules", params={"limit": 0})
         check("422 clean JSON", r.status_code == 422 and "errors" in r.json(), r.text[:120])
-        origin = ALLOWED_ORIGINS[0]
-        r = client.get("/api/status", headers={"Origin": origin})
-        check("CORS allows the UI origin",
-              r.headers.get("access-control-allow-origin") == origin)
+        same("CORS origins", sorted(ALLOWED_ORIGINS), sorted(DEV_ORIGINS))
+        for origin in DEV_ORIGINS:
+            r = client.get("/api/status", headers={"Origin": origin})
+            check(f"CORS allows {origin}",
+                  r.headers.get("access-control-allow-origin") == origin)
         r = client.get("/api/status", headers={"Origin": "http://example.invalid"})
         check("CORS refuses another origin", "access-control-allow-origin" not in r.headers)
         # From the OpenAPI document: app.routes does not list included routers' routes.
@@ -973,7 +1050,15 @@ def main() -> None:
               writes == sorted(READ_ONLY_POSTS + DEFERRED_POSTS + REFUSED_POSTS),
               ", ".join(writes))
 
+    for where, bad in unnamed.items():
+        check(f"bank_name = bank_directory name: {where}", not bad,
+              f"{len(bad)} rows, e.g. {bad[:5]}")
+    same("bank_name places checked", len(unnamed), BANK_NAME_PLACES)
     after = file_state(db)
+    counts_after = table_counts(db)
+    check("database content unchanged (row count of every table)", counts_before == counts_after,
+          str({t: (n, counts_after.get(t)) for t, n in counts_before.items()
+               if counts_after.get(t) != n}))
     check("database size unchanged", before[0] == after[0], f"{before[0]} -> {after[0]}")
     check("database modified time unchanged", before[1] == after[1], f"{before[1]} -> {after[1]}")
     check("no .wal file created", wal.exists() == wal_before)

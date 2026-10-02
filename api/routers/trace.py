@@ -41,13 +41,13 @@ def cells(con=Depends(get_con), profile: Profile = Depends(get_profile)):
 
 
 @router.get("/cells/{cell_id}", response_model=CellSummary)
-def cell(cell_id: int):
-    return service.cell(cell_id)
+def cell(cell_id: int, con=Depends(get_con)):
+    return service.cell(con, cell_id)
 
 
 @router.get("/cells/{cell_id}/victims", response_model=CellVictims)
-def cell_victims(cell_id: int):
-    return service.cell_victims(cell_id)
+def cell_victims(cell_id: int, con=Depends(get_con)):
+    return service.cell_victims(con, cell_id)
 
 
 @router.get("/network", response_model=NetworkResponse)

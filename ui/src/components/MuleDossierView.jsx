@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { ChevronRight, Copy, Check, Download, Lock, RefreshCw, Search, X } from "lucide-react";
-import { fetchMules } from "../api";
-import { downloadCsv, inr, num, text } from "../format";
+import { fetchActiveProfile, fetchMules } from "../api";
+import { DASH, downloadCsv, inr, num, text } from "../format";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Stat } from "./States";
 
 const MULE_LIMIT = 2000; // rows requested per call
@@ -28,6 +28,59 @@ const pointsOf = (m) =>
     .filter(([, points]) => Number(points) > 0)
     .sort((a, b) => b[1] - a[1]);
 
+// The reason the engine recorded for one parameter carries its id as a tag: "... [MP1: 20.0 of 20]".
+const reasonTag = (id) => new RegExp(`\\s*\\[${id}: [^\\]]*\\]\\s*$`);
+const ANY_TAG = /\[[A-Z]+\d+: [^\]]*\]\s*$/;
+
+// One row per parameter of the active profile (weights and names come from the profile,
+// points from the account's param_points). Without the profile: the ids we have, no weights.
+function breakdown(mule, profile) {
+  const points = mule.param_points || {};
+  const reasons = reasonsOf(mule);
+  const params = Array.isArray(profile?.parameters)
+    ? profile.parameters
+    : Object.keys(points).map((id) => ({ id, name: null, index: null, weight: null, scored: null }));
+  return params.map((p) => {
+    const tag = reasonTag(p.id);
+    const reason = reasons.find((r) => tag.test(r));
+    const weight = p.weight ?? null;
+    return {
+      id: p.id,
+      name: p.name,
+      index: p.index,
+      weight,
+      points: points[p.id] ?? null,
+      reason: reason ? reason.replace(tag, "") : null,
+      notScored: p.scored === false ? p.disabled_reason || "Not scored by the active profile." : null,
+      // Zero-weight and switched-off (gated) parameters cannot move the score.
+      inactive: weight === 0 || p.scored === false
+    };
+  });
+}
+
+function ParameterRow({ row }) {
+  const share = row.weight > 0 && row.points != null ? Math.min(100, (100 * row.points) / row.weight) : 0;
+  const trust = row.index === "trust";
+  return (
+    <div data-param={row.id} className={`py-2 border-t border-[#F0EAE1] first:border-t-0 ${row.inactive ? "opacity-60" : ""}`}>
+      <div className="flex items-baseline justify-between gap-2 font-mono">
+        <span className="min-w-0 truncate">
+          <strong className="text-[#2C2623]">{row.id}</strong>
+          <span className="text-[#746D65] font-sans"> {text(row.name)}</span>
+        </span>
+        <span className="whitespace-nowrap">
+          <strong className={trust ? "text-[#059669]" : "text-[#DC2626]"}>{num(row.points, 1)}</strong>
+          <span className="text-[#9E968D]"> of {num(row.weight, 1)}</span>
+        </span>
+      </div>
+      <div className="h-1 rounded-full bg-[#F3EDE2] mt-1 overflow-hidden">
+        <div style={{ width: `${share}%` }} className={`h-full ${trust ? "bg-[#059669]" : "bg-[#DC2626]"}`} />
+      </div>
+      <p className="text-[11px] text-[#5C554E] mt-1 leading-snug">{row.reason || row.notScored || DASH}</p>
+    </div>
+  );
+}
+
 export default function MuleDossierView({ forensicParams, onNavigateTab }) {
   const [state, setState] = useState({ rows: [], loading: true, error: null });
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,6 +91,19 @@ export default function MuleDossierView({ forensicParams, onNavigateTab }) {
   const [page, setPage] = useState(1);
   const [openAccount, setOpenAccount] = useState(null);
   const [copied, setCopied] = useState(null);
+  const [profile, setProfile] = useState({ data: null, error: null });
+  const [showAll, setShowAll] = useState(false);
+
+  // Parameter names and weights come from the active scoring profile.
+  useEffect(() => {
+    let live = true;
+    fetchActiveProfile()
+      .then((data) => live && setProfile({ data, error: null }))
+      .catch((err) => live && setProfile({ data: null, error: err.message }));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -117,6 +183,9 @@ export default function MuleDossierView({ forensicParams, onNavigateTab }) {
   const current = Math.min(page, pages);
   const rows = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
   const open = openAccount ? mules.find((m) => m.account === openAccount) : null;
+  const openRows = open ? breakdown(open, profile.data) : [];
+  const hiddenRows = openRows.filter((r) => r.inactive).length;
+  const otherReasons = open ? reasonsOf(open).filter((r) => !ANY_TAG.test(r)) : [];
 
   const handleCopy = (account) => {
     navigator.clipboard.writeText(account);
@@ -365,12 +434,12 @@ export default function MuleDossierView({ forensicParams, onNavigateTab }) {
       {open && (
         <>
           <div className="fixed inset-0 bg-[#2C2623]/20 z-40" onClick={() => setOpenAccount(null)} />
-          <aside className="fixed right-0 top-0 h-full w-full sm:w-[460px] bg-white border-l border-[#E8E2D5] shadow-2xl z-50 overflow-y-auto">
+          <aside className="fixed right-0 top-0 h-full w-full sm:w-[520px] bg-white border-l border-[#E8E2D5] shadow-2xl z-50 overflow-y-auto">
             <div className="p-4 border-b border-[#E8E2D5] bg-[#FAF6EE] flex items-start justify-between gap-3">
               <div>
                 <div className="font-mono font-bold text-base text-[#2C2623]">{open.account}</div>
                 <div className="text-[11px] font-mono text-[#746D65]">
-                  {text(open.ifsc)} • {text(open.bank)}
+                  {text(open.ifsc)} • {text(open.bank_name ?? open.bank)}
                 </div>
               </div>
               <button onClick={() => setOpenAccount(null)} className="text-[#9E968D] hover:text-[#2C2623] p-1 cursor-pointer" title="Close (Esc)">
@@ -382,6 +451,17 @@ export default function MuleDossierView({ forensicParams, onNavigateTab }) {
                 <Stat label="Final" value={num(open.final_index, 1)} tone="red" />
                 <Stat label="Mule" value={num(open.mule_index, 1)} />
                 <Stat label="Trust" value={num(open.trust_index, 1)} tone="green" />
+              </div>
+              <div data-final-line className="p-2.5 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] font-mono">
+                <strong className="text-[#2C2623]">
+                  Final {num(open.final_index, 1)} = Mule {num(open.mule_index, 1)} reduced by Trust {num(open.trust_index, 1)}
+                </strong>
+                <div className="text-[10px] text-[#746D65] mt-1 break-words">
+                  {text(profile.data?.final?.formula)}
+                  {profile.data?.final?.trust_discount_factor == null
+                    ? ""
+                    : ` • trust_discount_factor ${profile.data.final.trust_discount_factor}`}
+                </div>
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 font-mono">
                 <dt className="text-[#746D65]">Role</dt>
@@ -404,26 +484,51 @@ export default function MuleDossierView({ forensicParams, onNavigateTab }) {
                 <dd className="text-right">{text(open.network_id)}</dd>
               </dl>
               <div>
-                <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono mb-1.5">Points per parameter</h4>
-                {pointsOf(open).length === 0 ? (
-                  <p className="text-[#746D65]">No parameter scored points.</p>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+                    Score breakdown (points of weight, per parameter)
+                  </h4>
+                  {hiddenRows > 0 && (
+                    <button
+                      onClick={() => setShowAll(!showAll)}
+                      className="text-[10px] font-mono font-bold text-[#D96B27] hover:underline cursor-pointer whitespace-nowrap"
+                    >
+                      {showAll ? "Hide zero-weight / gated" : `Show all (+${hiddenRows})`}
+                    </button>
+                  )}
+                </div>
+                {profile.error && (
+                  <p className="text-[11px] text-[#B45309] mb-1">
+                    The scoring profile could not be loaded, so names and weights are missing ({profile.error}).
+                  </p>
+                )}
+                {openRows.length === 0 ? (
+                  <p className="text-[#746D65]">No parameter points recorded.</p>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
-                    {pointsOf(open).map(([id, points]) => (
-                      <span key={id} className="bg-[#FAF6EE] px-2 py-1 rounded-xs border border-[#E8E2D5]">
-                        {id}: <strong>{num(points, 2)}</strong>
-                      </span>
-                    ))}
-                  </div>
+                  [["mule", "Mule index"], ["trust", "Trust index"], [null, "Parameters"]].map(([index, label]) => {
+                    const group = openRows.filter((r) => (r.index ?? null) === index && (showAll || !r.inactive));
+                    if (group.length === 0) return null;
+                    return (
+                      <div key={label} className="mt-2">
+                        <div className="flex items-center justify-between text-[10px] font-bold uppercase font-mono text-[#746D65] bg-[#FAF6EE] border border-[#E8E2D5] rounded-xs px-2 py-1">
+                          <span>{label}</span>
+                          {index && <span>{num(index === "mule" ? open.mule_index : open.trust_index, 1)}</span>}
+                        </div>
+                        {group.map((row) => (
+                          <ParameterRow key={row.id} row={row} />
+                        ))}
+                      </div>
+                    );
+                  })
                 )}
               </div>
               <div>
-                <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono mb-1.5">Reasons recorded by the engine</h4>
-                {reasonsOf(open).length === 0 ? (
-                  <p className="text-[#746D65]">No reasons recorded.</p>
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono mb-1.5">Other reasons recorded by the engine</h4>
+                {otherReasons.length === 0 ? (
+                  <p className="text-[#746D65]">{DASH}</p>
                 ) : (
                   <ul className="list-disc pl-5 space-y-1 text-[#5C554E]">
-                    {reasonsOf(open).map((reason, i) => (
+                    {otherReasons.map((reason, i) => (
                       <li key={i}>{reason}</li>
                     ))}
                   </ul>

@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 from collections import Counter
 
 from fastapi import HTTPException
 
 from api.deps import ROOT, db_path
+from api.repositories import banks as banks_repo
 from api.repositories import trace as repo
 from api.schemas.trace import (
     BatchNotFound, BatchResponse, BatchSummary, BatchVictim, CellBrief, CellsResponse,
@@ -30,6 +32,7 @@ import victim_trace as engine  # noqa: E402
 
 AMOUNT_UNIT = "INR"
 SECONDS_PER_MINUTE = 60
+MS_PER_SECOND = 1000.0
 
 # One trace at a time: the context is built once and its lookup cache is shared.
 _LOCK = threading.Lock()
@@ -45,6 +48,16 @@ def _run(fn, *args):
             raise HTTPException(503, f"trace engine is not available: {e}") from e
 
 
+def _elapsed_ms(t0: float) -> float:
+    """Milliseconds since t0 (time.perf_counter), measured here on the server."""
+    return round((time.perf_counter() - t0) * MS_PER_SECOND, 1)
+
+
+def _named(rows: list[dict], names: dict[str, str]) -> list[dict]:
+    """Engine rows carrying a bank code, each with its bank_directory name added."""
+    return [dict(r, bank_name=names.get(r["bank"])) for r in rows]
+
+
 def _profile(ctx) -> ProfileUsed:
     def window(seconds: tuple[int, int]) -> Window:
         return Window(min=seconds[0] / SECONDS_PER_MINUTE, max=seconds[1] / SECONDS_PER_MINUTE)
@@ -57,11 +70,11 @@ def _profile(ctx) -> ProfileUsed:
         coverage_target=ctx.coverage, max_accounts=ctx.max_accounts)
 
 
-def _node(a: dict, ifsc: dict[str, str]) -> TraceNode:
+def _node(a: dict, ifsc: dict[str, str], names: dict[str, str]) -> TraceNode:
     shares = a.get("by_victim")
     return TraceNode(
         id=a["acct_no"], hop=a["hop"], role=a["role"], bank=a["bank"],
-        ifsc=ifsc.get(a["acct_no"]),
+        bank_name=names.get(a["bank"]), ifsc=ifsc.get(a["acct_no"]),
         risk_score=a["victim_score"] if a["role"] == "VICTIM" else a["final_index"],
         holding_amount=rupees(a["holding"]),
         tainted_received=rupees(a["tainted_in"]),
@@ -113,10 +126,11 @@ def _link(t: dict, facts: dict[int, dict]) -> TraceLink:
         by_victim=None if shares is None else {v: rupees(x) for v, x in shares.items()})
 
 
-def _graph(con, ctx, accounts: list[dict], transfers: list[dict]):
+def _graph(con, ctx, accounts: list[dict], transfers: list[dict], names: dict[str, str]):
     ifsc = repo.ifsc_of(con, [a["acct_no"] for a in accounts])
     facts = repo.transfer_facts(con, ctx.profile_id, [t["tx_key"] for t in transfers])
-    nodes, links = [_node(a, ifsc) for a in accounts], [_link(t, facts) for t in transfers]
+    nodes = [_node(a, ifsc, names) for a in accounts]
+    links = [_link(t, facts) for t in transfers]
     # Device and IP are recorded per transfer, made by the sender: a node gets
     # the most frequent value of its outgoing links in this trace (a tie goes
     # to the earliest transfer).
@@ -139,10 +153,11 @@ def _receipt(r: dict) -> Receipt:
         by_victim=None if shares is None else {v: rupees(x) for v, x in shares.items()})
 
 
-def _freeze(c: dict) -> FreezeCandidate:
+def _freeze(c: dict, names: dict[str, str]) -> FreezeCandidate:
     shares = c.get("by_victim")
     return FreezeCandidate(
-        acct_no=c["acct_no"], bank=c["bank"], role=c["role"], hop=c["hop"],
+        acct_no=c["acct_no"], bank=c["bank"], bank_name=names.get(c["bank"]),
+        role=c["role"], hop=c["hop"],
         cell_id=c.get("cell_id"), cell_ids=c["cell_ids"], holding=rupees(c["holding"]),
         tainted_in=rupees(c.get("tainted_in")),
         by_victim=None if shares is None else {v: rupees(x) for v, x in shares.items()},
@@ -184,12 +199,14 @@ def _shown(nodes: list[TraceNode], links: list[TraceLink], roots: set[str], *,
 def trace(con, victim: str, *, max_hops: int | None, min_amount: float,
           bank_filter: str | None, keyword: str | None,
           ignored: list[str]) -> TraceResponse | NotFound:
+    t0 = time.perf_counter()
     r, ctx = _run(engine.trace_victim, victim)
     if not r["found"]:
-        return NotFound(message=r["message"])
+        return NotFound(message=r["message"], elapsed_ms=_elapsed_ms(t0))
 
+    names = banks_repo.names(con)
     root = r["victim"]
-    nodes, links = _graph(con, ctx, [root] + r["accounts"], r["transfers"])
+    nodes, links = _graph(con, ctx, [root] + r["accounts"], r["transfers"], names)
     shown_hops = min(max_hops or ctx.max_hops, ctx.max_hops)
     amount = min_amount if min_amount > 0 else None
     bank = bank_code(bank_filter)
@@ -222,23 +239,28 @@ def trace(con, victim: str, *, max_hops: int | None, min_amount: float,
         reconcile=Reconcile(**{k: rupees(v) for k, v in rec.items()}),
         per_hop=[PerHop(**dict(h, tainted=rupees(h["tainted"]))) for h in r["per_hop"]],
         findings=[Finding(**f) for f in r["findings"]],
-        freeze_candidates=[_freeze(c) for c in r["freeze_candidates"]],
-        cells=_cells(con, ctx, r["summary"]["cell_ids"]))
+        freeze_candidates=[_freeze(c, names) for c in r["freeze_candidates"]],
+        cells=_cells(con, ctx, r["summary"]["cell_ids"]),
+        elapsed_ms=_elapsed_ms(t0))
 
 
 def trace_batch(con, victims: list[str]) -> BatchResponse | BatchNotFound:
+    t0 = time.perf_counter()
     r, ctx = _run(engine.trace_victims, victims)
     if not r["found"]:
-        return BatchNotFound(message=r["message"], not_found=r["not_found"])
+        return BatchNotFound(message=r["message"], not_found=r["not_found"],
+                             elapsed_ms=_elapsed_ms(t0))
+
+    names = banks_repo.names(con)
 
     reached = {a["acct_no"] for a in r["accounts"]}
     roots = [_root(ctx, v["acct_no"], v["paid"]) for v in r["victims"]
              if v["acct_no"] not in reached]
-    nodes, links = _graph(con, ctx, roots + r["accounts"], r["transfers"])
+    nodes, links = _graph(con, ctx, roots + r["accounts"], r["transfers"], names)
     s = dict(r["summary"])
     for k in ("tainted_total", "holding_total", "untraced_total"):
         s[k] = rupees(s[k])
-    candidates = [_freeze(c) for c in r["freeze_candidates"]]
+    candidates = [_freeze(c, names) for c in r["freeze_candidates"]]
     return BatchResponse(
         nodes=nodes, links=links,
         total_siphoned_inr=s["tainted_total"],
@@ -246,11 +268,13 @@ def trace_batch(con, victims: list[str]) -> BatchResponse | BatchNotFound:
         amount_unit=AMOUNT_UNIT, fingerprint=r["fingerprint"], profile=_profile(ctx),
         victims=[BatchVictim(**dict(
             v, paid=rupees(v["paid"]), holding_total=rupees(v["holding_total"]),
-            untraced_total=rupees(v["untraced_total"]))) for v in r["victims"]],
+            untraced_total=rupees(v["untraced_total"])))
+            for v in _named(r["victims"], names)],
         not_found=r["not_found"],
         summary=BatchSummary(**s),
         freeze_candidates=candidates,
-        cells=_cells(con, ctx, r["summary"]["cell_ids"]))
+        cells=_cells(con, ctx, r["summary"]["cell_ids"]),
+        elapsed_ms=_elapsed_ms(t0))
 
 
 def list_cells(con, profile_id: str) -> CellsResponse:
@@ -266,25 +290,29 @@ def _cell_or_404(fn, cell_id: int) -> dict:
     return r
 
 
-def cell(cell_id: int) -> CellSummary:
+def cell(con, cell_id: int) -> CellSummary:
     r = _cell_or_404(engine.cell_summary, cell_id)
+    names = banks_repo.names(con)
     return CellSummary(**dict(
         r, amount_unit=AMOUNT_UNIT,
-        victims=[CellVictim(**dict(v, amount=rupees(v["amount"]))) for v in r["victims"]],
+        victims=[CellVictim(**dict(v, amount=rupees(v["amount"])))
+                 for v in _named(r["victims"], names)],
         total_in=rupees(r["total_in"]), holding=rupees(r["holding"]),
         freeze_holding=rupees(r["freeze_holding"]),
         freeze_accounts=[FreezeAccount(**dict(
-            f, account_holding=rupees(f["account_holding"]))) for f in r["freeze_accounts"]]))
+            f, account_holding=rupees(f["account_holding"])))
+            for f in _named(r["freeze_accounts"], names)]))
 
 
-def cell_victims(cell_id: int) -> CellVictims:
+def cell_victims(con, cell_id: int) -> CellVictims:
     r = _cell_or_404(engine.reverse_trace_cell, cell_id)
+    names = banks_repo.names(con)
     return CellVictims(**dict(
         r, amount_unit=AMOUNT_UNIT, total_in=rupees(r["total_in"]),
         victims=[ReverseVictim(**dict(
             v, amount=rupees(v["amount"]),
             payments=[VictimPayment(**dict(p, amount=rupees(p["amount"])))
-                      for p in v["payments"]])) for v in r["victims"]]))
+                      for p in v["payments"]])) for v in _named(r["victims"], names)]))
 
 
 def networks(con, profile_id: str) -> NetworkResponse:

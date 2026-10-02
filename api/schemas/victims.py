@@ -9,6 +9,7 @@ class VictimItem(ApiModel):
     account: str
     account_id: str               # same as account (the UI reads either)
     bank: str
+    bank_name: str | None         # bank_directory name
     ifsc: str
     amount: float | None          # rupees paid into the chain (proven VICTIM_L1 links)
     timestamp: datetime | None    # first such payment

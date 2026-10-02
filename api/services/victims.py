@@ -12,6 +12,7 @@ def list_victims(con, profile: Profile) -> VictimsResponse:
             account=r["acct_no"],
             account_id=r["acct_no"],
             bank=r["bank"],
+            bank_name=r["bank_name"],
             ifsc=r["ifsc"],
             amount=rupees(r["amount_paise"]),
             timestamp=r["first_ts"],

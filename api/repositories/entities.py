@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from api.repositories import fetch_dicts
+from api.repositories import banks, fetch_dicts
 
 _FLOWS = """
     flow_in AS (
@@ -34,13 +34,14 @@ def list_entities(con, profile_id: str, *, limit: int, bank: str | None,
     where, params = _where(bank, min_paise)
     return fetch_dicts(con, f"""
         WITH {_FLOWS}
-        SELECT a.acct_no, a.ifsc, a.bank, a.first_seen, a.last_seen,
+        SELECT a.acct_no, a.ifsc, a.bank, bd.bank_name, a.first_seen, a.last_seen,
                s.role, s.role_confirmed, s.is_flagged, s.final_index, s.mule_index,
                s.trust_index, s.victim_score, s.band, s.freeze_recommended,
                f.tx_count, f.n_in, f.n_out, f.days_active,
                coalesce(fi.in_paise, 0)  AS in_paise,
                coalesce(fo.out_paise, 0) AS out_paise
         {_FROM}
+        {banks.JOIN}
         {where}
         ORDER BY s.final_index DESC NULLS LAST, a.acct_no
         LIMIT ?""", [profile_id] + params + [limit])

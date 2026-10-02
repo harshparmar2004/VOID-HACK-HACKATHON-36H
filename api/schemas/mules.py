@@ -8,6 +8,7 @@ class MuleItem(ApiModel):
     account: str
     account_id: str
     bank: str
+    bank_name: str | None         # bank_directory name
     ifsc: str
     bank_ifsc: str
     role: str | None

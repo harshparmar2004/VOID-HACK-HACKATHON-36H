@@ -31,6 +31,7 @@ def list_entities(con, profile: Profile, *, limit: int, bank_filter: str | None,
         EntityItem(
             account=r["acct_no"],
             bank=r["bank"],
+            bank_name=r["bank_name"],
             ifsc=r["ifsc"],
             type=TYPE_LABELS.get(r["role"], r["role"]),
             totalIn=rupees(r["in_paise"]),

@@ -12,7 +12,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 log = logging.getLogger("api")
 
-ALLOWED_ORIGINS = ["http://localhost:5173"]
+# The Vite dev server, under either name of the local machine.
+ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 TIMING_HEADER = "X-Process-Time-Ms"
 
 

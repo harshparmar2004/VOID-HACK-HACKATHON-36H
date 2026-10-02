@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from api.repositories import fetch_dicts
+from api.repositories import banks, fetch_dicts
 
 
 def list_mules(con, profile_id: str, *, limit: int, role: str | None,
@@ -48,7 +48,7 @@ def list_mules(con, profile_id: str, *, limit: int, role: str | None,
             WHERE profile_id = ?
             GROUP BY acct_id
         )
-        SELECT a.acct_no, a.ifsc, a.bank,
+        SELECT a.acct_no, a.ifsc, a.bank, bd.bank_name,
                s.role, s.role_confirmed, s.final_index, s.mule_index, s.trust_index,
                s.band, s.freeze_recommended, s.holding_paise, s.reasons, s.ring_id,
                CAST(s.param_points AS VARCHAR) AS param_points,
@@ -60,6 +60,7 @@ def list_mules(con, profile_id: str, *, limit: int, role: str | None,
         FROM scope sc
         JOIN scores s ON s.acct_id = sc.acct_id AND s.profile_id = ?
         JOIN accounts a ON a.acct_id = sc.acct_id
+        {banks.JOIN}
         LEFT JOIN flow_in fi ON fi.acct_id = sc.acct_id
         LEFT JOIN flow_out fo ON fo.acct_id = sc.acct_id
         LEFT JOIN cm ON cm.acct_id = sc.acct_id

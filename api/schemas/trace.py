@@ -13,6 +13,7 @@ MAX_BATCH_VICTIMS = 500           # request size limit, not an engine rule
 class NotFound(ApiModel):
     found: bool = False
     message: str
+    elapsed_ms: float | None = None   # set on trace answers; the time the trace took on the server
 
 
 class BatchNotFound(NotFound):
@@ -33,6 +34,7 @@ class TraceNode(ApiModel):
     hop: int                      # distance at first arrival, display only
     role: str | None
     bank: str | None
+    bank_name: str | None         # bank_directory name
     ifsc: str | None
     risk_score: float | None      # = final_index; victim_score for a VICTIM
     holding_amount: float         # the traced money still held here
@@ -116,6 +118,7 @@ class Receipt(ApiModel):
 class FreezeCandidate(ApiModel):
     acct_no: str
     bank: str | None
+    bank_name: str | None = None  # bank_directory name
     role: str | None
     hop: int
     cell_id: int | None = None
@@ -215,6 +218,7 @@ class CellBrief(ApiModel):
 
 class TraceResponse(ApiModel):
     found: bool = True
+    elapsed_ms: float                 # time the trace took on the server (engine + mapping)
     # Names the UI reads.
     nodes: list[TraceNode]
     links: list[TraceLink]
@@ -243,6 +247,7 @@ class BatchRequest(ApiModel):
 class BatchVictim(ApiModel):
     acct_no: str
     bank: str | None
+    bank_name: str | None = None  # bank_directory name
     paid: float
     accounts: int
     transfers: int
@@ -273,6 +278,7 @@ class BatchSummary(ApiModel):
 
 class BatchResponse(ApiModel):
     found: bool = True
+    elapsed_ms: float                 # time the trace took on the server (engine + mapping)
     nodes: list[TraceNode]
     links: list[TraceLink]
     total_siphoned_inr: float
@@ -297,6 +303,7 @@ class CellsResponse(ApiModel):
 class CellVictim(ApiModel):
     acct_no: str
     bank: str | None
+    bank_name: str | None = None  # bank_directory name
     amount: float
     first_ts: str
     last_ts: str
@@ -305,6 +312,7 @@ class CellVictim(ApiModel):
 class FreezeAccount(ApiModel):
     acct_no: str
     bank: str | None
+    bank_name: str | None = None  # bank_directory name
     role: str | None
     account_holding: float | None
     cell_ids: list[int]
@@ -344,6 +352,7 @@ class VictimPayment(ApiModel):
 class ReverseVictim(ApiModel):
     acct_no: str
     bank: str | None
+    bank_name: str | None = None  # bank_directory name
     role: str | None
     amount: float
     first_ts: str

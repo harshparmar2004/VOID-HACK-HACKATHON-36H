@@ -43,7 +43,8 @@ export default function EntityDirectoryView({ forensicParams }) {
       !term ||
       String(e.account || "").toLowerCase().includes(term) ||
       String(e.ifsc || "").toLowerCase().includes(term) ||
-      String(e.bank || "").toLowerCase().includes(term);
+      String(e.bank || "").toLowerCase().includes(term) ||
+      String(e.bank_name || "").toLowerCase().includes(term);
     return matchesSearch && (selectedBank === "ALL" || e.bank === selectedBank);
   });
 
@@ -57,7 +58,7 @@ export default function EntityDirectoryView({ forensicParams }) {
         <div className="relative">
           <input
             type="text"
-            placeholder="Search account, bank code or IFSC"
+            placeholder="Search account, bank or IFSC"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-72 bg-white border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
@@ -105,8 +106,10 @@ export default function EntityDirectoryView({ forensicParams }) {
                     : "bg-white border-[#E8E2D5] hover:border-[#D96B27]"
                 }`}
               >
-                <div className="text-xs font-mono font-bold text-[#D96B27]">{b.code}</div>
-                {b.name && <div className="text-xs font-bold text-[#2C2623] truncate mt-0.5">{b.name}</div>}
+                <div className="text-xs font-bold text-[#2C2623] truncate" title={b.name || b.code}>
+                  {text(b.name)}
+                </div>
+                <div className="text-[11px] font-mono font-bold text-[#D96B27] mt-0.5">{b.code}</div>
                 <div className="text-[11px] text-[#746D65] mt-1 font-mono">
                   {num(b.count)} accounts{b.share == null ? "" : ` • ${num(b.share, 2)}%`}
                 </div>
@@ -146,8 +149,10 @@ export default function EntityDirectoryView({ forensicParams }) {
                       <tr key={e.account} className="hover:bg-[#FAF6EE] transition-colors">
                         <td className="py-3 px-4 font-bold text-[#2C2623]">{e.account}</td>
                         <td className="py-3 px-4">
-                          <div className="font-semibold text-[#2C2623]">{text(e.bank)}</div>
-                          <div className="text-[11px] text-[#9E968D]">{text(e.ifsc)}</div>
+                          <div className="font-semibold text-[#2C2623] font-sans">{text(e.bank_name)}</div>
+                          <div className="text-[11px] text-[#9E968D]">
+                            {text(e.bank)} • {text(e.ifsc)}
+                          </div>
                         </td>
                         <td className="py-3 px-4 font-sans">
                           {e.role ? (
