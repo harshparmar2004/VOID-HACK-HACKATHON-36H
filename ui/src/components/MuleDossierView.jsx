@@ -81,7 +81,7 @@ function ParameterRow({ row }) {
   );
 }
 
-export default function MuleDossierView({ forensicParams, onNavigateTab }) {
+export default function MuleDossierView({ forensicParams, onNavigateTab, focusAccount }) {
   const [state, setState] = useState({ rows: [], loading: true, error: null });
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBank, setSelectedBank] = useState(forensicParams?.bankFilter || "ALL");
@@ -123,6 +123,11 @@ export default function MuleDossierView({ forensicParams, onNavigateTab }) {
     setSelectedBank(forensicParams?.bankFilter || "ALL");
     setMinRisk(Number(forensicParams?.minRisk) || 0);
   }, [forensicParams?.bankFilter, forensicParams?.minRisk]);
+
+  // Another page asked for this account's dossier.
+  useEffect(() => {
+    if (focusAccount?.account) setOpenAccount(focusAccount.account);
+  }, [focusAccount]);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && setOpenAccount(null);

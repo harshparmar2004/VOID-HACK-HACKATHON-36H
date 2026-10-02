@@ -14,6 +14,8 @@ async function send(path, options) {
     const body = await res.json().catch(() => null);
     const error = new Error(body?.detail || `Request failed (HTTP ${res.status})`);
     error.status = res.status;
+    // Per-field validation messages (HTTP 422), when the API sends them.
+    error.errors = Array.isArray(body?.errors) ? body.errors : [];
     throw error;
   }
   return { body: await res.json(), serverMs: serverTime(res) };
@@ -52,6 +54,31 @@ export function fetchVictims() {
 
 export function fetchActiveProfile() {
   return request("/profiles/active");
+}
+
+// Re-scores in memory with the given changes and returns the impact. Writes nothing.
+export function previewProfile(changes) {
+  return request("/profiles/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ changes })
+  });
+}
+
+// Only the search fields the API whitelists.
+export function searchTransactions({ minAmount, maxAmount, bank, paymentMode, device, foreignIp, narrationCategory, fromTs, toTs, limit } = {}) {
+  return request(`/transactions/search${query({
+    min_amount: minAmount,
+    max_amount: maxAmount,
+    bank: keyword(bank),
+    payment_mode: keyword(paymentMode),
+    device: keyword(device),
+    foreign_ip: foreignIp,
+    narration_category: keyword(narrationCategory),
+    from_ts: fromTs,
+    to_ts: toTs,
+    limit
+  })}`);
 }
 
 // Display filters only: they trim the returned graph, never the trace itself.

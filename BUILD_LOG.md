@@ -529,3 +529,27 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - A parameter that scored 0 has no reason text (the engine records reasons only for points earned), so MP6 and all trust rows show a dash on flagged accounts.
 - `param_points` and reasons are on /mules only: trace nodes and /entities carry no `param_points`, so the breakdown cannot be shown from the graph's node panel.
 - The dossier table and its bank filter still show bank codes (only the drawer shows the name).
+
+## 2026-10-02 — Step 7d: profile viewer with preview, transaction search
+
+**Step** — `ui\src\` only; no API, engine or database change.
+
+**Files** — rewrote `components\ForensicParametersView.jsx`; new `components\ProfilePreviewResult.jsx`, `components\TransactionSearchPanel.jsx`; changed `api.js`, `App.jsx`, `components\MuleDossierView.jsx`.
+
+**Key names** — `previewProfile`, `searchTransactions`, `error.errors` (api.js); `GROUPS`, `groupOf`, `SETTINGS`, `storedForm`, `buildChanges`, `placeErrors`, `DisplayFilters`, `ParameterRow` (view); `CountTable`, `AccountList` (preview); `openAccount`, `dossierFocus` (App); `focusAccount` prop (dossier).
+
+**What changed**
+- Profile from `GET /profiles/active`: id, "Locked default" badge, one table grouped Mule / Trust / Zero-weight / Gated off; each row has name, description, weight, full/half thresholds, enabled, gate status and reason.
+- Editable: parameter weight and enabled, flag_threshold, trust_discount_factor, min_parameters_at_half. Live "Mule/Trust weights sum to N" from the edited values. Windows, feature rules, override floor, trace hops shown read-only with the reason.
+- "Preview impact" sends only the values that differ to `POST /profiles/preview`: flagged before -> after, flags gained/lost, role changes (lists and transitions), band and role counts before/after, warnings, seconds. Results dim when values change afterwards. "Reset" restores stored values. 422 messages are placed on the parameter row or setting they name; the rest go in one banner.
+- Account click: currently flagged -> dossier drawer, otherwise -> trace on the trail tab.
+- "Save as new version" and "Activate" disabled with "Available in a later step".
+- Transaction search with the ten whitelisted fields only; 422 shown per field. Display filters kept, moved to the bottom.
+
+**Results** — `npm run build` compiles; `oxlint` 0 errors. Headless Chrome against the live API on port 8000, no console errors. (a) no changes: 1,073 -> 1,073, 0 gained, 0 lost, 0 role changes. (b) MP4 weight 0: "Mule weights sum to 85 (stored 100)", 1,073 -> 1,073, high confidence 129 -> 0, suspected 944 -> 1,073, API warning shown. (c) MP4 weight -5: "weight cannot be negative" under the MP4 weight. flag_threshold 20: 300 gained, click opened the trace; flag_threshold 80: 474 lost, click opened the dossier. Search foreign IP: 2,654 matched.
+
+**Deviations**
+- Groups come from the profile, not id ranges: Trust lists the scored T1, T4, T5, T7; gate-closed T2, T3, T6 sit under "Gated off" with ZP2, ZP4.
+- Touched `App.jsx` and `MuleDossierView.jsx` (needed to open a dossier or trace from the preview lists).
+- Checked from `http://localhost:5173`: the server running on 8000 does not yet allow the `127.0.0.1:5173` origin (needs a restart).
+- `two_signal_rule_enabled` is previewable in the API but was not in the task's list, so it is not editable.

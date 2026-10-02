@@ -90,6 +90,7 @@ export default function App() {
   const [trace, setTrace] = useState(EMPTY_TRACE);
   const [forensicParams, setForensicParams] = useState(storedFilters);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [dossierFocus, setDossierFocus] = useState(null);
   const traceRequest = useRef(0);
 
   const loadTrace = useCallback(async (victimId, params) => {
@@ -177,6 +178,17 @@ export default function App() {
     handleTabChange("trail");
   };
 
+  // A flagged account has a dossier; any other account is opened as a trace.
+  const openAccount = (account, hasDossier) => {
+    if (hasDossier) {
+      setDossierFocus({ account });
+      handleTabChange("dossier");
+    } else {
+      selectCase(account);
+      handleTabChange("trail");
+    }
+  };
+
   const retryTrace = () => loadTrace(activeCase, forensicParams);
   const filtersActive =
     Number(forensicParams.minAmount) > 0 ||
@@ -235,6 +247,7 @@ export default function App() {
                 forensicParams={forensicParams}
                 defaults={FILTER_DEFAULTS}
                 onSaveParams={handleSaveParams}
+                onOpenAccount={openAccount}
               />
             </ErrorBoundary>
           </div>
@@ -259,7 +272,7 @@ export default function App() {
 
           <div className={show("dossier")}>
             <ErrorBoundary name="Mule Dossier">
-              <MuleDossierView forensicParams={forensicParams} onNavigateTab={handleTabChange} />
+              <MuleDossierView forensicParams={forensicParams} onNavigateTab={handleTabChange} focusAccount={dossierFocus} />
             </ErrorBoundary>
           </div>
 
