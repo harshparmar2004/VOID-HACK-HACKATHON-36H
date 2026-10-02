@@ -66,7 +66,7 @@ export default function MuleDossierView({
     }
   }, [mules]);
 
-  // Self-healing: auto-fetch full 2,000 scored mules on mount if missing or fallback
+  // Self-healing: auto-fetch full 2,000 scored mules on mount
   const reloadMasterDossier = async () => {
     setIsLoadingMules(true);
     try {
@@ -82,9 +82,8 @@ export default function MuleDossierView({
   };
 
   useEffect(() => {
-    if (!mules || mules.length <= 6) {
-      reloadMasterDossier();
-    }
+    // Unconditionally fetch live scored mules from DuckDB on mount
+    reloadMasterDossier();
   }, []);
 
   // Close drawer on ESC key
@@ -104,12 +103,15 @@ export default function MuleDossierView({
   }, [forensicParams]);
 
   // Normalize list defensively from live internal state, incoming prop, or default mules
-  const rawList =
-    internalMules.length > 0
-      ? internalMules
-      : Array.isArray(mules) && mules.length > 0
-      ? mules
-      : DEFAULT_MULES;
+  const rawList = useMemo(() => {
+    if (Array.isArray(internalMules) && internalMules.length > 0) {
+      return internalMules;
+    }
+    if (Array.isArray(mules) && mules.length > 0) {
+      return mules;
+    }
+    return DEFAULT_MULES;
+  }, [internalMules, mules]);
   
   const normalizedMules = useMemo(() => {
     return rawList
@@ -465,35 +467,127 @@ export default function MuleDossierView({
         </div>
       </div>
 
-      {/* 3. Forensic Account Intelligence Console (Organized Executive Frame) */}
+      {/* 3. Forensic Account Intelligence Console (Filters Upward, Roles Downward) */}
       <div className="bg-white border border-[#E8E2D5] rounded-sm p-3.5 shadow-2xs space-y-3">
-        {/* Tier 1: Search + Role Segmentation */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
-          {/* Search Field */}
-          <div className="relative flex-1 min-w-0">
-            <div className="relative flex items-center">
-              <Search className="w-3.5 h-3.5 absolute left-3 text-[#9E968D] pointer-events-none" />
+        {/* Tier 1 (UPWARD): Small Search Field + Forensic Filters + Matching Telemetry */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E8E2D5]">
+          {/* Left: Compact Search Bar + Filters */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Small Search Field (w-64 sm:w-72) */}
+            <div className="relative w-64 sm:w-72">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9E968D] pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search Account ID, IFSC, Bank Name, or Modus Operandi..."
+                placeholder="Search Account, IFSC, Bank..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white border border-[#D4CEBF] rounded-sm pl-9 pr-14 py-2 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 shadow-2xs transition-all"
+                className="w-full bg-white border border-[#D4CEBF] rounded-sm pl-8 pr-12 py-1.5 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 shadow-2xs transition-all"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm("")}
-                  className="absolute right-2.5 px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold text-[#9E968D] hover:text-[#2C2623] hover:bg-[#FAF6EE] rounded-xs border border-transparent hover:border-[#E8E2D5] cursor-pointer transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-1 py-0.5 text-[9px] font-mono uppercase font-bold text-[#9E968D] hover:text-[#2C2623] hover:bg-[#FAF6EE] rounded-xs transition-colors cursor-pointer"
                 >
                   Clear
                 </button>
               )}
             </div>
+
+            {/* Hairline Divider with Proper Spacing */}
+            <div className="hidden sm:block h-6 w-px bg-[#E8E2D5]" />
+
+            {/* Forensic Filters Group */}
+            <div className="flex flex-wrap items-center gap-2.5 text-xs">
+              {/* Micro-Label Badge */}
+              <div className="inline-flex items-center gap-1 text-[#9E968D] font-mono">
+                <Filter className="w-3 h-3 text-[#D96B27]" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">FILTERS:</span>
+              </div>
+
+              {/* Bank Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
+                  Bank:
+                </span>
+                <select
+                  value={selectedBank}
+                  onChange={(e) => setSelectedBank(e.target.value)}
+                  className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
+                >
+                  <option value="ALL">All Banks ({stats.total.toLocaleString("en-IN")})</option>
+                  {bankOptions.map((b) => (
+                    <option key={b.code} value={b.code}>
+                      {b.name} ({b.code}) — {b.count.toLocaleString("en-IN")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Min Risk Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
+                  Min Risk:
+                </span>
+                <select
+                  value={minRisk}
+                  onChange={(e) => setMinRisk(Number(e.target.value))}
+                  className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
+                >
+                  <option value={0}>Any Risk (0+)</option>
+                  <option value={80}>High Confidence (80+)</option>
+                  <option value={90}>Critical Ring Core (90+)</option>
+                  <option value={95}>Definitive Syndicate Core (95+)</option>
+                </select>
+              </div>
+
+              {/* Sort Options */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
+                  Sort:
+                </span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
+                >
+                  <option value="risk_desc">Risk Index (High to Low)</option>
+                  <option value="holding_desc">Holding Balance (High to Low)</option>
+                  <option value="incoming_desc">Total Inflow (High to Low)</option>
+                  <option value="risk_asc">Risk Index (Low to High)</option>
+                </select>
+              </div>
+
+              {/* Reset Filters action */}
+              {hasActiveFilters && (
+                <button
+                  onClick={resetAllFilters}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-[#D96B27] hover:text-[#C25B1D] bg-[#FFEDD5]/70 hover:bg-[#FFEDD5] border border-[#FDBA74] rounded-xs transition-colors cursor-pointer shadow-2xs"
+                  title="Reset all search, bank, risk, and role filters"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Reset Filters</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Role Segmentation Controls */}
-          <div className="flex items-center overflow-x-auto no-scrollbar shrink-0">
-            <div className="inline-flex items-center p-0.5 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] gap-0.5 shadow-2xs w-full sm:w-auto">
+          {/* Right: Matching Accounts Telemetry Badge */}
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] shadow-2xs font-mono shrink-0 ml-auto sm:ml-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
+            <span className="text-xs font-bold text-[#2C2623]">{filteredMules.length.toLocaleString("en-IN")}</span>
+            <span className="text-[10px] font-bold text-[#746D65] uppercase tracking-wider">
+              Matching Accounts
+            </span>
+          </div>
+        </div>
+
+        {/* Tier 2 (DOWNWARD): L1, L2, L3 Role Segmentation */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-0.5">
+          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9E968D] shrink-0">
+              SYNDICATE LAYER:
+            </span>
+            <div className="inline-flex items-center p-0.5 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] gap-1 shadow-2xs shrink-0">
               {[
                 { id: "ALL", label: "ALL MULES", count: stats.total },
                 { id: "L1_COLLECTOR", label: "L1 COLLECTOR", count: stats.l1 },
@@ -526,93 +620,11 @@ export default function MuleDossierView({
               })}
             </div>
           </div>
-        </div>
 
-        {/* Tier 2: Unified Forensic Filter & Telemetry Strip */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-[#E8E2D5] text-xs">
-          {/* Forensic Controls Group */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            {/* Micro-Label Badge */}
-            <div className="inline-flex items-center gap-1.5 pr-2.5 border-r border-[#E8E2D5] shrink-0">
-              <Filter className="w-3 h-3 text-[#D96B27]" />
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9E968D]">
-                Forensic Filters
-              </span>
-            </div>
-
-            {/* Bank Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
-                Bank:
-              </span>
-              <select
-                value={selectedBank}
-                onChange={(e) => setSelectedBank(e.target.value)}
-                className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
-              >
-                <option value="ALL">All Banks ({stats.total.toLocaleString("en-IN")})</option>
-                {bankOptions.map((b) => (
-                  <option key={b.code} value={b.code}>
-                    {b.name} ({b.code}) — {b.count.toLocaleString("en-IN")}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Min Risk Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
-                Min Risk:
-              </span>
-              <select
-                value={minRisk}
-                onChange={(e) => setMinRisk(Number(e.target.value))}
-                className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
-              >
-                <option value={0}>Any Risk (0+)</option>
-                <option value={80}>High Confidence (80+)</option>
-                <option value={90}>Critical Ring Core (90+)</option>
-                <option value={95}>Definitive Syndicate Core (95+)</option>
-              </select>
-            </div>
-
-            {/* Sort Options */}
-            <div className="flex items-center gap-1.5 pl-1 sm:border-l sm:border-[#E8E2D5] sm:pl-3">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
-                Sort:
-              </span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-white border border-[#D4CEBF] rounded-sm px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
-              >
-                <option value="risk_desc">Risk Index (High to Low)</option>
-                <option value="holding_desc">Holding Balance (High to Low)</option>
-                <option value="incoming_desc">Total Inflow (High to Low)</option>
-                <option value="risk_asc">Risk Index (Low to High)</option>
-              </select>
-            </div>
-
-            {/* Reset Filters action */}
-            {hasActiveFilters && (
-              <button
-                onClick={resetAllFilters}
-                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-[#D96B27] hover:text-[#C25B1D] bg-[#FFEDD5]/70 hover:bg-[#FFEDD5] border border-[#FDBA74] rounded-xs transition-colors cursor-pointer shadow-2xs"
-                title="Reset all search, bank, risk, and role filters"
-              >
-                <X className="w-3 h-3" />
-                <span>Reset Filters</span>
-              </button>
-            )}
-          </div>
-
-          {/* Right: Matching Accounts Telemetry Badge */}
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] shadow-2xs font-mono shrink-0 ml-auto sm:ml-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
-            <span className="text-xs font-bold text-[#2C2623]">{filteredMules.length.toLocaleString("en-IN")}</span>
-            <span className="text-[10px] font-bold text-[#746D65] uppercase tracking-wider">
-              Matching Accounts
-            </span>
+          {/* Context tip on large screens */}
+          <div className="hidden lg:flex items-center gap-2 text-[11px] text-[#746D65] font-sans">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#D96B27]"></span>
+            <span>Click any tier to isolate intake, layering, or cashout nodes.</span>
           </div>
         </div>
       </div>
