@@ -388,11 +388,11 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
         {/* 4 Clean Framed Metric Columns with vertical dividing borders */}
         <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E2D5] bg-white">
           {/* Column 1: Scanned Records */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Scanned Records
             </span>
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#2C2623] tracking-tight my-1 whitespace-nowrap">
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#2C2623] tracking-tight my-0.5 whitespace-nowrap">
               {totalScanned.toLocaleString("en-IN")}
             </div>
             <p className="text-[11px] text-[#059669] font-medium flex items-center gap-1 whitespace-nowrap font-sans">
@@ -402,11 +402,11 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
           </div>
 
           {/* Column 2: Trapped Inflow */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Trapped Inflow at Risk
             </span>
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#DC2626] tracking-tight my-1 whitespace-nowrap">
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#DC2626] tracking-tight my-0.5 whitespace-nowrap">
               ₹{recoverableCrores} Crore
             </div>
             <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
@@ -415,11 +415,11 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
           </div>
 
           {/* Column 3: Heavy Whales */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Heavy Whales (₹50L–3 Cr)
             </span>
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#D96B27] tracking-tight my-1 whitespace-nowrap">
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#D96B27] tracking-tight my-0.5 whitespace-nowrap">
               {whaleCount} Outliers
             </div>
             <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
@@ -428,11 +428,11 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
           </div>
 
           {/* Column 4: Network Anomalies (Guaranteed Single-Line with zero wrapping) */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
+          <div className="p-3 sm:p-3.5 flex flex-col justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
               Network Anomalies
             </span>
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#2C2623] tracking-tight my-1 whitespace-nowrap">
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#2C2623] tracking-tight my-0.5 whitespace-nowrap">
               {foreignIpCount} IPs • {illegalLinksCount} Links
             </div>
             <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans truncate">
