@@ -462,54 +462,57 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
         </div>
       )}
 
-      {/* 3. Streamlined Single-Frame Control Bar (Search + Bank + Categories + Counter in 1 Sleek Line) */}
-      <div className="bg-white border border-[#E8E2D5] rounded-md p-2.5 sm:p-3 shadow-2xs">
-        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2.5">
-          {/* Left: Search Input */}
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <input
-              type="text"
-              placeholder="Search Txn ID, Account, IFSC, Narration..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-9 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm pl-8 pr-7 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:ring-1 focus:ring-[#D96B27]/30 transition-colors"
-            />
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-3 text-[#9E968D] pointer-events-none" />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="absolute right-2 top-2.5 text-[#9E968D] hover:text-[#2C2623] cursor-pointer"
+      {/* 3. Streamlined Control Bar (Search + Bank + Category Chips) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md p-2 sm:p-2.5 shadow-2xs w-full overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-2.5">
+          {/* Left: Search & Bank Selector */}
+          <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-lg">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[160px]">
+              <input
+                type="text"
+                placeholder="Search Txn ID, Account, IFSC..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm pl-8 pr-7 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:ring-1 focus:ring-[#D96B27]/30 transition-colors"
+              />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#9E968D] pointer-events-none" />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2 top-2 text-[#9E968D] hover:text-[#2C2623] cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Bank Route Dropdown */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] text-[#746D65] font-bold uppercase tracking-wider font-mono hidden sm:inline">Bank:</span>
+              <select
+                value={selectedBank}
+                onChange={(e) => setSelectedBank(e.target.value)}
+                className="h-8.5 bg-[#FAF6EE] hover:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-semibold font-mono text-[#2C2623] focus:outline-none cursor-pointer transition-colors"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+                <option value="ALL">All Banks</option>
+                <option value="SBIN">State Bank of India (SBIN)</option>
+                <option value="HDFC">HDFC Bank (HDFC)</option>
+                <option value="ICIC">ICICI Bank (ICIC)</option>
+                <option value="UTIB">Axis Bank (UTIB)</option>
+                <option value="PUNB">Punjab National Bank (PUNB)</option>
+                <option value="UBIN">Union Bank of India (UBIN)</option>
+                <option value="BARB">Bank of Baroda (BARB)</option>
+                <option value="KKBK">Kotak Mahindra Bank (KKBK)</option>
+              </select>
+            </div>
           </div>
 
-          {/* Middle Left: Bank Route Dropdown */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] text-[#746D65] font-bold uppercase tracking-wider font-mono hidden sm:inline">Bank:</span>
-            <select
-              value={selectedBank}
-              onChange={(e) => setSelectedBank(e.target.value)}
-              className="h-9 bg-[#FAF6EE] hover:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-semibold font-mono text-[#2C2623] focus:outline-none cursor-pointer transition-colors"
-            >
-              <option value="ALL">All Banks</option>
-              <option value="SBIN">State Bank of India (SBIN)</option>
-              <option value="HDFC">HDFC Bank (HDFC)</option>
-              <option value="ICIC">ICICI Bank (ICIC)</option>
-              <option value="UTIB">Axis Bank (UTIB)</option>
-              <option value="PUNB">Punjab National Bank (PUNB)</option>
-              <option value="UBIN">Union Bank of India (UBIN)</option>
-              <option value="BARB">Bank of Baroda (BARB)</option>
-              <option value="KKBK">Kotak Mahindra Bank (KKBK)</option>
-            </select>
-          </div>
-
-          {/* Middle Right: Segmented Filter Chips */}
-          <div className="flex items-center gap-1 overflow-x-auto shrink-0 py-0.5">
+          {/* Right: Segmented Filter Chips */}
+          <div className="flex items-center gap-1 overflow-x-auto max-w-full py-0.5 shrink-0">
             {[
               { id: "ALL", label: "All Flagged", count: tabCounts.all },
-              { id: "HEAVY_WHALES", label: "Whales (₹50L–3 Cr)", count: tabCounts.whales, isRed: true },
+              { id: "HEAVY_WHALES", label: "Whales (₹50L+)", count: tabCounts.whales, isRed: true },
               { id: "SMURFING_HOPS", label: "Hop 2 Smurfing", count: tabCounts.smurfing },
               { id: "FOREIGN_IP", label: "Foreign Proxies", count: tabCounts.foreignIp },
               { id: "ILLEGAL_LINKAGES", label: "Crime Links", count: tabCounts.crimeLinks }
@@ -519,7 +522,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
                 <button
                   key={tab.id}
                   onClick={() => setActiveFilter(tab.id)}
-                  className={`h-9 px-2.5 rounded-sm font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 border whitespace-nowrap shadow-2xs ${
+                  className={`h-8.5 px-2.5 rounded-sm font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 border whitespace-nowrap shadow-2xs ${
                     isSelected
                       ? tab.isRed
                         ? "bg-[#DC2626] border-[#DC2626] text-white"
@@ -542,13 +545,6 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
                 </button>
               );
             })}
-          </div>
-
-          {/* Right: Counter badge */}
-          <div className="hidden xl:flex items-center text-[11px] text-[#746D65] font-mono shrink-0 pl-2 border-l border-[#E8E2D5] whitespace-nowrap">
-            <span>
-              <strong className="text-[#2C2623] font-bold">{filteredTxns.length}</strong> txns
-            </span>
           </div>
         </div>
       </div>
