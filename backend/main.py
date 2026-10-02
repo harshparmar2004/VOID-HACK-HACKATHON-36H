@@ -13,7 +13,7 @@ import urllib.request
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from ingestion import IngestionEngine, DEFAULT_PARQUET
 from mule_scorer import MuleScorer
@@ -354,17 +354,25 @@ def trace_victim_flow(
     time_window: int = 180,
     min_amount: float = 0.0,
     bank_filter: Optional[str] = None,
-    keyword: Optional[str] = None
+    keyword: Optional[str] = None,
+    custom_rules: Optional[str] = None
 ):
     if not is_initialized:
         initialize_core()
+    parsed_rules = None
+    if custom_rules:
+        try:
+            parsed_rules = json.loads(custom_rules)
+        except Exception:
+            parsed_rules = None
     res = graph.trace_victim_trail(
         victim_account, 
         max_hops=max_hops, 
         time_window_minutes=time_window,
         min_amount=min_amount,
         bank_filter=bank_filter,
-        keyword=keyword
+        keyword=keyword,
+        custom_rules=parsed_rules
     )
     if not res.get("found", True):
         raise HTTPException(status_code=404, detail="Victim account has no outgoing transactions.")
@@ -607,6 +615,175 @@ def load_settings_dict():
         "status": "connected",
         "latency_ms": 65,
         "message": "Local Type-Safe Acceleration Engine Active"
+    }
+
+class ParameterSimulatePayload(BaseModel):
+    min_amount: float = 0.0
+    bank_filter: Optional[str] = "ALL"
+    keyword: Optional[str] = None
+    device_filter: Optional[str] = "ALL"
+    min_risk: float = 0.0
+    custom_rules: Optional[List[Dict[str, Any]]] = []
+    active_case: Optional[str] = None
+
+@app.post("/api/parameters/simulate")
+def simulate_parameters(payload: ParameterSimulatePayload):
+    if not is_initialized:
+        initialize_core()
+    t0 = time.time()
+    
+    where_clauses = ["1=1"]
+    sql_params = []
+    
+    if payload.min_amount and payload.min_amount > 0:
+        where_clauses.append("Amount_INR >= ?")
+        sql_params.append(float(payload.min_amount))
+        
+    if payload.bank_filter and payload.bank_filter != "ALL":
+        where_clauses.append("Receiver_IFSC LIKE ?")
+        sql_params.append(f"{payload.bank_filter}%")
+        
+    if payload.keyword and str(payload.keyword).strip():
+        where_clauses.append("LOWER(Narration) LIKE ?")
+        sql_params.append(f"%{str(payload.keyword).strip().lower()}%")
+        
+    if payload.device_filter == "HEADLESS":
+        where_clauses.append("is_headless_device = 1")
+    elif payload.device_filter == "FOREIGN_IP":
+        where_clauses.append("is_foreign_ip = 1")
+    elif payload.device_filter == "SUSPICIOUS":
+        where_clauses.append("(is_headless_device = 1 OR is_foreign_ip = 1 OR is_scam_narration = 1)")
+        
+    if payload.custom_rules:
+        for rule in payload.custom_rules:
+            if not isinstance(rule, dict) or not rule.get("enabled", True):
+                continue
+            field = rule.get("field", "")
+            op = rule.get("operator", "eq")
+            val = rule.get("value", "")
+            if val is None or str(val).strip() == "":
+                continue
+                
+            if field == "Amount_INR":
+                try:
+                    num_val = float(val)
+                    if op in [">", "gt"]:
+                        where_clauses.append("Amount_INR > ?")
+                        sql_params.append(num_val)
+                    elif op in [">=", "gte"]:
+                        where_clauses.append("Amount_INR >= ?")
+                        sql_params.append(num_val)
+                    elif op in ["<", "lt"]:
+                        where_clauses.append("Amount_INR < ?")
+                        sql_params.append(num_val)
+                    elif op in ["<=", "lte"]:
+                        where_clauses.append("Amount_INR <= ?")
+                        sql_params.append(num_val)
+                    elif op in ["==", "eq"]:
+                        where_clauses.append("Amount_INR = ?")
+                        sql_params.append(num_val)
+                except Exception:
+                    pass
+            elif field in ["Receiver_IFSC", "Sender_IFSC"]:
+                if op == "starts_with":
+                    where_clauses.append(f"{field} LIKE ?")
+                    sql_params.append(f"{val}%")
+                elif op == "contains":
+                    where_clauses.append(f"{field} LIKE ?")
+                    sql_params.append(f"%{val}%")
+                else:
+                    where_clauses.append(f"{field} = ?")
+                    sql_params.append(str(val))
+            elif field == "Narration":
+                if op in ["contains", "regex"]:
+                    where_clauses.append("LOWER(Narration) LIKE ?")
+                    sql_params.append(f"%{str(val).lower()}%")
+                else:
+                    where_clauses.append("LOWER(Narration) = ?")
+                    sql_params.append(str(val).lower())
+            elif field == "IP_Address":
+                if op in ["starts_with", "in_subnet"]:
+                    where_clauses.append("IP_Address LIKE ?")
+                    sql_params.append(f"{val}%")
+                else:
+                    where_clauses.append("IP_Address = ?")
+                    sql_params.append(str(val))
+            elif field == "Device_Type":
+                where_clauses.append("LOWER(Device_Type) LIKE ?")
+                sql_params.append(f"%{str(val).lower()}%")
+            elif field == "Payment_Mode":
+                where_clauses.append("UPPER(Payment_Mode) = ?")
+                sql_params.append(str(val).upper())
+
+    where_str = " AND ".join(where_clauses)
+    
+    # Run aggregated stats query
+    agg_sql = f"""
+        SELECT 
+            COUNT(*) as total_txns,
+            COALESCE(SUM(Amount_INR), 0.0) as total_volume,
+            COUNT(DISTINCT Sender_Account) as unique_senders,
+            COUNT(DISTINCT Receiver_Account) as unique_receivers
+        FROM transactions
+        WHERE {where_str};
+    """
+    agg_res = engine.con.execute(agg_sql, sql_params).fetchone()
+    
+    # Run sample transactions query
+    sample_sql = f"""
+        SELECT Transaction_ID, Sender_Account, Receiver_Account, Sender_IFSC, Receiver_IFSC,
+               Amount_INR, Timestamp, Payment_Mode, Narration, IP_Address, Device_Type
+        FROM transactions
+        WHERE {where_str}
+        ORDER BY Timestamp DESC
+        LIMIT 15;
+    """
+    sample_rows = engine.con.execute(sample_sql, sql_params).fetchall()
+    samples = []
+    for r in sample_rows:
+        samples.append({
+            "txn_id": r[0],
+            "sender": r[1],
+            "receiver": r[2],
+            "sender_ifsc": r[3],
+            "receiver_ifsc": r[4],
+            "amount": float(r[5]),
+            "timestamp": str(r[6]),
+            "mode": r[7],
+            "narration": r[8],
+            "ip": r[9],
+            "device": r[10]
+        })
+        
+    # Active case trail impact
+    case_impact = None
+    if payload.active_case:
+        try:
+            trail_res = graph.trace_victim_trail(
+                payload.active_case,
+                min_amount=payload.min_amount,
+                bank_filter=payload.bank_filter,
+                keyword=payload.keyword,
+                custom_rules=payload.custom_rules
+            )
+            case_impact = {
+                "nodes_count": trail_res.get("nodes_count", 0),
+                "edges_count": trail_res.get("edges_count", 0),
+                "recoverable_holding_inr": trail_res.get("recoverable_holding_inr", 0.0)
+            }
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "total_matching_txns": agg_res[0],
+        "total_matching_volume": round(float(agg_res[1]), 2),
+        "unique_senders": agg_res[2],
+        "unique_receivers": agg_res[3],
+        "sample_txns": samples,
+        "generated_where_clause": where_str,
+        "active_case_impact": case_impact,
+        "latency_ms": round((time.time() - t0) * 1000, 2)
     }
 
 def mask_key(k: str) -> str:

@@ -12,13 +12,26 @@ export async function fetchVictims() {
   return res.json();
 }
 
-export async function traceVictim(victimAccount, maxHops = 4, timeWindow = 180, minAmount = 0, bankFilter = null, keyword = null) {
+export async function traceVictim(victimAccount, maxHops = 4, timeWindow = 180, minAmount = 0, bankFilter = null, keyword = null, customRules = null) {
   let url = `${API_BASE}/trace/${victimAccount}?max_hops=${maxHops}&time_window=${timeWindow}`;
   if (minAmount > 0) url += `&min_amount=${minAmount}`;
   if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
   if (keyword && String(keyword).trim()) url += `&keyword=${encodeURIComponent(String(keyword).trim())}`;
+  if (customRules && Array.isArray(customRules) && customRules.length > 0) {
+    url += `&custom_rules=${encodeURIComponent(JSON.stringify(customRules))}`;
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to trace victim money trail");
+  return res.json();
+}
+
+export async function simulateParameters(payload) {
+  const res = await fetch(`${API_BASE}/parameters/simulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error("Failed to simulate parameters");
   return res.json();
 }
 

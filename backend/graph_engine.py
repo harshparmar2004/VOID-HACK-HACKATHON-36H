@@ -20,7 +20,8 @@ class GraphEngine:
         time_window_minutes=180,
         min_amount=0.0,
         bank_filter=None,
-        keyword=None
+        keyword=None,
+        custom_rules=None
     ):
         """
         Executes a temporal Breadth-First Search (BFS) starting from the Victim Account.
@@ -164,6 +165,67 @@ class GraphEngine:
                 outflow_sql += " AND LOWER(Narration) LIKE ?"
                 outflow_params.append(f"%{str(keyword).strip().lower()}%")
                 
+            if custom_rules and isinstance(custom_rules, list):
+                for rule in custom_rules:
+                    if not isinstance(rule, dict) or not rule.get("enabled", True):
+                        continue
+                    field = rule.get("field", "")
+                    op = rule.get("operator", "eq")
+                    val = rule.get("value", "")
+                    if val is None or str(val).strip() == "":
+                        continue
+                        
+                    if field == "Amount_INR":
+                        try:
+                            num_val = float(val)
+                            if op in [">", "gt"]:
+                                outflow_sql += " AND Amount_INR > ?"
+                                outflow_params.append(num_val)
+                            elif op in [">=", "gte"]:
+                                outflow_sql += " AND Amount_INR >= ?"
+                                outflow_params.append(num_val)
+                            elif op in ["<", "lt"]:
+                                outflow_sql += " AND Amount_INR < ?"
+                                outflow_params.append(num_val)
+                            elif op in ["<=", "lte"]:
+                                outflow_sql += " AND Amount_INR <= ?"
+                                outflow_params.append(num_val)
+                            elif op in ["==", "eq"]:
+                                outflow_sql += " AND Amount_INR = ?"
+                                outflow_params.append(num_val)
+                        except (ValueError, TypeError):
+                            pass
+                    elif field in ["Receiver_IFSC", "Sender_IFSC"]:
+                        if op == "starts_with":
+                            outflow_sql += f" AND {field} LIKE ?"
+                            outflow_params.append(f"{val}%")
+                        elif op == "contains":
+                            outflow_sql += f" AND {field} LIKE ?"
+                            outflow_params.append(f"%{val}%")
+                        else:
+                            outflow_sql += f" AND {field} = ?"
+                            outflow_params.append(str(val))
+                    elif field == "Narration":
+                        if op in ["contains", "regex"]:
+                            outflow_sql += " AND LOWER(Narration) LIKE ?"
+                            outflow_params.append(f"%{str(val).lower()}%")
+                        else:
+                            outflow_sql += " AND LOWER(Narration) = ?"
+                            outflow_params.append(str(val).lower())
+                    elif field == "IP_Address":
+                        if op in ["starts_with", "in_subnet"]:
+                            outflow_sql += " AND IP_Address LIKE ?"
+                            outflow_params.append(f"{val}%")
+                        else:
+                            outflow_sql += " AND IP_Address = ?"
+                            outflow_params.append(str(val))
+                    elif field == "Device_Type":
+                        outflow_sql += " AND LOWER(Device_Type) LIKE ?"
+                        outflow_params.append(f"%{str(val).lower()}%")
+                    elif field == "Payment_Mode":
+                        outflow_sql += " AND UPPER(Payment_Mode) = ?"
+                        outflow_params.append(str(val).upper())
+                
             outflow_sql += " ORDER BY Timestamp ASC;"
             outflows = self.con.execute(outflow_sql, outflow_params).fetchall()
             
@@ -241,7 +303,8 @@ class GraphEngine:
                 "time_window_minutes": time_window_minutes,
                 "min_amount": min_amount,
                 "bank_filter": bank_filter,
-                "keyword": keyword
+                "keyword": keyword,
+                "custom_rules_count": len(custom_rules) if custom_rules else 0
             }
         }
 

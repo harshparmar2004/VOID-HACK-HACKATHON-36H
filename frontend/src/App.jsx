@@ -211,7 +211,8 @@ export default function App() {
         p.timeWindow,
         p.minAmount,
         p.bankFilter,
-        p.narrationKeyword
+        p.narrationKeyword,
+        p.customRules
       );
       if (trace && trace.nodes) setTraceData(trace);
       
