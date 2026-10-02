@@ -113,11 +113,48 @@ def check_scratch_store() -> None:
         con.close()
     check("add_output: sha256 is the file's", sha == hashlib.sha256(doc.read_bytes()).hexdigest())
 
+    # Step 8d: case events (status = latest event) and documents stored in the store.
+    check("create_case: each case starts with its OPENED event",
+          [(c["case_id"], c["status"]) for c in cs.list_cases(db)] == [(c1, "OPENED"), (c2, "OPENED")]
+          and [e["event"] for e in cs.get_case(c1, db)["events"]] == ["OPENED"])
+    cs.add_event(c1, "NOTICES_GENERATED", "AUDIT", note="audit", db=db)
+    cs.add_event(c1, "CLOSED", "AUDIT", db=db)
+    check("add_event: status is the latest event", cs.get_case(c1, db)["status"] == "CLOSED"
+          and cs.get_case(c2, db)["status"] == "OPENED" and cs.get_case("CASE-999999", db) is None)
+    d = cs.add_document(c2, "FIR", "fir_audit", "<p>audit fixture</p>", True, "TEMPLATE", db=db)
+    check("add_document: next version, sha256 of the HTML, body stored",
+          (d["version"], d["file_path"]) == (2, "fir_audit_v2.html")
+          and d["sha256"] == hashlib.sha256(b"<p>audit fixture</p>").hexdigest()
+          and cs.document_body(d["output_id"], db) == "<p>audit fixture</p>"
+          and cs.document_body(1, db) is None)
+    check("current_requests: a withdrawn request is not current", cs.current_requests(c1, db) == [])
+    closed = {
+        "event": lambda: cs.add_event(c1, "FIR_GENERATED", "AUDIT", db=db),
+        "second CLOSED": lambda: cs.add_event(c1, "CLOSED", "AUDIT", db=db),
+        "output": lambda: cs.add_output(c1, "FIR", doc, True, "TEMPLATE", db=db),
+        "document": lambda: cs.add_document(c1, "FIR", "x", "x", True, "TEMPLATE", db=db),
+        "freeze action": lambda: cs.add_freeze_action(c1, "A", "SBIN", 1, "REQUESTED", "AUDIT", db=db),
+    }
+    for name, fn in closed.items():
+        check(f"closed case refuses: {name}", refused(fn, cs.CaseClosedError))
+    docs = cs.case_documents(c2, db=db)
+    check("case_documents: rows with their stored page", [(x["seq"], x["body"]) for x in docs]
+          == [(6, None), (d["output_id"], "<p>audit fixture</p>")]
+          and cs.case_documents(c2, d["output_id"], db) == docs[1:]
+          and cs.case_documents(c1, d["output_id"], db) == [])
+
     bad = {
         "unknown case (output)": lambda: cs.add_output("CASE-999999", "FIR", doc, True, "TEMPLATE", db=db),
         "unknown case (freeze)": lambda: cs.add_freeze_action("CASE-999999", "A", "SBIN", 1, "REQUESTED", "AUDIT", db=db),
         "bad doc_type": lambda: cs.add_output(c1, "NOTICE", doc, True, "TEMPLATE", db=db),
         "bad generator": lambda: cs.add_output(c1, "FIR", doc, True, "LLM", db=db),
+        "FIR under a model label": lambda: cs.add_document(c2, "FIR", "x", "x", True, "LLM+VALIDATED", db=db),
+        "notice under the fallback label": lambda: cs.add_output(
+            c2, "FREEZE_NOTICE", doc, True, "TEMPLATE_FALLBACK", bank="SBIN", db=db),
+        "bad event": lambda: cs.add_event(c1, "REOPENED", "AUDIT", db=db),
+        "unknown case (event)": lambda: cs.add_event("CASE-999999", "CLOSED", "AUDIT", db=db),
+        "unknown case (document)": lambda: cs.add_document("CASE-999999", "FIR", "x", "x", True, "TEMPLATE", db=db),
+        "empty document": lambda: cs.add_document(c1, "FIR", "x", "", True, "TEMPLATE", db=db),
         "bad action": lambda: cs.add_freeze_action(c1, "A", "SBIN", 1, "FROZEN", "AUDIT", db=db),
         "amount not integer paise": lambda: cs.add_freeze_action(c1, "A", "SBIN", 1.5, "REQUESTED", "AUDIT", db=db),
         "negative amount": lambda: cs.add_freeze_action(c1, "A", "SBIN", -1, "REQUESTED", "AUDIT", db=db),
@@ -139,8 +176,9 @@ def check_scratch_store() -> None:
         sqlite3.DatabaseError))
 
     r = cs.verify(db)
-    check("verify: clean store passes", r["ok"] and r["rows"] == {"cases": 2, "case_outputs": 6, "freeze_actions": 2}
-          and r["triggers"] == 6, str(r))
+    check("verify: clean store passes", r["ok"] and r["rows"] == {
+        "cases": 2, "case_outputs": 7, "freeze_actions": 2, "case_events": 4, "output_bodies": 1}
+          and r["triggers"] == len(cs.TRIGGERS) == 2 * len(cs.COLUMNS), str(r))
 
     # Tampering behind the triggers: each on its own copy of the clean store.
     tampers = {
@@ -149,6 +187,12 @@ def check_scratch_store() -> None:
         "a deleted middle row": ["DROP TRIGGER case_outputs_no_delete", "DELETE FROM case_outputs WHERE seq = 3"],
         "a deleted last row": ["DROP TRIGGER case_outputs_no_delete", "DELETE FROM case_outputs WHERE seq = 6"],
         "a dropped trigger": ["DROP TRIGGER cases_no_update"],
+        "a changed event": ["DROP TRIGGER case_events_no_update",
+                            "UPDATE case_events SET event = 'OPENED' WHERE seq = 4"],
+        "a deleted event": ["DROP TRIGGER case_events_no_delete", "DELETE FROM case_events WHERE seq = 4"],
+        "a changed stored document": ["DROP TRIGGER output_bodies_no_update",
+                                      "UPDATE output_bodies SET body = 'x'"],
+        "a missing table": ["DROP TABLE case_events"],
     }
     for i, (name, statements) in enumerate(tampers.items()):
         copy = fresh(f"tamper{i}.db", db)
@@ -163,6 +207,7 @@ def check_real_store() -> None:
     if cs.DEFAULT_DB.is_file():
         r = cs.verify(cs.DEFAULT_DB)
         check("data\\cases.db passes verify", r["ok"], f"{r['rows']} {r['problems']}")
+        print(f"data\\cases.db rows: {r['rows']}")
 
 
 def check_bank_directory() -> None:

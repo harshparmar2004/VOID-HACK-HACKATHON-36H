@@ -1,7 +1,28 @@
 """
-audits/check_api.py -- checks the Step 6 API (batches B1, B2, B3, B4a, B4b) against the database.
+audits/check_api.py -- checks the API (Step 6 batches B1, B2, B3, B4a, B4b; Step 8d) against the database.
 
-Read-only. Uses FastAPI's TestClient (no server, no network).
+data\\case.duckdb is only read. The Step 8d write routes run on a SCRATCH case
+store in %TEMP% (ABHEDYA_CASES_DB), never on data\\cases.db. Uses FastAPI's
+TestClient (no server, no network; --llm also asks the local model once).
+
+Checked (8d): a case opens with its OPENED event, the dataset SHA-256 and the
+active profile; notices, diary and FIR draft are stored with the sha256 of the
+page returned and each passes its validator (the notices also the Step 8b
+audit's check, against a trace run here); the diary comes back as the template
+without asking the model, and its summary route stores AI text only when the
+answer validates; the freeze routes record REQUESTED / WITHDRAWN rows with the
+trace's holding and never say a bank was notified; after every request every
+earlier row of the case store is still there unchanged, UPDATE and DELETE are
+refused; vault verify passes on the clean store and fails on five tampered
+copies; data\\cases.db is untouched.
+
+Checked (8d follow-up): the diary route's page is labelled TEMPLATE (model not
+asked), TEMPLATE_FALLBACK only after a failed attempt, and a page stored under
+another label than it prints is rejected, as is a label the document type cannot
+carry; GET /cases/{id}/outputs/{output_id} returns each stored page byte for
+byte with its sha256, and answers 409 with the vault error on a tampered copy;
+POST /cases/{id}/close appends CLOSED, after which every write route answers
+409 and writes nothing, while the read routes still answer.
 
 Checked (7c1): every account the API returns with a bank also carries the
 bank_directory name of that bank (entities for ALL accounts, victims, mules,
@@ -48,13 +69,18 @@ hard-coded. Run:  .venv\\Scripts\\python.exe audits\\check_api.py [--samples]
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import shutil
+import sqlite3
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 import duckdb
+import yaml
 from pydantic import TypeAdapter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,9 +88,13 @@ sys.path.insert(0, str(ROOT))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from api.deps import db_path  # noqa: E402
+from api.deps import DEFAULT_CASES_DB, db_path  # noqa: E402
 from api.main import app  # noqa: E402
 from api.middleware import ALLOWED_ORIGINS, TIMING_HEADER  # noqa: E402
+from api.schemas.cases import (  # noqa: E402
+    ArtifactsResponse, CaseDetail, CaseOutputs, CasesResponse, FreezeResponse, FrozenAccount,
+    VerifyResponse)
+from api.schemas.legal import DiarySummary, LegalDocument, NoticesResponse  # noqa: E402
 from api.schemas.benchmark import (  # noqa: E402
     DEFAULT_JURY_VICTIMS, MAX_JURY_VICTIMS, BenchmarkResponse, JuryResponse)
 from api.schemas.entities import EntitiesResponse  # noqa: E402
@@ -79,7 +109,34 @@ from api.schemas.trace import (  # noqa: E402
 from api.schemas.transactions import MAX_SEARCH_LIMIT, TransactionSearchResponse  # noqa: E402
 from api.schemas.victims import VictimsResponse  # noqa: E402
 from api.services import rupees  # noqa: E402
+from api.services.cases import case_store  # noqa: E402
+from api.services.legal import build_evidence  # noqa: E402
+from api.services.legal import diary as diary_mod  # noqa: E402
+from api.services.legal import fir as fir_mod  # noqa: E402
+from api.services.legal import notices as notices_mod  # noqa: E402
 from api.services.trace import engine  # noqa: E402
+
+sys.path.insert(0, str(ROOT / "audits"))
+import check_notices  # noqa: E402
+
+SCHEMAS_8D = {
+    "case": TypeAdapter(CaseDetail),
+    "cases": TypeAdapter(CasesResponse),
+    "notices": TypeAdapter(NoticesResponse),
+    "document": TypeAdapter(LegalDocument),
+    "diary_summary": TypeAdapter(DiarySummary),
+    "freeze": TypeAdapter(FreezeResponse),
+    "frozen": TypeAdapter(list[FrozenAccount]),
+    "artifacts": TypeAdapter(ArtifactsResponse),
+    "verify": TypeAdapter(VerifyResponse),
+    "outputs": TypeAdapter(CaseOutputs),
+}
+CASES_ENV = "ABHEDYA_CASES_DB"
+SCRATCH_DIR = Path(os.environ["TEMP"]) / "abhedya_check_api"
+OFFICER = "AUDIT"
+# Step 8d: the routes that append to the case store (vault/verify only reads it).
+CASE_STORE_POSTS = ["POST /api/cases", "POST /api/cases/{case_id}/close", "POST /api/legal/fir", "POST /api/scanner/emergency-freeze",
+                    "POST /api/scanner/unfreeze", "POST /api/vault/verify"]
 
 SCHEMAS = {
     "/api/status": TypeAdapter(StatusResponse),
@@ -114,21 +171,16 @@ READ_ONLY_POSTS = ["POST /api/profiles/preview", "POST /api/trace/batch",
                    "POST /api/scanner/run-60s-benchmark", "POST /api/jury/blind-test"]
 BENCHMARK_TRACES = 20             # the sample size the task names
 JURY_SEED = 7                     # any fixed seed: the same victims twice
-# Writes are deferred: these routes exist and answer 501.
+# Profile writes are deferred: these routes exist and answer 501.
 DEFERRED_POSTS = ["POST /api/profiles", "POST /api/profiles/{profile_id}/activate"]
 # API_CONTRACT.md rows marked DEFERRED / LATER (501) and DROP (410), as (method, path called).
-DEFERRED_B4 = [
-    ("POST", "/api/upload"), ("POST", "/api/scanner/emergency-freeze"),
-    ("POST", "/api/scanner/unfreeze"), ("GET", "/api/legal/notices/" + SAMPLE_VICTIM),
-    ("GET", "/api/legal/case-diary/" + SAMPLE_VICTIM), ("GET", "/api/vault/artifacts"),
-    ("POST", "/api/vault/verify"), ("GET", "/api/vault/certificate/x")]
+DEFERRED_B4 = [("POST", "/api/upload"), ("GET", "/api/vault/certificate/x")]
 DROPPED = [
     ("POST", "/api/victim/load-demo/case_sunil_4hop"), ("POST", "/api/ingest-url"),
     ("GET", "/api/settings"), ("POST", "/api/settings"),
     ("POST", "/api/settings/test-connection"), ("POST", "/api/assistant/chat")]
 REFUSED_POSTS = [
-    "POST /api/upload", "POST /api/scanner/emergency-freeze", "POST /api/scanner/unfreeze",
-    "POST /api/vault/verify", "POST /api/victim/load-demo/{demo_id}", "POST /api/ingest-url",
+    "POST /api/upload", "POST /api/victim/load-demo/{demo_id}", "POST /api/ingest-url",
     "POST /api/settings", "POST /api/settings/test-connection", "POST /api/assistant/chat"]
 TEMPLATE_COLUMNS = [
     "Transaction_ID", "Sender_Account", "Receiver_Account", "Sender_IFSC", "Receiver_IFSC",
@@ -404,8 +456,392 @@ def trim(body):
     return body
 
 
+def chain(db: Path) -> dict[str, list[tuple]]:
+    """(seq, row_hash) of every row of every case-store table, in seq order."""
+    con = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        return {t: con.execute(f"SELECT seq, row_hash FROM {t} ORDER BY seq").fetchall()
+                for t in case_store.COLUMNS}
+    finally:
+        con.close()
+
+
+def raw_sql(db: Path, *statements: str) -> None:
+    """Run statements straight on the file, as a tamperer would."""
+    con = sqlite3.connect(str(db), isolation_level=None)
+    try:
+        for sql in statements:
+            con.execute(sql)
+    finally:
+        con.close()
+
+
+def call(client: TestClient, method: str, path: str, schema: str | None = None,
+         expect: int = 200, **kwargs):
+    """One request to a Step 8d route: status, timing header, schema. Returns the JSON body."""
+    label = f"{method} {path} {json.dumps(kwargs.get('params') or kwargs.get('json') or {})[:60]}"
+    r = client.request(method, path, **kwargs)
+    check(f"{label}  {expect}", r.status_code == expect, f"HTTP {r.status_code} {r.text[:300]}")
+    if TIMING_HEADER in r.headers and schema and r.status_code == expect:
+        timings.setdefault(schema, []).append(float(r.headers[TIMING_HEADER]))
+    if schema and r.status_code == expect:
+        try:
+            SCHEMAS_8D[schema].validate_python(r.json(), strict=False)
+            check(f"{label}  schema", True)
+        except Exception as ex:
+            check(f"{label}  schema", False, str(ex)[:300])
+    return r.json()
+
+
+def check_case_store_api(client: TestClient, db: Path, e: dict, scratch: Path, live_llm: bool) -> dict:
+    """Step 8d: the write routes, on the scratch case store only."""
+    V = SAMPLE_VICTIM
+    steps: list[dict] = [chain(scratch)] if scratch.is_file() else []
+
+    def appended(step: str) -> None:
+        """Every row that was there before this step is still there, unchanged."""
+        now = chain(scratch)
+        if steps:
+            check(f"rows only appended: {step}",
+                  all(now[t][:len(rows)] == rows for t, rows in steps[-1].items()))
+        steps.append(now)
+
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        dataset_sha = con.execute(
+            "SELECT file_sha256 FROM ingest_meta ORDER BY load_id DESC LIMIT 1").fetchone()[0]
+        ifsc = dict(con.execute("SELECT acct_no, ifsc FROM accounts").fetchall())
+        directory = {r[0]: r[1:] for r in con.execute(
+            "SELECT bank_prefix, bank_name, nodal_officer_title, address_block "
+            "FROM bank_directory").fetchall()}
+    finally:
+        con.close()
+    legal_cfg = yaml.safe_load((ROOT / "legal" / "config.yaml").read_text(encoding="utf-8"))
+    trace = engine.trace_victim(V, db)                     # run here, apart from the API
+    candidates = {c["acct_no"]: c for c in trace["freeze_candidates"]}
+    banks = sorted({c["bank"] for c in candidates.values()})
+
+    # cases
+    case = call(client, "POST", "/api/cases", "case", 201, json={
+        "victims": [V], "officer": OFFICER, "fir_number": "AUDIT/8D/1", "complainant": "AUDIT"})
+    cid = case["case_id"]
+    appended("POST /cases")
+    same("case: status is its only event", (case["status"], [x["event"] for x in case["events"]]),
+         ("OPENED", ["OPENED"]))
+    same("case: dataset SHA-256 is ingest_meta's", case["dataset_sha256"], dataset_sha)
+    same("case: profile is the active one", case["profile_id"], e["profile_id"])
+    for name, bad in (("unknown account", {"victims": [UNKNOWN_ACCOUNT], "officer": OFFICER}),
+                      ("no victims", {"victims": [], "officer": OFFICER}),
+                      ("blank officer", {"victims": [V], "officer": "  "}),
+                      ("unknown field", {"victims": [V], "officer": OFFICER, "status": "CLOSED"})):
+        r = client.post("/api/cases", json=bad)
+        check(f"POST /cases {name} -> 422", r.status_code == 422, f"HTTP {r.status_code}")
+    appended("refused cases wrote nothing")
+    same("refused cases wrote nothing (one case)", len(steps[-1]["cases"]), 1)
+    listed = call(client, "GET", "/api/cases", "cases")
+    same("GET /cases lists the case", [c["case_id"] for c in listed["cases"]], [cid])
+    r = client.get("/api/cases/CASE-999999")
+    check("GET /cases/{unknown} -> 404", r.status_code == 404, f"HTTP {r.status_code}")
+
+    def stored(doc: dict, label: str) -> None:
+        body = case_store.document_body(doc["output_id"], scratch)
+        check(f"{label}: sha256 is the page's and the stored copy is the page",
+              body == doc["html"] and doc["sha256"] == hashlib.sha256(doc["html"].encode("utf-8")).hexdigest())
+        check(f"{label}: DRAFT label, dataset SHA-256 and fingerprint on the page",
+              all(x in doc["html"] for x in (legal_cfg["draft_label"], dataset_sha, trace["fingerprint"])))
+
+    def evidence_of(doc: dict) -> dict:
+        """The evidence rebuilt here, stamped with the page's own time and generator."""
+        return {**build_evidence(V, cid, case["fir_number"], db),
+                "generated_at": doc["generated_at"], "generator": doc["generator"]}
+
+    # freeze notices
+    for name, params, status in (("no case_id", {}, 422), ("unknown case", {"case_id": "CASE-999999"}, 404)):
+        r = client.get(f"/api/legal/notices/{V}", params=params)
+        check(f"notices {name} -> {status}", r.status_code == status, f"HTTP {r.status_code}")
+    other = next(a for a in candidates if a != V)
+    r = client.get(f"/api/legal/notices/{other}", params={"case_id": cid})
+    check("notices for an account that is not the case's victim -> 422", r.status_code == 422,
+          f"HTTP {r.status_code}")
+    nt = call(client, "GET", f"/api/legal/notices/{V}", "notices", params={"case_id": cid})
+    appended("GET /legal/notices")
+    same("notices: one per bank of the trace's freeze list", [n["bank"] for n in nt["notices"]], banks)
+    check_notices.CASE_ID = cid
+    for n in nt["notices"]:
+        ev = evidence_of(n)
+        problems = check_notices.check_notice(n["html"], n["bank"], trace, ifsc, directory, dataset_sha,
+                                              legal_cfg)
+        problems += notices_mod.validate_notice(
+            n["html"], ev, next(b for b in ev["banks"] if b["bank_prefix"] == n["bank"]))
+        check(f"notice {n['bank']} passes its validator and the Step 8b audit", not problems, str(problems[:3]))
+        stored(n, f"notice {n['bank']}")
+
+    # case diary: the template at once, the AI narrative apart
+    dy = call(client, "GET", f"/api/legal/case-diary/{V}", "document", params={"case_id": cid})
+    appended("GET /legal/case-diary")
+    same("diary: labelled TEMPLATE, model not asked", dy["generator"], diary_mod.GENERATOR_TEMPLATE)
+    relabelled = dy["html"].replace(">TEMPLATE<", ">TEMPLATE_FALLBACK<")
+    check("diary validator rejects a page printing another label than it is stored under",
+          relabelled != dy["html"] and bool(diary_mod.validate_html(relabelled, evidence_of(dy)))
+          and bool(diary_mod.validate_html(dy["html"], {**evidence_of(dy), "generator": "TEMPLATE_FALLBACK"})))
+    for doc_type, label in (("FREEZE_NOTICE", "TEMPLATE_FALLBACK"), ("FIR", "LLM+VALIDATED"),
+                            ("CASE_DIARY", "LLM")):
+        try:
+            case_store.add_document(cid, doc_type, "audit", "audit", True, label, bank=None, db=scratch)
+            check(f"case store refuses a {doc_type} labelled {label}", False)
+        except ValueError:
+            check(f"case store refuses a {doc_type} labelled {label}", True)
+    appended("refused labels wrote nothing")
+    check("diary passes its validator", not diary_mod.validate_html(dy["html"], evidence_of(dy)),
+          str(diary_mod.validate_html(dy["html"], evidence_of(dy))[:3]))
+    stored(dy, "diary")
+
+    ask = diary_mod.ask_ollama
+    sp = f"/api/legal/case-diary/{V}/summary"
+    ai_diary = False                  # --llm: the live answer validated and was stored
+    try:
+        def down(tokens, llm):
+            raise ConnectionRefusedError("audit: model switched off")
+        diary_mod.ask_ollama = down
+        sm = call(client, "GET", sp, "diary_summary", params={"case_id": cid})
+        appended("diary summary, model down")
+        check("summary, model down: TEMPLATE_FALLBACK, no AI text, nothing stored",
+              sm["generator"] == diary_mod.GENERATOR_FALLBACK and sm["summary"] is None
+              and sm["entries"] == [] and sm["document"] is None
+              and len(steps[-1]["case_outputs"]) == len(steps[-2]["case_outputs"]), str(sm)[:200])
+        # A model that answers with a wrong account token: rejected, nothing stored.
+        def wrong(tokens, llm):
+            answer = diary_mod.template_narrative(tokens)
+            answer["entries"][0]["sentence"] += " ACC_999"
+            return answer
+        diary_mod.ask_ollama = wrong
+        sm = call(client, "GET", sp, "diary_summary", params={"case_id": cid})
+        appended("diary summary, wrong answer")
+        check("summary, answer with an unknown token: TEMPLATE_FALLBACK, rejected, nothing stored",
+              sm["llm"]["status"] == "rejected by validation" and sm["document"] is None
+              and sm["generator"] == diary_mod.GENERATOR_FALLBACK
+              and len(steps[-1]["case_outputs"]) == len(steps[-2]["case_outputs"]), str(sm)[:200])
+        if live_llm:
+            diary_mod.ask_ollama = ask
+            sm = call(client, "GET", sp, "diary_summary", params={"case_id": cid})
+            appended("diary summary, live model")
+            print(f"diary summary (live model): {sm['generator']}, {sm['llm']['status']}, "
+                  f"{sm['llm']['seconds']} s")
+            if sm["document"]:
+                d, ai_diary = sm["document"], True
+                check("summary (live): stored as the next diary version and valid",
+                      d["version"] == dy["version"] + 1 and d["generator"] == diary_mod.GENERATOR_LLM
+                      and not diary_mod.validate_html(d["html"], evidence_of(d)))
+                stored(d, "diary with AI narrative")
+            else:
+                check("summary (live): no AI text without a validated answer",
+                      sm["summary"] is None and sm["entries"] == [])
+    finally:
+        diary_mod.ask_ollama = ask
+
+    # FIR draft
+    entered = {"complainant": {"name": "AUDIT <Complainant> & Co", "address": "1 Audit Road\nAudit Town",
+                               "phone": "0000000000"},
+               "offence_summary": "Entered for the audit: the caller asked for 1,00,000 to be sent\n"
+                                  "to an account such as ZZZZ00000000.",
+               "police_station": "AUDIT PS"}
+    fr = call(client, "POST", "/api/legal/fir", "document", json={"case_id": cid, "victim": V, **entered})
+    appended("POST /legal/fir")
+    details = fir_mod.fir_details(entered["complainant"], entered["offence_summary"], None,
+                                  entered["police_station"])
+    problems = fir_mod.validate_html(fr["html"], evidence_of(fr), details)
+    check("FIR draft passes its validator", not problems, str(problems[:3]))
+    stored(fr, "FIR draft")
+    text = fir_mod.visible_text(fr["html"])
+    check("FIR draft: officer's text printed as typed, annexure lists every traced account",
+          entered["complainant"]["name"] in text
+          and all(a["acct_no"] in text for a in trace["accounts"]))
+    for what, page in (("a wrong amount", fr["html"].replace("₹", "₹9", 1)),
+                       ("an account outside the trace", fr["html"].replace(
+                           "<h2>Annexure A", "<p>ZZZZ00000000</p><h2>Annexure A", 1)),
+                       ("changed officer text", fr["html"].replace("AUDIT PS", "OTHER PS", 1))):
+        check(f"FIR validator rejects a page with {what}",
+              bool(fir_mod.validate_html(page, evidence_of(fr), details)))
+    for name, bad in (("no complainant name", {**entered, "complainant": {"address": "x"}}),
+                      ("no offence summary", {**entered, "offence_summary": ""})):
+        r = client.post("/api/legal/fir", json={"case_id": cid, "victim": V, **bad})
+        check(f"POST /legal/fir {name} -> 422", r.status_code == 422, f"HTTP {r.status_code}")
+    appended("refused FIR drafts wrote nothing")
+
+    detail = call(client, "GET", f"/api/cases/{cid}", "case")
+    same("case: events in order, status = latest",
+         ([x["event"] for x in detail["events"]], detail["status"]),
+         (["OPENED", "NOTICES_GENERATED", "DIARY_GENERATED"] + ["DIARY_GENERATED"] * ai_diary
+          + ["FIR_GENERATED"], "FIR_GENERATED"))
+    same("case: outputs (type, bank, version)",
+         sorted(((o["doc_type"], o["bank"] or "", o["version"]) for o in detail["outputs"])),
+         sorted([("FREEZE_NOTICE", b, 1) for b in banks] + [("CASE_DIARY", "", 1), ("FIR", "", 1)]
+                + [("CASE_DIARY", "", 2)] * ai_diary))
+    check("case: every output validated", all(o["validated"] for o in detail["outputs"]))
+
+    # freeze register: REQUESTED / WITHDRAWN rows only
+    accts = sorted(candidates)
+    fz = call(client, "POST", "/api/scanner/emergency-freeze", "freeze",
+              json={"case_id": cid, "accounts": accts, "note": "audit"})
+    appended("POST /scanner/emergency-freeze")
+    same("freeze: one REQUESTED row per account", sorted(a["account"] for a in fz["recorded"]), accts)
+    check("freeze: amount is the trace's holding, bank the account's",
+          all(a["action"] == "REQUESTED" and paise(a["amount"]) == candidates[a["account"]]["holding"]
+              and a["bank"] == candidates[a["account"]]["bank"] for a in fz["recorded"]))
+    check("freeze: never claims a bank was notified",
+          fz["bank_notified"] is False and "No bank has been notified" in fz["message"])
+    again = call(client, "POST", "/api/scanner/emergency-freeze", "freeze",
+                 json={"case_id": cid, "accounts": accts})
+    appended("repeated freeze request")
+    check("freeze: a repeated request records nothing",
+          again["recorded"] == [] and len(again["skipped"]) == len(accts))
+    r = client.post("/api/scanner/emergency-freeze", json={"case_id": cid, "accounts": [V]})
+    check("freeze: an account the case's traces do not reach -> 422", r.status_code == 422,
+          f"HTTP {r.status_code}")
+    fa = call(client, "GET", "/api/scanner/frozen-accounts", "frozen")
+    check("frozen-accounts: the requested accounts, status REQUESTED, bank not notified",
+          sorted(a["account"] for a in fa) == accts
+          and all(a["status"] == "REQUESTED" and a["bank_notified"] is False for a in fa))
+    uf = call(client, "POST", "/api/scanner/unfreeze", "freeze",
+              json={"case_id": cid, "accounts": accts[:1], "note": "audit"})
+    appended("POST /scanner/unfreeze")
+    check("unfreeze: one WITHDRAWN row, the REQUESTED row stays",
+          [a["action"] for a in uf["recorded"]] == ["WITHDRAWN"]
+          and len(steps[-1]["freeze_actions"]) == len(accts) + 1)
+    fa = call(client, "GET", "/api/scanner/frozen-accounts", "frozen", params={"case_id": cid})
+    same("frozen-accounts after the withdrawal", sorted(a["account"] for a in fa), accts[1:])
+    uf = call(client, "POST", "/api/scanner/unfreeze", "freeze", json={"case_id": cid, "accounts": accts[:1]})
+    check("unfreeze: nothing to withdraw records nothing", uf["recorded"] == [] and len(uf["skipped"]) == 1)
+
+    # vault
+    va = call(client, "GET", "/api/vault/artifacts", "artifacts")
+    same("vault: one artifact per case_outputs row", va["count"], len(steps[-1]["case_outputs"]))
+    same("vault: dataset SHA-256", va["dataset_sha256"], dataset_sha)
+    check("vault: every artifact's sha256 is its stored document's",
+          all(hashlib.sha256(case_store.document_body(a["output_id"], scratch).encode("utf-8")).hexdigest()
+              == a["sha256"] for a in va["artifacts"]))
+    vf = call(client, "POST", "/api/vault/verify", "verify")
+    check("vault verify: clean store passes", vf["ok"] and not vf["problems"]
+          and vf["triggers"] == vf["triggers_expected"] and vf["documents"] == va["count"], str(vf))
+    for table in case_store.COLUMNS:
+        for sql in (f"UPDATE {table} SET row_hash = 'x'", f"DELETE FROM {table}"):
+            try:
+                raw_sql(scratch, sql)
+                check(f"{sql.split()[0]} on {table} refused", False)
+            except sqlite3.DatabaseError:
+                check(f"{sql.split()[0]} on {table} refused", True)
+    appended("after every request and refused UPDATE / DELETE")
+
+    # stored pages, read back exactly as stored
+    returned = {d["output_id"]: d["html"].encode("utf-8") for d in (*nt["notices"], dy, fr)}
+    ol = call(client, "GET", f"/api/cases/{cid}/outputs", "outputs")
+    same("outputs: every case_outputs row of the case, each with its stored page",
+         (ol["count"], all(o["stored"] for o in ol["outputs"])), (len(steps[-1]["case_outputs"]), True))
+    same("outputs: labels", sorted({(o["doc_type"], o["generator"]) for o in ol["outputs"]}),
+         sorted({("FREEZE_NOTICE", "TEMPLATE"), ("CASE_DIARY", "TEMPLATE"), ("FIR", "TEMPLATE")}
+                | ({("CASE_DIARY", "LLM+VALIDATED")} if ai_diary else set())))
+    exact = []
+    for o in ol["outputs"]:
+        r = client.get(f"/api/cases/{cid}/outputs/{o['output_id']}")
+        exact.append(r.status_code == 200 and r.headers["content-type"].startswith("text/html")
+                     and hashlib.sha256(r.content).hexdigest() == o["sha256"] == r.headers.get("x-content-sha256")
+                     and r.content == returned.get(o["output_id"], r.content))
+    check("output pages: byte for byte the page first returned, sha256 matches",
+          all(exact) and len(exact) >= len(returned), str(exact))
+    for name, path in (("unknown output", f"/api/cases/{cid}/outputs/999999"),
+                       ("unknown case", "/api/cases/CASE-999999/outputs"),
+                       ("unknown case (page)", "/api/cases/CASE-999999/outputs/1")):
+        r = client.get(path)
+        check(f"outputs {name} -> 404", r.status_code == 404, f"HTTP {r.status_code}")
+
+    # close: CLOSED is appended, then every write is refused
+    cp = f"/api/cases/{cid}/close"
+    for name, path, body, status in (("unknown case", "/api/cases/CASE-999999/close", {"officer": OFFICER}, 404),
+                                     ("no officer", cp, {"note": "x"}, 422),
+                                     ("blank officer", cp, {"officer": "  "}, 422)):
+        r = client.post(path, json=body)
+        check(f"close {name} -> {status}", r.status_code == status, f"HTTP {r.status_code}")
+    appended("refused closes wrote nothing")
+    same("refused closes wrote nothing (events)", len(steps[-1]["case_events"]), len(steps[-2]["case_events"]))
+    cl = call(client, "POST", cp, "case", json={"officer": OFFICER, "note": "audit close"})
+    appended("POST /cases/{id}/close")
+    same("close: CLOSED is the latest event and the status",
+         (cl["status"], cl["events"][-1]["event"], cl["events"][-1]["note"],
+          len(steps[-1]["case_events"]) - len(steps[-2]["case_events"])),
+         ("CLOSED", "CLOSED", "audit close", 1))
+    fir_body = {"case_id": cid, "victim": V, **entered}
+    writes = {
+        "notices": ("GET", f"/api/legal/notices/{V}", {"params": {"case_id": cid}}),
+        "diary": ("GET", f"/api/legal/case-diary/{V}", {"params": {"case_id": cid}}),
+        "diary summary": ("GET", sp, {"params": {"case_id": cid}}),
+        "FIR draft": ("POST", "/api/legal/fir", {"json": fir_body}),
+        "freeze": ("POST", "/api/scanner/emergency-freeze", {"json": {"case_id": cid, "accounts": accts[:1]}}),
+        "unfreeze": ("POST", "/api/scanner/unfreeze", {"json": {"case_id": cid, "accounts": accts[1:2]}}),
+        "second close": ("POST", cp, {"json": {"officer": OFFICER}}),
+    }
+    for name, (method, path, kwargs) in writes.items():
+        r = client.request(method, path, **kwargs)
+        check(f"after CLOSED: {name} -> 409", r.status_code == 409 and "closed" in r.json().get("detail", ""),
+              f"HTTP {r.status_code} {r.text[:120]}")
+    for name, fn in (("event", lambda: case_store.add_event(cid, "FIR_GENERATED", OFFICER, db=scratch)),
+                     ("document", lambda: case_store.add_document(
+                         cid, "FIR", "audit", "audit", True, "TEMPLATE", db=scratch))):
+        try:
+            fn()
+            check(f"after CLOSED: the case store itself refuses a new {name}", False)
+        except case_store.CaseClosedError:
+            check(f"after CLOSED: the case store itself refuses a new {name}", True)
+    check("after CLOSED: nothing was written", chain(scratch) == steps[-1])
+    for path, schema in ((f"/api/cases/{cid}", "case"), (f"/api/cases/{cid}/outputs", "outputs"),
+                         ("/api/scanner/frozen-accounts", "frozen"), ("/api/vault/artifacts", "artifacts")):
+        call(client, "GET", path, schema)
+    r = client.get(f"/api/cases/{cid}/outputs/{dy['output_id']}")
+    check("after CLOSED: stored pages can still be read",
+          r.status_code == 200 and r.content == returned[dy["output_id"]])
+    vf = call(client, "POST", "/api/vault/verify", "verify")
+    check("vault verify: passes with the closed case", vf["ok"], str(vf["problems"]))
+
+    # Tampering behind the triggers, each on its own copy; the triggers are put
+    # back (connect) so that the changed row is the only thing verify can find.
+    tampers = {
+        "a changed case_outputs row": ("case_outputs", "UPDATE case_outputs SET sha256 = '{}' WHERE seq = 1".format("0" * 64)),
+        "a changed stored document": ("output_bodies", "UPDATE output_bodies SET body = body || ' ' WHERE seq = 2"),
+        "a changed freeze action": ("freeze_actions", "UPDATE freeze_actions SET action = 'WITHDRAWN' WHERE seq = 2"),
+        "a changed case event": ("case_events", "UPDATE case_events SET officer = 'x' WHERE seq = 1"),
+        "a deleted case event": ("case_events", "DELETE FROM case_events WHERE seq = 2"),
+    }
+    try:
+        for i, (name, (table, sql)) in enumerate(tampers.items()):
+            copy = scratch.with_name(f"tamper{i}.db")
+            shutil.copyfile(scratch, copy)
+            raw_sql(copy, f"DROP TRIGGER {table}_no_update", f"DROP TRIGGER {table}_no_delete", sql)
+            case_store.connect(copy).close()
+            os.environ[CASES_ENV] = str(copy)
+            r = client.post("/api/vault/verify").json()
+            check(f"vault verify detects {name}", r["ok"] is False
+                  and any(table in p for p in r["problems"]), str(r["problems"])[:200])
+            if table == "output_bodies":       # body seq 2 is the page of case_outputs seq 2
+                vault_error = next(p for p in r["problems"] if "sha256" in p)
+                for path in (f"/api/cases/{cid}/outputs/2", f"/api/cases/{cid}/outputs"):
+                    t = client.get(path)
+                    check(f"tampered page: GET {path} -> 409 with the vault error",
+                          t.status_code == 409 and t.json().get("detail") == vault_error, t.text[:200])
+                t = client.get(f"/api/cases/{cid}/outputs/1")
+                check("tampered page: an untouched page of the same case is still served",
+                      t.status_code == 200 and t.content == returned[1])
+    finally:
+        os.environ[CASES_ENV] = str(scratch)
+    return {"case": cl, "notices": nt, "freeze": fz, "frozen": fa, "verify": vf,
+            "rows": {t: len(rows) for t, rows in steps[-1].items()}}
+
+
 def main() -> None:
     t0 = time.perf_counter()
+    shutil.rmtree(SCRATCH_DIR, ignore_errors=True)
+    SCRATCH_DIR.mkdir(parents=True)
+    scratch = SCRATCH_DIR / "cases.db"
+    os.environ[CASES_ENV] = str(scratch)
+    real_store = file_state(DEFAULT_CASES_DB) if DEFAULT_CASES_DB.is_file() else None
     db = db_path()
     before = file_state(db)
     counts_before = table_counts(db)
@@ -1029,6 +1465,12 @@ def main() -> None:
             r = client.post(jp, json=bad)
             check(f"jury {name} -> 422", r.status_code == 422, f"HTTP {r.status_code}")
 
+        # Step 8d: cases, legal documents, freeze register, vault (scratch case store)
+        t8 = time.perf_counter()
+        s8 = check_case_store_api(client, db, e, scratch, "--llm" in sys.argv)
+        t8 = time.perf_counter() - t8
+        samples["step 8d"] = {k: v for k, v in s8.items() if k in ("case", "frozen", "verify")}
+
         # errors and CORS
         r = client.get("/api/nope")
         check("404 clean JSON", r.status_code == 404 and r.json().get("status") == 404
@@ -1046,8 +1488,8 @@ def main() -> None:
         writes = sorted(f"{m_.upper()} {p_}" for p_, ops in app.openapi()["paths"].items()
                         for m_ in ops if m_ not in ("get", "head", "options"))
         check("routes are listed", len(app.openapi()["paths"]) >= len(SCHEMAS) - 3)
-        check("no write routes (POSTs are read-only, deferred 501 or dropped 410)",
-              writes == sorted(READ_ONLY_POSTS + DEFERRED_POSTS + REFUSED_POSTS),
+        check("POST routes: read-only, deferred 501, dropped 410, or case-store only",
+              writes == sorted(READ_ONLY_POSTS + DEFERRED_POSTS + REFUSED_POSTS + CASE_STORE_POSTS),
               ", ".join(writes))
 
     for where, bad in unnamed.items():
@@ -1062,6 +1504,10 @@ def main() -> None:
     check("database size unchanged", before[0] == after[0], f"{before[0]} -> {after[0]}")
     check("database modified time unchanged", before[1] == after[1], f"{before[1]} -> {after[1]}")
     check("no .wal file created", wal.exists() == wal_before)
+    check("data\\cases.db untouched (the run used the scratch case store)",
+          (file_state(DEFAULT_CASES_DB) if DEFAULT_CASES_DB.is_file() else None) == real_store
+          and scratch.parent == SCRATCH_DIR and ROOT not in scratch.parents)
+    shutil.rmtree(SCRATCH_DIR, ignore_errors=True)
 
     failed = [r for r in results if not r[1]]
     print(f"runtime {time.perf_counter() - t0:.2f} s   database {db.name} "
@@ -1069,6 +1515,9 @@ def main() -> None:
     print(f"checks {len(results)}   passed {len(results) - len(failed)}   failed {len(failed)}")
     print(f"counts: accounts {e['accounts']}, flagged {e['flagged']}, "
           f"roles {dict(sorted(e['roles'].items()))}, cells {e['cells']}")
+    print(f"step 8d: {t8:.2f} s on scratch case store; rows appended {s8['rows']}; "
+          f"notices {s8['notices']['count']}, freeze requests {len(s8['freeze']['recorded'])}, "
+          f"vault verify ok={s8['verify']['ok']}")
     print("timings ms (median / max, n): " + "; ".join(
         f"{k.replace('/api/', '')} {sorted(t)[len(t) // 2]:.0f} / {max(t):.0f} ({len(t)})"
         for k, t in timings.items()))

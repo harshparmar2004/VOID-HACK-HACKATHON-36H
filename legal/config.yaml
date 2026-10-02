@@ -11,8 +11,18 @@ legal_references:
   freezing: "Section 106 BNSS / Section 102 CrPC"
   # Authority the case diary is kept under (case diary heading).
   case_diary: "Case diary maintained under Section 192 BNSS (corresponding to Section 172 CrPC)"
+  # Provision an FIR is registered under (FIR draft heading).
+  fir: "First Information Report under Section 173 BNSS (corresponding to Section 154 CrPC)"
   confirmed_with_mentors: false
 
 # Printed on every document. A document is a draft until an officer signs it;
 # nothing here may say that a notice was sent.
 draft_label: "DRAFT — for officer review and signature"
+
+# Local model for the case-diary narrative. Loopback only: the code refuses
+# any host other than 127.0.0.1 / localhost. On any failure the diary is built
+# from the template alone (generator TEMPLATE_FALLBACK).
+llm:
+  url: "http://127.0.0.1:11434"
+  model: "qwen2.5:7b"
+  timeout_seconds: 60

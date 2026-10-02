@@ -34,8 +34,3 @@ def problematic_transactions(request: Request,
         con, profile.profile_id, limit=limit, filter_type=filter_type, link_type=link_type,
         min_amount=min_amount, bank_filter=bank_filter, keyword=keyword)
 
-
-# The freeze register is deferred (deferred.py); until it exists nothing is frozen.
-@router.get("/scanner/frozen-accounts", response_model=list)
-def frozen_accounts():
-    return []

@@ -656,3 +656,75 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - While `confirmed_with_mentors` is false each notice prints a line saying the legal references are unconfirmed; a low-confidence or truncated trace prints a review warning.
 - `jinja2` and `PyYAML` are installed in `.venv` but still not listed in `requirements.txt` (as logged in 7e for `duckdb` / `PyYAML`).
 - The `run.bat` server left running on port 8000 was stopped by the harness time limit; not restarted.
+
+## 2026-10-03 — Step 8c: case diary (tokenised LLM narrative, validator, fallback)
+
+**Step** — Sections 15 / 4.5: case diary HTML; narrative by local `qwen2.5:7b` over tokens, validated; template fallback.
+
+**Files** — new `legal\diary.py`, `legal\templates\case_diary.html.j2`, `legal\templates\_print_css.j2`, `audits\check_diary.py`; changed `legal\evidence.py` (adds `totals`, `accounts`, `transfers`), `legal\templates\freeze_notice.html.j2` (CSS now included), `legal\config.yaml` (`llm.url`, `llm.model`, `llm.timeout_seconds` = 60).
+
+**Key names** — `diary.tokenise`, `build_prompt`, `build_schema`, `ask_ollama`, `template_narrative`, `validate_narrative`, `substitute`, `validate_html`, `build_diary(evidence, use_llm)` -> `{html, generator, llm{status, seconds, problems}}`, `write_diary`; CLI `--no-llm`; file `case_diary_<case>.html`.
+
+**What was built**
+- Tables (total siphoned, layer-wise accounts with timestamps/amounts, freeze list) are always code-filled. Layers = roles read from `scores`, ordered by when money first reached each role; hop not used.
+- Model gets tokens + role labels only; schema enums = this case's tokens; one entry per transfer. `validate_narrative`: entry fields must equal that transfer's tokens, each transfer exactly once, sentence may use only its own tokens, no figure outside a token, no role the accounts do not have. Then substitute, render, `validate_html` on the visible text (accounts, IFSCs, tx_ids, timestamps, amounts, hashes, required sections/labels).
+- Fallback (Ollama down / timeout / bad JSON / either validation failing) uses template sentences through the same two validations. `llm.url` must be loopback. `data\cases.db` not written.
+
+**Results** (victim `SBIN10000294`, 11 transfers, 11 accounts)
+- Ollama running: `LLM+VALIDATED`, LLM 42.2 s cold / 32.3 s warm, narrative and page valid.
+- Ollama stopped: `TEMPLATE_FALLBACK`, connection refused after 2.0 s, page valid. Timeout forced to 2 s: `TEMPLATE_FALLBACK`, "timed out".
+- `check_diary.py`: 31 checks, 0 failed (43.9 s with Ollama, 13.3 s without). Tampered pages rejected 16/16 (wrong amount, unknown account, tx_id, timestamp, hash, token, label); tampered narratives 8/8; prompt holds no real value; template diary valid for 300/300 send-only accounts.
+- `check_notices.py` re-run after the CSS / evidence change: 1937 notices, 0 failures.
+
+**Deviations**
+- LLM time is close to the 60 s limit on this GPU (RTX 3050 6 GB): the largest trace has 14 transfers, so a cold start may time out and fall back.
+- Ollama (`ollama app.exe`, `ollama.exe`) was stopped for the fallback test and started again; it is running.
+- The model's sentences are near-identical to the template's because the rules leave it little freedom; its summary omits the word "account".
+---
+## 2026-10-03 — Step 8d: case events, FIR draft, first write endpoints (case store only)
+
+**Step** — Section 15 + API_CONTRACT rows for /cases, /legal/*, freeze, vault. The API now writes ONE file, `data\cases.db`, append-only; `data\case.duckdb` stays read-only.
+
+**Files** — new `legal\fir.py`, `legal\templates\fir.html.j2`, `api\routers\cases.py`, `api\routers\legal.py`, `api\services\cases.py`, `api\services\legal.py`, `api\schemas\cases.py`, `api\schemas\legal.py`; changed `engine\case_store.py`, `legal\notices.py`, `legal\diary.py`, `legal\evidence.py`, `legal\config.yaml` (`legal_references.fir`), `legal\templates\_print_css.j2`, `api\deps.py`, `api\main.py`, `api\routers\deferred.py`, `api\routers\scanner.py`, `audits\check_api.py`, `audits\check_case_store.py`, `API_CONTRACT.md`.
+
+**Key names** — case_store: tables `case_events`, `output_bodies`; `EVENTS`, `add_event`, `add_document` (row + HTML in one transaction), `list_cases`, `get_case`, `list_outputs`, `document_body`, `current_requests`; `verify` also re-hashes stored documents and reports a missing table. legal: `notices.validate_notice`, `page_problems`, shared patterns; `diary.evidence_problems`, `build_diary` returns `narrative`; `fir.fir_details`, `build_fir`, `validate_html`. api: `deps.cases_path` (`ABHEDYA_CASES_DB`).
+
+**What was built**
+- `case_events` (case_id, event, officer, note, created_at): same triggers and hash chain; `create_case` adds OPENED in the same transaction; status = latest event.
+- FIR draft: officer text (complainant, station, sections, offence summary) printed as typed inside `class="officer"` blocks only; amounts and Annexures A/B/C (traced accounts, transfers, freeze list) from the evidence object. Validator: officer blocks equal what was entered; outside them every account, IFSC, tx_id, timestamp, amount, hash must be the trace's. DRAFT label, fingerprint, dataset SHA-256 on the page.
+- Routes: POST/GET `/cases`, GET `/cases/{id}`; GET `/legal/notices/{victim}`, `/legal/case-diary/{victim}` (template at once), `/legal/case-diary/{victim}/summary` (local model; AI text returned and stored only if validated); POST `/legal/fir`; POST `/scanner/emergency-freeze`, `/scanner/unfreeze`, GET `/scanner/frozen-accounts` (REQUESTED / WITHDRAWN rows, `bank_notified: false`); GET `/vault/artifacts`, POST `/vault/verify`. A page that fails its validator is neither stored nor returned (500).
+- Still 501: `/upload`, profile writes, `/vault/certificate/{id}`.
+
+**Results**
+- `check_api.py` (scratch `%TEMP%\abhedya_check_api\cases.db`): 1401 checks, 0 failed, 34.2 s (Step 8d part 1.8 s). With `--llm`: 1407 checks, 0 failed, 68.7 s; live summary `LLM+VALIDATED` in 33.4 s, stored as diary v2.
+- Scratch rows appended: cases 1, case_events 4, case_outputs 9 (7 notices, diary, FIR), output_bodies 9, freeze_actions 12 (11 REQUESTED, 1 WITHDRAWN). Earlier rows unchanged after every request; UPDATE / DELETE refused on all 5 tables; vault verify fails on 5/5 tampered copies. `case.duckdb` size, mtime and row counts unchanged; `data\cases.db` untouched by the audit.
+- `check_case_store.py` 58 checks, 0 failed. `check_notices.py` 1937 notices, 0 failures. `check_diary.py` 31 checks, 0 failed. FIR draft valid for 300/300 send-only accounts (ad hoc run).
+
+**Deviations**
+- Document HTML is stored inside `cases.db` (`output_bodies`, not in Section 15) so the API writes that one file; `case_outputs.file_path` holds the page's file name, not a path on disk.
+- `data\cases.db` (0 rows) was migrated once by `engine\case_store.py`: it gained the two empty tables and 4 triggers.
+- The diary route labels its page `TEMPLATE_FALLBACK` (model not asked), as `build_diary(use_llm=False)` does. FIR legal reference (Section 173 BNSS / 154 CrPC) is a default to confirm with the mentors. No route closes a case (CLOSED exists only in `add_event`). Stored pages cannot yet be re-fetched by id. The UI is not wired to these routes.
+---
+## 2026-10-03 — Step 8d follow-up: generator labels, case close, stored pages read back
+
+**Step** — three follow-ups to Step 8d; the API still writes only `data\cases.db`.
+
+**Files** — changed `engine\case_store.py`, `legal\notices.py`, `legal\diary.py`, `legal\fir.py`, `api\schemas\cases.py`, `api\schemas\legal.py`, `api\services\cases.py`, `api\services\legal.py`, `api\routers\cases.py`, `audits\check_api.py`, `audits\check_case_store.py`, `audits\check_diary.py`, `API_CONTRACT.md`. No new file.
+
+**Key names** — case_store: `DOC_GENERATORS`, `CaseClosedError`, `DocumentMismatch`, `_need_open`, `case_documents`; notices: `label_problems`; api: `services.cases.open_case`, `close`, `outputs`, `output_page`; schemas `CaseClose`, `StoredOutput`, `CaseOutputs`; header `X-Content-SHA256`.
+
+**What was built**
+- Labels: `build_diary(use_llm=False)` -> `TEMPLATE`; `TEMPLATE_FALLBACK` only after the model was asked and its answer not used; `LLM+VALIDATED` when used. The three page validators now read the page's Generator cell and require it to equal the stored label exactly (before, `TEMPLATE` matched inside `TEMPLATE_FALLBACK`). The case store refuses a label the document type cannot carry (notice and FIR: `TEMPLATE` only).
+- POST `/cases/{id}/close` (officer, note) appends CLOSED. Every later write on the case answers 409: notices, diary, summary, FIR, freeze, unfreeze, second close. Refused twice: by the API before any work, and by the case store inside its own transaction. Reads still answer.
+- GET `/cases/{id}/outputs` (rows + `stored`) and GET `/cases/{id}/outputs/{output_id}` (the stored HTML byte for byte, `text/html`). Both re-hash the stored pages first; a mismatch answers 409 with the same message vault verify reports.
+
+**Results**
+- `check_api.py` (scratch store in `%TEMP%`): 1448 checks, 0 failed, 23.2 s. With `--llm`: 1454 checks, 0 failed, 58.7 s (live summary `LLM+VALIDATED`, 32.4 s).
+- Stored pages: 9/9 returned byte for byte with matching sha256; tampered copy -> 409 on the page and on the list, an untouched page of the same case still served. After CLOSED: 7/7 write routes 409, 0 rows written.
+- `check_case_store.py` 66 checks, 0 failed. `check_diary.py` 32 checks, 0 failed (A `LLM+VALIDATED` 41.1 s, B `TEMPLATE`). `check_notices.py` 1937 notices, 0 failures.
+- `case.duckdb` unchanged; `data\cases.db` untouched (0 rows, verify ok).
+
+**Deviations**
+- The outputs list returns rows, not page bodies; the page route returns raw HTML, not JSON.
+- A page added with `add_output` (no stored body) is listed with `stored: false` and its page route answers 404.
+- A closed case cannot be reopened (no such event). The UI is not wired to these routes.

@@ -1,7 +1,8 @@
 """Per-request dependencies: a read-only DuckDB connection and the active profile.
 
-The API never writes: every connection is opened with read_only=True and is
-closed in a finally block when the request ends.
+The API never writes data\\case.duckdb: every connection is opened with
+read_only=True and is closed in a finally block when the request ends. The one
+file the API writes is the case store, data\\cases.db (engine\\case_store.py).
 """
 from __future__ import annotations
 
@@ -18,11 +19,17 @@ from api.repositories import profiles as profiles_repo
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "data" / "case.duckdb"
+DEFAULT_CASES_DB = ROOT / "data" / "cases.db"
 
 
 def db_path() -> Path:
     """The case database; ABHEDYA_DB overrides it (used by tests on a copy)."""
     return Path(os.environ.get("ABHEDYA_DB") or DEFAULT_DB)
+
+
+def cases_path() -> Path:
+    """The case store; ABHEDYA_CASES_DB overrides it (audits use a scratch file)."""
+    return Path(os.environ.get("ABHEDYA_CASES_DB") or DEFAULT_CASES_DB)
 
 
 @dataclass(frozen=True)

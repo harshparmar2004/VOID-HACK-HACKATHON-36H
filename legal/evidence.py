@@ -8,7 +8,9 @@ One trace_victim() call, plus three look-ups the trace does not carry: each
 account's IFSC (accounts), the bank's name and Nodal Officer block
 (bank_directory) and the SHA-256 of the loaded dataset (ingest_meta). Nothing
 is computed here except the per-bank sum of holdings; every account, amount,
-tx_id and timestamp is the trace's own. Templates read this object and nothing
+tx_id and timestamp is the trace's own. Roles are the ones the trace read from
+`scores`. The trace carries no narration text, so none can reach a document or
+a prompt. Templates read this object and nothing
 else, so a document can only show what the trace found.
 
 Amounts are integer paise. The engine database is opened read-only.
@@ -47,7 +49,7 @@ class EvidenceError(Exception):
 def load_legal_config(path: Path = CONFIG_PATH) -> dict:
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     refs = cfg.get("legal_references") or {}
-    missing = [k for k in ("production_of_records", "freezing", "case_diary") if not refs.get(k)]
+    missing = [k for k in ("production_of_records", "freezing", "case_diary", "fir") if not refs.get(k)]
     if missing or not cfg.get("draft_label"):
         raise EvidenceError(f"{path.name}: missing {missing or ['draft_label']}")
     return cfg
@@ -86,7 +88,7 @@ def build_evidence(victim_acct: str, case_id: str, fir_number: str | None = None
 
     candidates = trace["freeze_candidates"]
     banks = sorted({c["bank"] for c in candidates})
-    acct_nos = [trace["victim"]["acct_no"], *(c["acct_no"] for c in candidates)]
+    acct_nos = [trace["victim"]["acct_no"], *(a["acct_no"] for a in trace["accounts"])]
     ifsc, directory, dataset = _lookups(db, acct_nos, banks)
     unrouted = [b for b in banks if b not in directory
                 or not directory[b]["nodal_officer_title"] or not directory[b]["address_block"]]
@@ -108,6 +110,8 @@ def build_evidence(victim_acct: str, case_id: str, fir_number: str | None = None
 
     freeze = [candidate(c) for c in candidates]
     summary = trace["summary"]
+    role = {a["acct_no"]: a["role"] for a in [trace["victim"], *trace["accounts"]]}
+    rec = summary["reconciliation"]
     return {
         "case_id": str(case_id).strip(),
         "fir_number": fir_number,
@@ -122,6 +126,25 @@ def build_evidence(victim_acct: str, case_id: str, fir_number: str | None = None
         "trace": {"first_ts": summary["first_ts"], "last_ts": summary["last_ts"],
                   "low_confidence": summary["low_confidence"], "truncated": summary["truncated"],
                   "freeze_holding_total_paise": sum(c["holding_paise"] for c in freeze)},
+        "totals": {"paid_paise": summary["tainted_total"],
+                   "commissions_kept_paise": rec["commissions_kept"],
+                   "holding_at_end_paise": rec["holding_at_end"],
+                   "untraced_paise": rec["untraced"],
+                   "holding_total_paise": summary["holding_total"],
+                   "freeze_holding_total_paise": sum(c["holding_paise"] for c in freeze)},
+        # Every account the trace reached (the victim is not among them).
+        "accounts": [{"acct_no": a["acct_no"], "ifsc": ifsc[a["acct_no"]], "bank": a["bank"],
+                      "role": a["role"], "freeze_recommended": bool(a["freeze_recommended"]),
+                      "tainted_in_paise": a["tainted_in"], "tainted_out_paise": a["tainted_out"],
+                      "untraced_out_paise": a["untraced_out"], "holding_paise": a["holding"]}
+                     for a in trace["accounts"]],
+        # Every transfer the trace followed, oldest first.
+        "transfers": sorted(
+            ({"tx_id": t["tx_id"], "tx_key": t["tx_key"], "ts": t["ts"],
+              "from": t["from"], "to": t["to"], "from_role": role[t["from"]], "to_role": role[t["to"]],
+              "amount_paise": t["amount"], "tainted_paise": int(round(t["tainted"])),
+              "proven_link": t["via"] == "layer_link"} for t in trace["transfers"]),
+            key=lambda t: (t["ts"], t["tx_id"])),
         "freeze_candidates": freeze,
         # One entry per bank in the freeze list, in bank_prefix order.
         "banks": [{**directory[b],

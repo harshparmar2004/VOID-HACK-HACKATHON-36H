@@ -13,12 +13,6 @@ NOT_YET = "not yet available"
 
 DEFERRED = [                                   # 501
     ("POST", "/upload"),
-    ("POST", "/scanner/emergency-freeze"),
-    ("POST", "/scanner/unfreeze"),
-    ("GET", "/legal/notices/{victim}"),
-    ("GET", "/legal/case-diary/{victim}"),
-    ("GET", "/vault/artifacts"),
-    ("POST", "/vault/verify"),
     ("GET", "/vault/certificate/{artifact_id}"),
 ]
 
