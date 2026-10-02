@@ -63,11 +63,14 @@ function TraceGate({ trace, onRetry, children }) {
   if (!trace.victim) {
     return <EmptyState title="No victim selected" hint="Pick a victim account in the header to trace its money trail." />;
   }
-  if (trace.notFound || !trace.data?.nodes?.length) {
+  if (trace.notFound) {
+    return <EmptyState title="No transaction graph found" hint={`The engine has no transaction graph for account ${trace.victim}.`} />;
+  }
+  if (!trace.data?.nodes?.length) {
     return (
       <EmptyState
         title={`No money trail for ${trace.victim}`}
-        hint="The engine found no transaction graph for this account with the current display filters."
+        hint="The current display filters leave no accounts of this trace to show."
       />
     );
   }
@@ -100,8 +103,10 @@ export default function App() {
     try {
       const { data, serverMs } = await traceVictim(id, params);
       if (requestNo !== traceRequest.current) return;
-      const found = data?.found !== false && Array.isArray(data?.nodes) && data.nodes.length > 0;
-      setTrace({ ...EMPTY_TRACE, victim: id, data: found ? data : null, notFound: !found, serverMs });
+      // found=false is the API's answer for an account it has no graph for.
+      const notFound = data?.found === false;
+      const hasNodes = !notFound && Array.isArray(data?.nodes) && data.nodes.length > 0;
+      setTrace({ ...EMPTY_TRACE, victim: id, data: hasNodes ? data : null, notFound, serverMs });
     } catch (err) {
       if (requestNo !== traceRequest.current) return;
       setTrace({ ...EMPTY_TRACE, victim: id, error: err.message });
@@ -261,7 +266,7 @@ export default function App() {
           <div className={show("graph")}>
             <ErrorBoundary name="Mule Network Graph">
               <TraceGate trace={trace} onRetry={retryTrace}>
-                {(data) => <NetworkGraphView key={trace.victim} traceData={data} serverMs={trace.serverMs} />}
+                {(data) => <NetworkGraphView key={trace.victim} traceData={data} serverMs={trace.serverMs} isActive={activeTab === "graph"} />}
               </TraceGate>
             </ErrorBoundary>
           </div>

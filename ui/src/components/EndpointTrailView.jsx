@@ -1,42 +1,26 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
-import {
-  Search,
-  ArrowRight,
-  ShieldAlert,
-  CheckCircle,
-  ExternalLink,
-  Zap,
-  Lock,
-  DollarSign,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  RotateCcw,
-  Move,
-  Layers,
-  Eye,
-  Sliders,
-  Share2,
-  AlertTriangle,
-  Info,
-  X,
-  Copy,
-  Check
-} from "lucide-react";
-import { inr } from "../format";
+import React, { useState, useEffect, useRef } from "react";
+import { Search, Zap, Lock, ZoomIn, ZoomOut, Maximize2, Share2, Copy, Check } from "lucide-react";
+import { DASH, inr, num, text } from "../format";
 import { EmptyState, ErrorState, LoadingState } from "./States";
+import {
+  DENSE_FROM,
+  EvidencePanels,
+  LinkCard,
+  NodePanel,
+  ROLE_KEYS,
+  RoleLegend,
+  TrimBadge,
+  hopsShown,
+  riskOf,
+  roleKey,
+  roleTheme
+} from "./TraceEvidence";
 
 const EMPTY_TRACE = { nodes: [], links: [] };
 const WIDE_LANE_FROM = 4; // a lane with more accounts than this may use two columns
-
-// Lane colours by hop (display only). Roles shown on the cards come from the engine.
-const HOP_THEMES = [
-  { color: "#10B981", soft: "#E6F7F0", border: "#A7F3D0", text: "#059669" },
-  { color: "#EA580C", soft: "#FFF7ED", border: "#FFEDD5", text: "#EA580C" },
-  { color: "#D97706", soft: "#FEF3C7", border: "#FDE68A", text: "#D97706" },
-  { color: "#7C3AED", soft: "#EDE9FE", border: "#DDD6FE", text: "#7C3AED" },
-  { color: "#DC2626", soft: "#FEF2F2", border: "#FECACA", text: "#DC2626" }
-];
+const DENSE_LANE_ROWS = 24; // accounts per column in a lane of a large trace
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 2.0;
 
 export default function EndpointTrailView({
   victimAccount,
@@ -55,6 +39,8 @@ export default function EndpointTrailView({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
+  const [hoveredLink, setHoveredLink] = useState(null);
+  const [selectedLink, setSelectedLink] = useState(null);
   const [showEdgeAmounts, setShowEdgeAmounts] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
   const [hop2Layout, setHop2Layout] = useState("grid"); // 'grid' (2-cols) or 'stack' (1-col)
@@ -62,6 +48,7 @@ export default function EndpointTrailView({
 
   const viewportRef = useRef(null);
   const canvasRef = useRef(null);
+  const lanesRef = useRef(null);
   const nodeRefs = useRef({});
   const [renderedLinks, setRenderedLinks] = useState([]);
 
@@ -70,6 +57,14 @@ export default function EndpointTrailView({
       setInputAcct(victimAccount);
     }
   }, [victimAccount]);
+
+  // A new trace starts with nothing selected.
+  useEffect(() => {
+    setSelectedNode(null);
+    setSelectedLink(null);
+    setHoveredLink(null);
+    nodeRefs.current = {};
+  }, [traceData]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -88,7 +83,7 @@ export default function EndpointTrailView({
   const hasTrace = Boolean(traceData && Array.isArray(traceData.nodes) && traceData.nodes.length > 0);
   const effectiveTrace = hasTrace ? traceData : EMPTY_TRACE;
 
-  // Group nodes by hop level (0: Victim, 1: L1 Collector, 2: L2 Distributors, 3: L3 Cashout, 4: L4 Terminal)
+  // Lanes: one per hop, left to right. Hop decides position only; colour comes from the role.
   const hopGroups = React.useMemo(() => {
     // One group per hop the trace actually returned: no fixed number of columns.
     const groups = {};
@@ -104,10 +99,16 @@ export default function EndpointTrailView({
   const effectiveLinks = effectiveTrace.links || [];
   const hopNumbers = Object.keys(hopGroups).map(Number).filter((h) => hopGroups[h].length > 0).sort((a, b) => a - b);
   const lastHop = hopNumbers.length ? hopNumbers[hopNumbers.length - 1] : 0;
-  // full_hops = hops in the whole trace; fewer are shown when the display filter trims it.
   const fullHops = traceData?.full_hops ?? null;
-  const trimmed = Boolean(traceData?.display_trimmed) && fullHops != null && fullHops > lastHop;
   const spanSeconds = traceData?.summary?.seconds_first_to_last;
+  const dense = effectiveTrace.nodes.length > DENSE_FROM;
+  const roleOf = React.useMemo(() => {
+    const map = {};
+    effectiveTrace.nodes.forEach((n) => {
+      map[n.id] = n.role;
+    });
+    return map;
+  }, [effectiveTrace]);
 
   // Orthogonal Horizontal Pipeline Path with rounded elbow fillets
   const makePipelinePath = (x1, y1, x2, y2) => {
@@ -197,7 +198,7 @@ export default function EndpointTrailView({
   // Pan interaction handlers with physical button check (fixes mouse sticking bug)
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".interactive-node-card")) {
+    if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".interactive-node-card") || e.target.closest(".trace-link")) {
       return;
     }
     setIsDragging(true);
@@ -227,11 +228,11 @@ export default function EndpointTrailView({
 
   // Zoom controls
   const handleZoomIn = () => {
-    setZoom((z) => Math.min(2.0, Number((z + 0.15).toFixed(2))));
+    setZoom((z) => Math.min(MAX_ZOOM, Number((z + 0.15).toFixed(2))));
   };
 
   const handleZoomOut = () => {
-    setZoom((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))));
+    setZoom((z) => Math.max(MIN_ZOOM, Number((z - 0.15).toFixed(2))));
   };
 
   const handleResetZoom = () => {
@@ -240,60 +241,68 @@ export default function EndpointTrailView({
   };
 
   const handleFitView = () => {
-    if (viewportRef.current && canvasRef.current) {
+    if (viewportRef.current && lanesRef.current) {
       const vWidth = viewportRef.current.clientWidth - 40;
-      const cWidth = 1450; // estimated layout total width
-      const autoZoom = Math.min(1.0, Math.max(0.45, Number((vWidth / cWidth).toFixed(2))));
+      const cWidth = lanesRef.current.offsetWidth + 80; // lanes plus canvas padding, before zoom
+      const autoZoom = Math.min(1.0, Math.max(MIN_ZOOM, Number((vWidth / cWidth).toFixed(2))));
       setZoom(autoZoom);
       setPan({ x: 10, y: 15 });
     }
   };
 
+  // A new trace opens fitted to the canvas (once the tab is visible, so the canvas has a size).
+  const fittedFor = useRef(null);
+  useEffect(() => {
+    if (!isActive || !hasTrace || fittedFor.current === traceData) return;
+    fittedFor.current = traceData;
+    handleFitView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, hasTrace, traceData]);
+
   // Wheel zoom handler
   const handleWheel = (e) => {
-    if (e.ctrlKey || e.metaKey || true) {
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.08 : -0.08;
-      setZoom((z) => Math.min(2.0, Math.max(0.4, Number((z + delta).toFixed(2)))));
-    }
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.08 : -0.08;
+    setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((z + delta).toFixed(2)))));
   };
 
-  // Path highlight determination
-  const isLinkActive = (l) => {
-    if (!hoveredNodeId && !selectedNode) return true;
-    const activeId = hoveredNodeId || selectedNode?.id;
-    return l.source === activeId || l.target === activeId;
-  };
-
-  const isNodeActive = (nodeId) => {
-    if (!hoveredNodeId && !selectedNode) return true;
-    const activeId = hoveredNodeId || selectedNode?.id;
-    if (nodeId === activeId) return true;
-    // Check if directly connected
-    return effectiveLinks.some(
-      (l) => (l.source === activeId && l.target === nodeId) || (l.target === activeId && l.source === nodeId)
-    );
-  };
+  // Highlight: the hovered or pinned transfer, else the transfers of the active account.
+  const activeId = hoveredNodeId || selectedNode?.id || null;
+  const activeSet = React.useMemo(() => {
+    if (!activeId) return null;
+    const set = new Set([activeId]);
+    effectiveLinks.forEach((l) => {
+      if (l.source === activeId) set.add(l.target);
+      if (l.target === activeId) set.add(l.source);
+    });
+    return set;
+  }, [activeId, effectiveLinks]);
+  const sameLink = (a, b) => Boolean(a && b) && (a.tx_key != null ? a.tx_key === b.tx_key : a === b);
+  const shownLink = hoveredLink || selectedLink;
+  const touchesActive = (l) => !activeId || l.source === activeId || l.target === activeId;
+  const isLinkActive = (l) => (shownLink ? sameLink(l, shownLink) : touchesActive(l));
+  const isNodeActive = (nodeId) => !activeSet || activeSet.has(nodeId);
 
   return (
     <div className="space-y-4 select-none">
       {/* 1. Top Banner / Header & Trace Form */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E8E2D5] pb-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="w-2 h-2 rounded-xs bg-[#D96B27]"></span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
               MULTI-HOP MONEY TRAIL
             </span>
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-xs bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-mono">
-              {hasTrace ? `HOP 0 → HOP ${lastHop}${trimmed ? ` OF ${fullHops}` : ""}` : "NO TRACE"}
+              {hasTrace ? `${text(fullHops)} HOPS • LAYERED BY HOP • COLOUR BY ROLE` : "NO TRACE"}
             </span>
+            {hasTrace && <TrimBadge traceData={traceData} />}
           </div>
           <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#2C2623] mt-0.5 tracking-tight">
             Endpoint Multi-Hop Money Trail &amp; Flow Graph
           </h2>
           <p className="text-xs text-[#746D65] mt-0.5 max-w-3xl font-sans">
-            Zoomable canvas showing how the selected victim's money moved from account to account.
+            How the selected victim's money moved from account to account. Click an account for its details; hover or click a transfer for its details.
           </p>
         </div>
 
@@ -334,11 +343,15 @@ export default function EndpointTrailView({
           <ErrorState title="The trace could not be loaded" message={trace.error} onRetry={onRetry} />
         ) : (
           <EmptyState
-            title={victimAccount ? `No money trail for ${victimAccount}` : "No victim selected"}
+            title={
+              !victimAccount ? "No victim selected" : trace?.notFound ? "No transaction graph found" : `No money trail for ${victimAccount}`
+            }
             hint={
-              victimAccount
-                ? "The engine found no transaction graph for this account with the current display filters."
-                : "Enter a victim account above, or pick one in the header."
+              !victimAccount
+                ? "Enter a victim account above, or pick one in the header."
+                : trace?.notFound
+                ? `The engine has no transaction graph for account ${victimAccount}.`
+                : "The current display filters leave no accounts of this trace to show."
             }
           />
         )
@@ -353,11 +366,11 @@ export default function EndpointTrailView({
               TRACE TIME (SERVER)
             </span>
             <div className="text-lg sm:text-xl font-bold font-mono text-[#059669] tracking-tight my-0.5 whitespace-nowrap">
-              {trace?.serverMs == null ? "—" : `${trace.serverMs} ms`}
+              {trace?.serverMs == null ? DASH : `${trace.serverMs} ms`}
             </div>
             <p className="text-[11px] text-[#059669] font-medium whitespace-nowrap font-sans">
-              {fullHops ?? "—"} hops{trimmed ? `, ${lastHop} shown` : ""} •{" "}
-              {spanSeconds == null ? "—" : `${(spanSeconds / 60).toFixed(1)} min`} first to last transfer
+              {text(fullHops)} hops{traceData.display_trimmed ? `, ${hopsShown(effectiveTrace.nodes)} shown` : ""} •{" "}
+              {spanSeconds == null ? DASH : `${(spanSeconds / 60).toFixed(1)} min`} first to last transfer
             </p>
           </div>
 
@@ -367,7 +380,7 @@ export default function EndpointTrailView({
               TOTAL SIPHONED
             </span>
             <div className="text-lg sm:text-xl font-bold font-mono text-[#DC2626] tracking-tight my-0.5 whitespace-nowrap">
-              ₹{traceData.total_siphoned_inr ? traceData.total_siphoned_inr.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "0.00"}
+              {inr(traceData.total_siphoned_inr)}
             </div>
             <p className="text-[11px] text-[#DC2626] font-medium whitespace-nowrap font-sans">
               Victim outbound drain
@@ -380,7 +393,7 @@ export default function EndpointTrailView({
               TRAPPED LIEN HOLDING
             </span>
             <div className="text-lg sm:text-xl font-bold font-mono text-[#059669] tracking-tight my-0.5 whitespace-nowrap">
-              ₹{traceData.recoverable_holding_inr ? traceData.recoverable_holding_inr.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "0.00"}
+              {inr(traceData.recoverable_holding_inr)}
             </div>
             <p className="text-[11px] text-[#059669] font-medium whitespace-nowrap font-sans">
               Actionable for Sec 91 freeze
@@ -393,7 +406,7 @@ export default function EndpointTrailView({
               CORRELATED NETWORK
             </span>
             <div className="text-lg sm:text-xl font-bold font-mono text-[#2C2623] tracking-tight my-0.5 whitespace-nowrap">
-              {effectiveTrace.nodes.length} Nodes • {effectiveLinks.length} Links
+              {num(effectiveTrace.nodes.length)} Nodes • {num(effectiveLinks.length)} Links
             </div>
             <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
               Intake to exit endpoints
@@ -411,7 +424,7 @@ export default function EndpointTrailView({
                 className="w-full px-3 py-1.5 rounded-sm bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-mono font-bold shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>{traceData.freeze_candidates?.length ?? 0} freeze candidates</span>
+                <span>{Array.isArray(traceData.freeze_candidates) ? num(traceData.freeze_candidates.length) : DASH} freeze candidates</span>
               </button>
             </div>
             <p className="text-[10px] text-[#9E968D] font-mono whitespace-nowrap">
@@ -423,7 +436,7 @@ export default function EndpointTrailView({
 
       {/* 4. Interactive Graph Canvas Toolbar */}
       <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono font-bold text-[#746D65] flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
             <Share2 className="w-3.5 h-3.5 text-[#D96B27]" />
             Graph Canvas Controls:
@@ -431,6 +444,7 @@ export default function EndpointTrailView({
           <span className="text-[11px] text-[#9E968D] hidden sm:inline font-sans">
             Drag canvas to pan • Scroll or buttons to zoom
           </span>
+          <RoleLegend nodes={effectiveTrace.nodes} />
         </div>
 
         <div className="flex items-center gap-2">
@@ -515,6 +529,8 @@ export default function EndpointTrailView({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+      <div className="space-y-4 min-w-0">
       {/* MAIN GRAPH CANVAS VIEWPORT */}
       <div
         ref={viewportRef}
@@ -553,124 +569,73 @@ export default function EndpointTrailView({
             style={{ minWidth: "2200px", minHeight: "1200px", overflow: "visible" }}
           >
             <defs>
-              {/* Hop 0 -> Hop 1 Gradient */}
-              <linearGradient id="grad-hop1" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#10B981" />
-                <stop offset="100%" stopColor="#EA580C" />
-              </linearGradient>
-
-              {/* Hop 1 -> Hop 2 Gradient */}
-              <linearGradient id="grad-hop2" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#EA580C" />
-                <stop offset="100%" stopColor="#D97706" />
-              </linearGradient>
-
-              {/* Hop 2 -> Hop 3 Gradient */}
-              <linearGradient id="grad-hop3" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#D97706" />
-                <stop offset="100%" stopColor="#7C3AED" />
-              </linearGradient>
-
-              {/* Hop 3 -> Hop 4 Gradient */}
-              <linearGradient id="grad-hop4" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#7C3AED" />
-                <stop offset="100%" stopColor="#DC2626" />
-              </linearGradient>
-
-              {/* Markers / Arrowheads */}
-              <marker id="marker-hop1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EA580C" />
-              </marker>
-
-              <marker id="marker-hop2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#D97706" />
-              </marker>
-
-              <marker id="marker-hop3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7C3AED" />
-              </marker>
-
-              <marker id="marker-hop4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#DC2626" />
-              </marker>
+              {ROLE_KEYS.map((key) => (
+                <marker key={key} id={`marker-${key}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill={roleTheme(key).color} />
+                </marker>
+              ))}
             </defs>
 
-            {/* Dynamic Rendered SVG Pipeline Connectors */}
+            {/* Transfers: coloured by the role of the receiving account */}
             {renderedLinks.map((l, i) => {
+              const picked = sameLink(l, shownLink);
               const active = isLinkActive(l);
-              const hopGrad = l.hop === 1 ? "url(#grad-hop1)" : l.hop === 2 ? "url(#grad-hop2)" : l.hop === 3 ? "url(#grad-hop3)" : "url(#grad-hop4)";
-              const marker = l.hop === 1 ? "url(#marker-hop1)" : l.hop === 2 ? "url(#marker-hop2)" : l.hop === 3 ? "url(#marker-hop3)" : "url(#marker-hop4)";
-              const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : l.hop === 3 ? "#7C3AED" : "#DC2626";
+              const targetRole = roleOf[l.target];
+              const strokeColor = roleTheme(targetRole).color;
+              const showLabel = showEdgeAmounts && (!dense || picked || (activeId && touchesActive(l)));
+              const linkEvents = {
+                onMouseEnter: () => setHoveredLink(l),
+                onMouseLeave: () => setHoveredLink(null),
+                onClick: () => setSelectedLink(l)
+              };
 
               return (
                 <g key={l.tx_key ?? i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.18}>
-                  {/* Outer Pipe Glow Casing */}
-                  <path
-                    d={l.pathD}
-                    fill="none"
-                    stroke={strokeColor}
-                    strokeWidth={active ? 8 : 5}
-                    strokeOpacity={active ? 0.22 : 0.12}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-                  {/* Core Solid Pipe Conduit */}
-                  <path
-                    d={l.pathD}
-                    fill="none"
-                    stroke={strokeColor}
-                    strokeWidth={active ? 3 : 2}
-                    markerEnd={marker}
-                    strokeOpacity={active ? 1.0 : 0.85}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-                  {/* Animated Directional Fluid Pulse Dash */}
-                  <path
-                    d={l.pathD}
-                    fill="none"
-                    stroke="#FFFFFF"
-                    strokeWidth={2}
-                    strokeDasharray="8,14"
-                    strokeOpacity={0.9}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <animate
-                      attributeName="stroke-dashoffset"
-                      from="44"
-                      to="0"
-                      dur="1.2s"
-                      repeatCount="indefinite"
+                  {!dense && (
+                    <path
+                      d={l.pathD}
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth={active ? 8 : 5}
+                      strokeOpacity={active ? 0.22 : 0.12}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     />
-                  </path>
+                  )}
 
-                  {/* Amount Pill over the pipe midpoint */}
-                  {showEdgeAmounts && (
-                    <g transform={`translate(${l.midX}, ${l.midY})`}>
-                      <rect
-                        x="-48"
-                        y="-10"
-                        width="96"
-                        height="20"
-                        rx="6"
-                        fill="#FFFFFF"
-                        stroke={strokeColor}
-                        strokeWidth="1.2"
-                        className="shadow-xs"
-                      />
-                      <text
-                        x="0"
-                        y="3.5"
-                        textAnchor="middle"
-                        fontSize="9"
-                        fontWeight="bold"
-                        fill="#2C2623"
-                        fontFamily="monospace"
-                      >
-                        ₹{l.amount ? Number(l.amount).toLocaleString("en-IN") : "0"}
+                  <path
+                    d={l.pathD}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth={picked ? 4 : dense ? 1.5 : 2.5}
+                    markerEnd={`url(#marker-${roleKey(targetRole)})`}
+                    strokeOpacity={dense && !picked ? 0.7 : 1.0}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+
+                  {!dense && (
+                    <path d={l.pathD} fill="none" stroke="#FFFFFF" strokeWidth={2} strokeDasharray="8,14" strokeOpacity={0.9} strokeLinecap="round" strokeLinejoin="round">
+                      <animate attributeName="stroke-dashoffset" from="44" to="0" dur="1.2s" repeatCount="indefinite" />
+                    </path>
+                  )}
+
+                  {/* Wide invisible stroke: hover or click the transfer for its details */}
+                  <path
+                    d={l.pathD}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth={14}
+                    pointerEvents="stroke"
+                    className="trace-link cursor-pointer"
+                    {...linkEvents}
+                  />
+
+                  {showLabel && (
+                    <g transform={`translate(${l.midX}, ${l.midY})`} className="trace-link pointer-events-auto cursor-pointer" {...linkEvents}>
+                      <rect x="-48" y="-10" width="96" height="20" rx="6" fill="#FFFFFF" stroke={strokeColor} strokeWidth={picked ? "2" : "1.2"} />
+                      <text x="0" y="3.5" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#2C2623" fontFamily="monospace">
+                        {inr(l.amount)}
                       </text>
                     </g>
                   )}
@@ -679,52 +644,80 @@ export default function EndpointTrailView({
             })}
           </svg>
 
-          {/* HOP LANES: one column per hop found in the trace. Labels are the engine's roles. */}
-          <div className="flex items-start gap-20 relative z-10">
+          {/* HOP LANES: one column per hop found in the trace. Cards are coloured by the engine's role. */}
+          <div ref={lanesRef} className="inline-flex items-start gap-20 relative z-10 pointer-events-none">
             {hopNumbers.map((h) => {
-              const theme = HOP_THEMES[Math.min(h, HOP_THEMES.length - 1)];
               const lane = hopGroups[h] || [];
-              const wide = lane.length > WIDE_LANE_FROM && hop2Layout === "grid";
+              const cols =
+                hop2Layout !== "grid" ? 1 : dense ? Math.ceil(lane.length / DENSE_LANE_ROWS) : lane.length > WIDE_LANE_FROM ? 2 : 1;
+              const laneWidth = dense ? cols * 200 + (cols - 1) * 12 : cols > 1 ? 420 : 320;
               const roles = [...new Set(lane.map((n) => n.role || "no role"))].join(" / ");
 
               return (
-                <div key={h} className={`${wide ? "w-[420px]" : "w-80"} flex-shrink-0 space-y-4`}>
-                  <div
-                    style={{ backgroundColor: theme.soft, borderColor: theme.border }}
-                    className="border rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs"
-                  >
-                    <span style={{ color: theme.text }} className="text-xs font-bold uppercase font-mono tracking-wider">
+                <div key={h} style={{ width: `${laneWidth}px` }} className="flex-shrink-0 space-y-4 pointer-events-auto">
+                  <div className="border border-[#E8E2D5] bg-[#FAF6EE] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
+                    <span className="text-xs font-bold uppercase font-mono tracking-wider text-[#746D65] truncate">
                       HOP {h} • {roles}
                     </span>
-                    <span
-                      style={{ color: theme.text, borderColor: theme.border }}
-                      className="text-[10px] px-2 py-0.5 rounded bg-white font-bold border font-mono"
-                    >
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-white font-bold border border-[#E8E2D5] font-mono text-[#746D65]">
                       {lane.length}
                     </span>
                   </div>
 
-                  <div className={wide ? "grid grid-cols-2 gap-3" : "space-y-3"}>
+                  <div
+                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                    className={`grid ${dense ? "gap-x-3 gap-y-2" : "gap-3"}`}
+                  >
                     {lane.map((node) => {
                       const active = isNodeActive(node.id);
                       const isSelected = selectedNode?.id === node.id;
-                      const isVictim = h === 0;
+                      const isVictim = node.role === "VICTIM";
+                      const theme = roleTheme(node.role);
+                      const risk = riskOf(node).value;
+                      const badge = `${node.role || DASH} • ${risk == null ? DASH : Math.round(risk)}`;
+                      const cardEvents = {
+                        ref: (el) => {
+                          if (el) nodeRefs.current[node.id] = el;
+                        },
+                        onMouseEnter: () => setHoveredNodeId(node.id),
+                        onMouseLeave: () => setHoveredNodeId(null),
+                        onClick: () => setSelectedNode(node)
+                      };
+
+                      if (dense) {
+                        return (
+                          <div
+                            key={node.id}
+                            {...cardEvents}
+                            title={`${node.id} • ${badge}`}
+                            style={{ borderColor: theme.color }}
+                            className={`interactive-node-card bg-white border-2 rounded-lg px-2 py-1 shadow-sm cursor-pointer ${
+                              isSelected ? "ring-3 ring-[#D96B27]/40" : active ? "" : "opacity-40 hover:opacity-100"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className="font-mono text-[10px] font-bold text-[#2C2623] truncate">{node.id}</span>
+                              <span style={{ backgroundColor: theme.soft, color: theme.text }} className="text-[9px] px-1.5 rounded font-bold font-mono whitespace-nowrap">
+                                {badge}
+                              </span>
+                            </div>
+                            <div className="text-[9px] font-mono font-bold text-[#059669] truncate">
+                              {isVictim ? `Paid: ${inr(traceData?.total_siphoned_inr, 0)}` : `Holding: ${inr(node.holding_amount, 0)}`}
+                            </div>
+                          </div>
+                        );
+                      }
 
                       return (
                         <div
                           key={node.id}
-                          ref={(el) => {
-                            if (el) nodeRefs.current[node.id] = el;
-                          }}
-                          onMouseEnter={() => setHoveredNodeId(node.id)}
-                          onMouseLeave={() => setHoveredNodeId(null)}
-                          onClick={() => setSelectedNode(node)}
-                          style={{ borderColor: active || isSelected ? theme.color : "#E8E2D5" }}
+                          {...cardEvents}
+                          style={{ borderColor: theme.color }}
                           className={`interactive-node-card relative bg-white border-2 rounded-2xl p-3.5 shadow-sm transition-all duration-150 cursor-pointer ${
-                            isSelected ? "scale-102 shadow-md" : active ? "hover:shadow-md" : "opacity-40 hover:opacity-100"
+                            isSelected ? "ring-3 ring-[#D96B27]/40 shadow-md" : active ? "hover:shadow-md" : "opacity-40 hover:opacity-100"
                           }`}
                         >
-                          {!isVictim && (
+                          {h !== hopNumbers[0] && (
                             <div
                               style={{ backgroundColor: theme.color }}
                               className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-xs"
@@ -751,14 +744,14 @@ export default function EndpointTrailView({
                             <span
                               style={{ backgroundColor: theme.soft, color: theme.text }}
                               className="text-[10px] px-2 py-0.5 rounded font-bold font-mono whitespace-nowrap"
-                              title="Role and risk score from the engine"
+                              title="Role and risk from the engine"
                             >
-                              {node.role || "—"} • {node.risk_score == null ? "—" : Math.round(node.risk_score)}
+                              {badge}
                             </span>
                           </div>
 
                           <div className="text-[11px] text-[#746D65] mt-1 font-medium truncate">
-                            {node.bank || "—"} ({node.ifsc || "—"})
+                            {node.bank || DASH} ({node.ifsc || DASH})
                           </div>
 
                           {isVictim ? (
@@ -780,8 +773,8 @@ export default function EndpointTrailView({
                           )}
 
                           <div className="mt-2 text-[10px] text-[#9E968D] font-mono flex items-center justify-between gap-2">
-                            <span>{node.device_type || "—"}</span>
-                            <span>{node.ip_address || "—"}</span>
+                            <span>{node.device_type || DASH}</span>
+                            <span>{node.ip_address || DASH}</span>
                           </div>
                           {node.freeze_recommended && (
                             <div className="mt-2 text-[10px] font-bold text-[#B45309] font-mono">freeze recommended</div>
@@ -795,79 +788,25 @@ export default function EndpointTrailView({
             })}
           </div>
         </div>
+
+        {shownLink && <LinkCard link={shownLink} pinned={!hoveredLink} onClose={() => setSelectedLink(null)} />}
       </div>
 
-      {/* NODE FORENSIC INSPECTOR MODAL / DRAWER */}
       {selectedNode && (
-        <div className="bg-white border-2 border-[#D96B27] rounded-2xl p-5 shadow-lg relative animate-in fade-in slide-in-from-bottom-2">
+        <NodePanel node={selectedNode} onClose={() => setSelectedNode(null)}>
           <button
-            onClick={() => setSelectedNode(null)}
-            className="absolute right-4 top-4 text-[#9E968D] hover:text-[#2C2623] p-1 cursor-pointer"
+            onClick={onNavigateToNotices}
+            className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <Lock className="w-3.5 h-3.5" />
+            <span>Open Section 91 notices</span>
           </button>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#F0EAE1] pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-bold text-[#2C2623]">{selectedNode.id}</span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5]">
-                  Hop {selectedNode.hop} • {selectedNode.role || "no role"}
-                </span>
-                <span className="text-xs font-bold text-[#059669]">
-                  Risk Score: {selectedNode.risk_score == null ? "—" : selectedNode.risk_score}/100
-                </span>
-              </div>
-              <p className="text-xs text-[#746D65] mt-0.5">
-                Bank: <b>{selectedNode.bank}</b> | IFSC: <b>{selectedNode.ifsc}</b> | Device: {selectedNode.device_type || "—"}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onNavigateToNotices}
-                className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Open Section 91 notices</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 text-xs font-mono">
-            <div className="p-3 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
-              <span className="text-[#9E968D] block text-[10px] uppercase font-bold">Tainted Inflow</span>
-              <span className="text-sm font-bold text-[#EA580C]">
-                ₹{selectedNode.tainted_received ? Number(selectedNode.tainted_received).toLocaleString("en-IN") : "0"}
-              </span>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
-              <span className="text-[#9E968D] block text-[10px] uppercase font-bold">Tainted Outflow</span>
-              <span className="text-sm font-bold text-[#DC2626]">
-                ₹{selectedNode.tainted_forwarded ? Number(selectedNode.tainted_forwarded).toLocaleString("en-IN") : "0"}
-              </span>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
-              <span className="text-[#9E968D] block text-[10px] uppercase font-bold">Trapped Lien Balance</span>
-              <span className="text-sm font-bold text-[#059669]">
-                ₹{selectedNode.holding_amount ? Number(selectedNode.holding_amount).toLocaleString("en-IN") : "0"}
-              </span>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
-              <span className="text-[#9E968D] block text-[10px] uppercase font-bold">IP & Device Signature</span>
-              <span className="text-xs text-[#2C2623] truncate block">
-                {selectedNode.ip_address || "—"} ({selectedNode.device_type || "—"})
-              </span>
-            </div>
-          </div>
-
-          {selectedNode.reasons?.length > 0 && (
-            <div className="mt-3 p-3 rounded-xl bg-[#FEF2F2] border border-[#FEE2E2] text-xs text-[#DC2626] font-medium">
-              <b>Reasons:</b> {Array.isArray(selectedNode.reasons) ? selectedNode.reasons.join("; ") : selectedNode.reasons}
-            </div>
-          )}
-        </div>
+        </NodePanel>
       )}
+      </div>
+
+      <EvidencePanels traceData={traceData} />
+      </div>
         </>
       )}
     </div>

@@ -442,3 +442,29 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - Bank names (`/entities` `bank_stats.name` is null), so banks show as codes.
 - Trace time inside the response body; it is only in a response header.
 - Still 501 / absent: upload, notices, freeze / unfreeze, case diary, vault, profile save / activate, a case register for FIR details.
+
+## 2026-10-02 — Step 7b: trace evidence in the graph and trail views
+
+**Step** — `ui\src\` only; `api\`, `engine\` and the database untouched.
+
+**Files** — new `ui\src\components\TraceEvidence.jsx`; changed `App.jsx`, `components\NetworkGraphView.jsx`, `components\EndpointTrailView.jsx`.
+
+**Key names** — `roleTheme` / `roleKey` / `ROLE_KEYS`, `riskOf`, `layeredLayout`, `linkGeometry`, `DENSE_FROM`, `hopsShown`, `RoleLegend`, `TrimBadge`, `NodePanel`, `LinkCard`, `EvidencePanels` (TraceEvidence); `isActive` prop and `fittedFor` (graph, trail); `DENSE_LANE_ROWS`, `lanesRef` (trail); trace state `notFound` now means `found === false` only.
+
+**What changed**
+- Layout: one layer per hop, left to right (top-to-bottom toggle kept); accounts ordered under their senders; long layers wrap. Colour (cards, links, arrows, legend) comes from the API role; hop is position only. Over `DENSE_FROM` accounts: compact cards, plain links, labels only on the active account or transfer. Both views open fitted to the canvas.
+- Node panel (click): role, risk (victim_score for VICTIM, else final_index), mule_index, trust_index, band, role_confirmed, freeze_recommended, bank, tainted in / out, holding, cell_ids, device, IP, reasons list.
+- Link card (hover; click pins): amount, timestamp, txn_id, link_type, lag, via, confidence, narration, device, IP.
+- Side column: summary (who / how / why / when), reconciliation line, per-hop table, findings (pattern, confidence, evidence, transactions), freeze list (account, bank, holding, proving txn ids), fingerprint with copy.
+- `display_trimmed` badge: "Showing N of full_hops hops" (plus "x of y accounts" when the filter drops accounts).
+- `found=false`: "No transaction graph found" on both views; a filter-emptied trace has its own message. Missing values show a dash (old "₹0" fallbacks removed).
+
+**Results** — `npm run build` compiles; `oxlint` 0 errors. Checked in headless Chrome against the live API and dev server: SBIN10000294 (12 accounts, 11 transfers, 3 hops; all panels filled, no console errors), `max_hops=2` (badge "Showing 2 of 3 hops • 7 of 12 accounts"), unknown ZZZZ99999999 (clean empty state on both views). Largest real trace is 14 accounts, so the 500-account path was checked only with a response inflated inside the test browser (500 cards, 499 links, click-to-paint about 100 ms); nothing synthetic is in the project.
+
+**Deviations** — Added one shared file instead of duplicating panels in two views. Card width and layer gap reduced slightly so a 3-hop trace fits beside the side column.
+
+**What the UI needs that the API lacks**
+- With display filters on, `per_hop`, `findings`, `freeze_candidates`, `summary` and `reconcile` still describe the full trace (no trimmed versions, no flag saying so).
+- CORS allows only `http://localhost:5173`; the dev server opened as `127.0.0.1:5173` gets no data.
+- No real trace with a fallback link or over 14 accounts exists in this load, so `via` = fallback and the dense layout are unverified on real data.
+- Bank names, per-node first / last activity time, and trace time in the body are still absent.
