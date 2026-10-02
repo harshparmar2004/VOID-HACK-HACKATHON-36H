@@ -750,16 +750,17 @@ export default function ForensicParametersView({
           </div>
         </div>
 
-        {/* 1-Click Quick Presets Strip (Derived directly from Excel/Parquet 2M Dataset) */}
-        <div className="p-3.5 bg-[#FDFBF7] border-b border-[#F0EAE1] space-y-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* 1-Click Quick Presets Strip (Organized Rows & Columns Grid) */}
+        <div className="p-4 bg-[#FDFBF7] border-b border-[#F0EAE1] space-y-3">
+          {/* Header & Category Filter Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pb-1 border-b border-[#F0EAE1]">
             <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-[#D96B27]">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>REAL DATASET FRAUD PRESETS ({displayedPresets.length}):</span>
+              <Sparkles className="w-3.5 h-3.5 text-[#D96B27]" />
+              <span className="tracking-wide">REAL DATASET FRAUD PRESETS ({displayedPresets.length}):</span>
             </div>
 
-            {/* Preset Category Pills */}
-            <div className="flex flex-wrap items-center gap-1 text-[11px] font-mono">
+            {/* Category Filter Pills with proper spacing */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
               {[
                 { id: "ALL", label: `All (${realDataPresets.length})` },
                 { id: "SCAMS", label: "Scam Narrations (11)" },
@@ -772,10 +773,10 @@ export default function ForensicParametersView({
                   key={c.id}
                   type="button"
                   onClick={() => setPresetCategory(c.id)}
-                  className={`px-2 py-0.5 rounded-xs transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-sm text-xs transition-all cursor-pointer font-medium ${
                     presetCategory === c.id
-                      ? "bg-[#D96B27] text-white font-bold"
-                      : "bg-white text-[#746D65] border border-[#E8E2D5] hover:border-[#D4CEBF]"
+                      ? "bg-[#D96B27] text-white font-bold shadow-2xs"
+                      : "bg-white text-[#746D65] border border-[#E8E2D5] hover:border-[#D4CEBF] hover:text-[#2C2623]"
                   }`}
                 >
                   {c.label}
@@ -784,41 +785,58 @@ export default function ForensicParametersView({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
+          {/* Organized Rows & Columns Grid (Equal widths, heights & spacing) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto pr-1">
             {displayedPresets.map((preset) => (
               <div
                 key={preset.title}
-                className="group flex items-center bg-white hover:bg-[#FAF6EE] border border-[#D4CEBF] hover:border-[#D96B27] rounded-sm transition-all shadow-2xs overflow-hidden"
+                className="group bg-white hover:bg-[#FAF8F5] border border-[#E8E2D5] hover:border-[#D96B27] rounded-sm p-2.5 transition-all shadow-2xs hover:shadow-xs flex items-center justify-between gap-2 min-h-[58px]"
               >
-                {/* Click to load into form for free editing */}
+                {/* Clickable Preset Body (Loads into Builder Form) */}
                 <button
                   type="button"
                   onClick={() => handleLoadPresetToBuilder(preset)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-mono text-[#2C2623] cursor-pointer"
+                  className="flex-1 min-w-0 text-left cursor-pointer focus:outline-none"
                   title="Click to load into form and edit freely before applying"
                 >
-                  <Pencil className="w-3 h-3 text-[#9E968D] group-hover:text-[#D96B27]" />
-                  <span>{preset.title}</span>
-                  <span className="text-[10px] text-[#059669] font-bold">+{preset.points} pts</span>
+                  <div className="flex items-center gap-1.5">
+                    <Pencil className="w-2.5 h-2.5 text-[#9E968D] group-hover:text-[#D96B27] shrink-0" />
+                    <span className="font-mono text-xs font-semibold text-[#2C2623] group-hover:text-[#D96B27] truncate block">
+                      {preset.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-mono">
+                    <span className="text-[#746D65] bg-[#FAF6EE] px-1.5 py-0.5 rounded-2xs border border-[#E8E2D5] truncate max-w-[120px]">
+                      {preset.field}: {preset.value}
+                    </span>
+                    <span className="text-[#059669] bg-emerald-50 px-1.5 py-0.5 rounded-2xs border border-emerald-200 font-bold shrink-0">
+                      +{preset.points} pts
+                    </span>
+                  </div>
                 </button>
 
-                {/* Direct 1-Click Add Button */}
+                {/* Direct 1-Click Add Action Button */}
                 <button
                   type="button"
                   onClick={() => handleDirectAddPreset(preset)}
-                  className="px-2 py-1.5 bg-[#FAF6EE] group-hover:bg-[#D96B27] group-hover:text-white border-l border-[#E8E2D5] text-[#746D65] text-[10px] font-mono font-bold cursor-pointer transition-colors"
-                  title="Direct 1-Click Add without editing"
+                  className="shrink-0 px-2.5 py-1.5 bg-[#FAF6EE] hover:bg-[#D96B27] text-[#D96B27] hover:text-white border border-[#E8E2D5] hover:border-[#D96B27] rounded-sm text-[11px] font-mono font-bold cursor-pointer transition-all shadow-2xs active:scale-95"
+                  title="Direct 1-Click Add to active rules"
                 >
                   + Add
                 </button>
               </div>
             ))}
           </div>
-          <div className="text-[10px] text-[#9E968D] font-mono flex items-center justify-between">
-            <span>Tip: Click preset name to load & customize in builder, or click "+ Add" for instant application.</span>
-            <span>Dataset: DuckDB 2,000,008 Rows</span>
+
+          {/* Micro Information Footer */}
+          <div className="text-[10px] text-[#746D65] font-mono flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[#F0EAE1]">
+            <span className="flex items-center gap-1">
+              <span className="text-[#D96B27] font-bold">💡 Tip:</span> Click any card to customize in builder below, or click "+ Add" for instant application.
+            </span>
+            <span className="text-[#9E968D]">Dataset: DuckDB 2,000,008 Rows • Columnar Vector</span>
           </div>
         </div>
+
 
         {/* Manual Parameter Builder Form (Horizontal Grid) */}
         <form onSubmit={handleSubmitBuilder} className="p-4 sm:p-5 space-y-3.5 text-xs">
