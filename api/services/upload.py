@@ -36,9 +36,14 @@ def format_bytes(size: int) -> str:
     return f"{size:.1f} TB"
 
 
+from api.services import trace
+
 def process_dataset_upload(file: UploadFile) -> dict:
     t_start = time.perf_counter()
     db = db_path()
+
+    # Release any cached graph arrays before running pipeline
+    victim_trace.release_context()
 
     # 1. Save uploaded file to disk
     t0 = time.perf_counter()
@@ -57,39 +62,41 @@ def process_dataset_upload(file: UploadFile) -> dict:
     upload_ms = round((time.perf_counter() - t0) * 1000, 2)
     file_sha256 = hasher.hexdigest()
 
-    # 2. Ingest into DuckDB
-    t0 = time.perf_counter()
-    try:
-        ingest_res = ingest.run_ingest(dest_path, db)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Ingestion failed: {e}")
-    ingest_seconds = round(time.perf_counter() - t0, 3)
+    # Acquire trace lock so no concurrent requests read/write graph arrays during pipeline rebuild
+    with trace._LOCK:
+        # 2. Ingest into DuckDB
+        t0 = time.perf_counter()
+        try:
+            ingest_res = ingest.run_ingest(dest_path, db)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Ingestion failed: {e}")
+        ingest_seconds = round(time.perf_counter() - t0, 3)
 
-    # 3. Run Pipeline Stages
-    t_pipeline_start = time.perf_counter()
-    stage_timings = {}
+        # 3. Run Pipeline Stages
+        t_pipeline_start = time.perf_counter()
+        stage_timings = {}
 
-    def run_stage(name: str, cmd: list[str]):
-        t_s = time.perf_counter()
-        p = subprocess.run(cmd, capture_output=True, text=True)
-        dur = round(time.perf_counter() - t_s, 3)
-        if p.returncode != 0:
-            err = p.stderr.strip() or p.stdout.strip()
-            raise HTTPException(status_code=500, detail=f"Pipeline stage '{name}' failed: {err}")
-        stage_timings[name] = dur
-        return dur
+        def run_stage(name: str, cmd: list[str]):
+            t_s = time.perf_counter()
+            p = subprocess.run(cmd, capture_output=True, text=True)
+            dur = round(time.perf_counter() - t_s, 3)
+            if p.returncode != 0:
+                err = p.stderr.strip() or p.stdout.strip()
+                raise HTTPException(status_code=500, detail=f"Pipeline stage '{name}' failed: {err}")
+            stage_timings[name] = dur
+            return dur
 
-    py = sys.executable
-    run_stage("seed_banks", [py, str(ENGINE_DIR / "seed_banks.py"), "--db", str(db)])
-    run_stage("features", [py, str(ENGINE_DIR / "features.py"), "--db", str(db)])
-    run_stage("scoring_pass1", [py, str(ENGINE_DIR / "scoring.py"), "--pass", "1", "--db", str(db)])
-    run_stage("links", [py, str(ENGINE_DIR / "links.py"), "--db", str(db)])
-    run_stage("scoring_pass2", [py, str(ENGINE_DIR / "scoring.py"), "--pass", "2", "--db", str(db)])
-    run_stage("rings", [py, str(ENGINE_DIR / "rings.py"), "--db", str(db)])
-    run_stage("graph", [py, str(ENGINE_DIR / "graph.py"), "--db", str(db), "--force"])
+        py = sys.executable
+        run_stage("seed_banks", [py, str(ENGINE_DIR / "seed_banks.py"), "--db", str(db)])
+        run_stage("features", [py, str(ENGINE_DIR / "features.py"), "--db", str(db)])
+        run_stage("scoring_pass1", [py, str(ENGINE_DIR / "scoring.py"), "--pass", "1", "--db", str(db)])
+        run_stage("links", [py, str(ENGINE_DIR / "links.py"), "--db", str(db)])
+        run_stage("scoring_pass2", [py, str(ENGINE_DIR / "scoring.py"), "--pass", "2", "--db", str(db)])
+        run_stage("rings", [py, str(ENGINE_DIR / "rings.py"), "--db", str(db)])
+        run_stage("graph", [py, str(ENGINE_DIR / "graph.py"), "--db", str(db), "--force"])
 
-    # Clear victim trace in-memory context cache
-    victim_trace._CONTEXTS.clear()
+        # Release context cache again to ensure fresh context on next query
+        victim_trace.release_context()
 
     pipeline_seconds = round(time.perf_counter() - t_pipeline_start, 3)
     total_seconds = round(time.perf_counter() - t_start, 3)
