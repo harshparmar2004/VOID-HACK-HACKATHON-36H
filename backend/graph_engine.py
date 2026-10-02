@@ -158,8 +158,8 @@ class GraphEngine:
                        Amount_INR, Timestamp, Payment_Mode, Narration, IP_Address, Device_Type
                 FROM transactions
                 WHERE Sender_Account = ?
-                  AND Timestamp >= ?
-                  AND Timestamp <= ? + INTERVAL {time_window_minutes} MINUTE
+                  AND Timestamp >= TRY_CAST(? AS TIMESTAMP)
+                  AND Timestamp <= TRY_CAST(? AS TIMESTAMP) + INTERVAL {time_window_minutes} MINUTE
             """
             outflow_params = [curr_acct, in_time, in_time]
             
