@@ -3,6 +3,7 @@
     .venv\\Scripts\\python.exe auditor\\run_audit.py --db data\\case.duckdb
 
 The database is opened read-only. Columns a database does not have are skipped.
+--limits names an optional domain file of amount limits (see audits\\).
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from auditor import tools  # noqa: E402
 DEFAULT_OUT = ROOT / "reports" / "json" / "audit.json"
 
 SHAPE_KINDS = ("id", "text", "cat")
-SHAPE_SKIP = ("tx_key", "src", "dst", "acct_id", "ts_hour")
+SHAPE_SKIP = ("tx_key", "src", "dst", "acct_id")
 UNIQUE_COLUMNS = ("tx_key", "tx_id", "utr", "acct_id", "acct_no")
 CONSISTENCY_PAIRS = (
     ("narr_rail", "mode"),
@@ -31,20 +32,31 @@ CONSISTENCY_PAIRS = (
     ("is_foreign_ip", "is_headless"),
     ("bank", "ifsc_bank"),
 )
+ADJACENCY_PAIRS = (("dst", "src"), ("src", "src"), ("dst", "dst"))
 TX_OUTLIER_GROUPS = ("mode", "device", "is_headless", "is_foreign_ip")
 ACCOUNT_OUTLIER_GROUP = "flow_class"
+
+DO_NOT_USE_SEMANTICS = (
+    "Off-only. Each entry names a field or pattern that must not be used as evidence, with the test "
+    "that found it. The list can only switch a signal off: it never enables a signal and carries no "
+    "weight, threshold or value for scoring."
+)
 
 
 def plan(con) -> list[tuple[str, tuple]]:
     """(tool name, arguments) for every check this database supports."""
     cols = tools.list_columns(con)
     groups = tools.list_groups(con)
+    ordered = [c for c in cols if tools.COLUMNS[c].table in tools.POSITION]
     calls: list[tuple[str, tuple]] = []
     calls += [("profile_shapes", (c,)) for c, k in cols.items() if k in SHAPE_KINDS and c not in SHAPE_SKIP]
     calls += [("check_uniqueness", (c,)) for c in UNIQUE_COLUMNS if c in cols]
     calls += [("check_consistency", (a, b)) for a, b in CONSISTENCY_PAIRS if a in cols and b in cols]
     calls += [("check_ranges", (c,)) for c, k in cols.items() if k in ("num", "ts")]
     calls += [("check_distribution", (c,)) for c, k in cols.items() if k in ("cat", "bool", "num")]
+    calls += [("check_time_pattern", (c,)) for c in ordered if cols[c] == "ts"]
+    calls += [("check_row_position", (c,)) for c in ordered if cols[c] in ("cat", "bool")]
+    calls += [("check_adjacency", (a, b)) for a, b in ADJACENCY_PAIRS if a in ordered and b in ordered]
     calls += [("find_outliers", (c, g)) for c, k in cols.items() if k == "num"
               for g in TX_OUTLIER_GROUPS if g in groups["tx"]]
     if ACCOUNT_OUTLIER_GROUP in groups["accounts"]:
@@ -52,12 +64,12 @@ def plan(con) -> list[tuple[str, tuple]]:
     return calls
 
 
-def run(db_path: str, out_path: Path) -> int:
+def run(db_path: str, out_path: Path, limits_path: str | None = None) -> int:
     t0 = time.perf_counter()
     findings, failures = [], []
     con = tools.connect(db_path)
     try:
-        rules = tools.load_rules(con)
+        rules = tools.load_rules(con, limits_path)
         cat = tools._catalog(con)
         counts = {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in ("tx", "accounts") if t in cat}
         sha = None
@@ -77,6 +89,7 @@ def run(db_path: str, out_path: Path) -> int:
 
     runtime = round(time.perf_counter() - t0, 3)
     summary = {v: sum(1 for f in findings if f["verdict"] == v) for v in tools.VERDICTS}
+    do_not_use = [{"finding": f["id"], **entry} for f in findings for entry in f["do_not_use"]]
     payload = {
         "run": {
             "db": Path(db_path).name,
@@ -89,6 +102,7 @@ def run(db_path: str, out_path: Path) -> int:
         },
         "rules": rules,
         "summary": summary,
+        "do_not_use": {"semantics": DO_NOT_USE_SEMANTICS, "entries": do_not_use},
         "findings": findings,
         "failures": failures,
     }
@@ -103,6 +117,9 @@ def run(db_path: str, out_path: Path) -> int:
         print(f"{f['verdict']:<13} {f['id']:<52} {why if len(why) <= 150 else why[:147] + '...'}")
     for f in failures:
         print(f"FAILED        {f['id']:<52} {f['error']}")
+    print(f"do_not_use ({len(do_not_use)}):")
+    for e in do_not_use:
+        print(f"  [{e['test']}] {e['name']}")
     return 1 if failures else 0
 
 
@@ -110,8 +127,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--db", required=True, help="path to case.duckdb (opened read-only)")
     ap.add_argument("--out", default=str(DEFAULT_OUT), help="output JSON path")
+    ap.add_argument("--limits", default=None, help="optional JSON file of domain amount limits")
     a = ap.parse_args()
-    return run(a.db, Path(a.out))
+    return run(a.db, Path(a.out), a.limits)
 
 
 if __name__ == "__main__":

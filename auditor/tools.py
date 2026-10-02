@@ -1,15 +1,19 @@
-"""Generic, deterministic, read-only anomaly tools (PROJECT_CONTEXT 16, stage 1).
+"""Generic, deterministic, read-only anomaly tools (PROJECT_CONTEXT 16, stages 1 and 5).
 
-Six tools over the tx / accounts layout. Each returns a JSON-ready dict:
-question, sql, result (numbers), verdict, explanation.
+Nine tools over the tx / accounts layout. Each returns a JSON-ready dict:
+question, sql, result (numbers), verdict, explanation, do_not_use.
 
 Rules of this module:
 - Column names are resolved through a whitelist; nothing a caller passes is
   ever placed into SQL.
 - Raw narration text is never returned: free text is reduced to a shape mask.
-- Every tolerance comes from audit_rules.json, overridden by the optional
+- No value of any dataset appears here. Every tolerance is a p-value, a ratio
+  or an output cap from audit_rules.json, overridden by the optional
   `audit_rules` block of the active scoring profile.
 - The database is only read. Python only loops over aggregated rows.
+- An ARTEFACT finding lists what must not be used as evidence (`do_not_use`).
+  That list can only switch a signal off. No tool enables a signal or hands a
+  value to scoring.
 """
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ import functools
 import json
 import math
 import re
+import sys
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,8 +30,9 @@ import duckdb
 
 RULES_PATH = Path(__file__).resolve().parent / "audit_rules.json"
 
-CLEAN, TRAP, SIGNAL, NOISE, INCONCLUSIVE = "CLEAN", "TRAP", "SIGNAL", "NOISE", "INCONCLUSIVE"
-VERDICTS = (CLEAN, TRAP, SIGNAL, NOISE, INCONCLUSIVE)
+CLEAN, TRAP, SIGNAL, NOISE, ARTEFACT, INCONCLUSIVE = (
+    "CLEAN", "TRAP", "SIGNAL", "NOISE", "ARTEFACT", "INCONCLUSIVE")
+VERDICTS = (CLEAN, TRAP, SIGNAL, NOISE, ARTEFACT, INCONCLUSIVE)
 
 
 @dataclass(frozen=True)
@@ -47,10 +53,9 @@ COLUMNS: dict[str, Col] = {
     "dst":            Col("tx", "t.dst", "id", ("dst",)),
     "amount_paise":   Col("tx", "t.amount_paise", "num", ("amount_paise",)),
     "ts":             Col("tx", "t.ts", "ts", ("ts",)),
-    "ts_hour":        Col("tx", "hour(t.ts)", "cat", ("ts",)),
     "mode":           Col("tx", "t.mode", "cat", ("mode",)),
     "narration":      Col("tx", "t.narration", "text", ("narration",)),
-    "narr_rail":      Col("tx", "split_part(t.narration, '/', 1)", "cat", ("narration",)),
+    "narr_rail":      Col("tx", "regexp_extract(t.narration, '^[A-Za-z]+')", "cat", ("narration",)),
     "ip":             Col("tx", "t.ip", "text", ("ip",)),
     "device":         Col("tx", "t.device", "cat", ("device",)),
     "is_foreign_ip":  Col("tx", "t.is_foreign_ip", "bool", ("is_foreign_ip",)),
@@ -61,7 +66,7 @@ COLUMNS: dict[str, Col] = {
     "acct_no":        Col("accounts", "t.acct_no", "id", ("acct_no",)),
     "ifsc":           Col("accounts", "t.ifsc", "text", ("ifsc",)),
     "bank":           Col("accounts", "t.bank", "cat", ("bank",)),
-    "ifsc_bank":      Col("accounts", "substr(t.ifsc, 1, 4)", "cat", ("ifsc",)),
+    "ifsc_bank":      Col("accounts", "regexp_extract(t.ifsc, '^[A-Za-z]+')", "cat", ("ifsc",)),
     "first_seen":     Col("accounts", "t.first_seen", "ts", ("first_seen",)),
     "last_seen":      Col("accounts", "t.last_seen", "ts", ("last_seen",)),
 }
@@ -71,6 +76,17 @@ COLUMNS: dict[str, Col] = {
 ROW_IDENTITY = {
     "tx": ("src", "dst", "amount_paise", "ts", "mode", "narration", "ip", "device"),
     "accounts": ("acct_no", "ifsc", "bank"),
+}
+
+# The column that holds a table's row order (load order), and its event time.
+# Row order is only ever TESTED as a generator artefact, never used as a signal.
+POSITION = {"tx": "tx_key"}
+EVENT_TIME = {"tx": "ts"}
+
+# Calendar cycles for check_time_pattern: name -> (slot expression, slots in a full cycle).
+CYCLES = {
+    "hour_of_day": ("hour(x)", 24),
+    "day_of_week": ("dayofweek(x)", 7),
 }
 
 # Account-level groups for find_outliers: name -> (expression, tables it reads).
@@ -120,15 +136,20 @@ def active_profile(con) -> tuple[str | None, dict]:
     return row[0], json.loads(row[1]) if row[1] else {}
 
 
-def load_rules(con) -> dict:
-    """audit_rules.json, overridden key by key by the active profile's `audit_rules`."""
+def load_rules(con, limits_path: str | Path | None = None) -> dict:
+    """audit_rules.json, then the optional domain limits file (its `ranges`),
+    then the active profile's `audit_rules`, each overriding key by key."""
     rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))
     rules.pop("_doc", None)
+    if limits_path:
+        limits = json.loads(Path(limits_path).read_text(encoding="utf-8"))
+        rules["ranges"] = limits.get("ranges") or {}
     profile_id, definition = active_profile(con)
     override = definition.get("audit_rules") or {}
     rules.update(override)
     rules["_source"] = {
         "file": RULES_PATH.name,
+        "limits_file": Path(limits_path).name if limits_path else None,
         "profile_id": profile_id,
         "profile_overrides": sorted(override),
     }
@@ -144,6 +165,13 @@ def _resolve(con, column: str) -> Col:
     if missing:
         raise ToolInputError(f"{col.table}.{missing[0]} does not exist in this database.")
     return col
+
+
+def _position(con, table: str) -> str:
+    pos = POSITION.get(table)
+    if pos is None or pos not in _catalog(con).get(table, {}):
+        raise ToolInputError(f"Table {table} has no row-order column.")
+    return pos
 
 
 def list_columns(con) -> dict[str, str]:
@@ -182,7 +210,9 @@ def _js(v):
     if v is None or isinstance(v, (str, bool, int)):
         return v
     if isinstance(v, float):
-        return None if math.isnan(v) or math.isinf(v) else round(v, 6)
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return float(f"{v:.6g}") if abs(v) < 1e-6 else round(v, 6)
     if hasattr(v, "isoformat"):
         return v.isoformat(sep=" ", timespec="seconds")
     try:
@@ -210,8 +240,79 @@ def _pct(x: float) -> str:
     return f"{100 * x:.2f}%"
 
 
-def _finding(tool, args, question, sql, result, verdict, explanation) -> dict:
+def _p(x: float) -> str:
+    return f"{x:.3g}"
+
+
+def _chi2_sf(x: float, dof: int) -> float | None:
+    """Upper-tail p-value of a chi-square statistic (regularised incomplete gamma)."""
+    if dof <= 0:
+        return None
+    if x <= 0:
+        return 1.0
+    a, h = dof / 2.0, x / 2.0
+    scale = math.exp(-h + a * math.log(h) - math.lgamma(a))
+    eps, tiny = sys.float_info.epsilon, sys.float_info.min
+    if h < a + 1:                       # series for the lower tail
+        term = total = 1.0 / a
+        n = 0
+        while abs(term) > abs(total) * eps and n < 100000:
+            n += 1
+            term *= h / (a + n)
+            total += term
+        return min(1.0, max(0.0, 1.0 - total * scale))
+    b = h + 1.0 - a                     # continued fraction for the upper tail
+    c, d = 1.0 / tiny, 1.0 / b
+    frac = d
+    for i in range(1, 100000):
+        an = -i * (i - a)
+        b += 2.0
+        d = an * d + b
+        d = tiny if abs(d) < tiny else d
+        c = b + an / c
+        c = tiny if abs(c) < tiny else c
+        d = 1.0 / d
+        delta = d * c
+        frac *= delta
+        if abs(delta - 1.0) < eps:
+            break
+    return min(1.0, max(0.0, frac * scale))
+
+
+def _fit(observed: list[float], expected: list[float]) -> dict:
+    """Chi-square goodness of fit of observed counts to expected counts."""
+    dof = len(observed) - 1
+    if dof < 1 or min(expected) <= 0:
+        return {"chi2": None, "dof": dof, "p_value": None, "min_expected": None}
+    chi2 = sum((o - e) ** 2 / e for o, e in zip(observed, expected))
+    return {"chi2": _js(chi2), "dof": dof, "p_value": _js(_chi2_sf(chi2, dof)), "min_expected": _js(min(expected))}
+
+
+def _is_even(fit: dict, spread: float | None, rules: dict) -> bool:
+    """True when counts match an equal split too well to be a natural pattern."""
+    return (fit["p_value"] is not None
+            and fit["min_expected"] >= rules["min_expected_per_cell"]
+            and fit["p_value"] >= rules["even_min_p_value"]
+            and spread is not None and spread <= rules["even_max_relative_spread"])
+
+
+def _tie_probability(counts: list[int]) -> float | None:
+    """Chance that independent counts of this size come out exactly equal."""
+    if len(counts) < 2 or len(set(counts)) != 1 or counts[0] <= 0:
+        return None
+    return (1.0 / math.sqrt(4 * math.pi * counts[0])) ** (len(counts) - 1)
+
+
+def _off(kind: str, name: str, test: str, evidence: dict) -> dict:
+    """One do_not_use entry. kind is 'field' or 'pattern'. Off-only by design:
+    it names what to ignore and why, and carries no weight, value or threshold."""
+    return {"kind": kind, "name": name, "test": test, "evidence": evidence}
+
+
+def _finding(tool, args, question, sql, result, verdict, explanation, do_not_use=None) -> dict:
+    do_not_use = do_not_use or []
     assert verdict in VERDICTS
+    assert (verdict == ARTEFACT) == bool(do_not_use)
     return {
         "tool": tool,
         "args": args,
@@ -220,6 +321,7 @@ def _finding(tool, args, question, sql, result, verdict, explanation) -> dict:
         "result": result,
         "verdict": verdict,
         "explanation": explanation,
+        "do_not_use": do_not_use,
     }
 
 
@@ -374,7 +476,7 @@ def check_consistency(con, col_a: str, col_b: str, rules: dict | None = None) ->
     """)
     cells = con.execute(sql).fetchall()
     args = {"col_a": col_a, "col_b": col_b}
-    question = f"Do {col_a} and {col_b} agree, or does one tell us nothing about the other?"
+    question = f"Do {col_a} and {col_b} agree, repeat each other, or say nothing about each other?"
     if len(cells) > max_pairs:
         return _finding("check_consistency", args, question, sql, {"n_pairs": f">{max_pairs}"}, INCONCLUSIVE,
                         f"More than {max_pairs} value pairs: too many categories to compare.")
@@ -392,7 +494,9 @@ def check_consistency(con, col_a: str, col_b: str, rules: dict | None = None) ->
     cramers_v = math.sqrt(max(chi2, 0.0) / (total * (k - 1))) if k > 1 else None
     a_fixes_b = len(cells) == len(row_tot)
     b_fixes_a = len(cells) == len(col_tot)
-    shared = sorted(set(row_tot) & set(col_tot))
+    # Two category columns that share labels are meant to say the same thing;
+    # true/false flags share labels by construction, so they are not compared this way.
+    shared = sorted(set(row_tot) & set(col_tot)) if a.kind == b.kind == "cat" else []
     n_mismatch = sum(n for va, vb, n in cells if va != vb) if shared else None
     lab = int(rules["label_max_len"])
     result = {
@@ -413,6 +517,7 @@ def check_consistency(con, col_a: str, col_b: str, rules: dict | None = None) ->
     }
     indep_v = rules["independence_max_cramers_v"]
     independent = cramers_v is not None and cramers_v < indep_v
+    off = []
     if shared:
         mm = result["mismatch_share"]
         if n_mismatch == 0:
@@ -428,6 +533,13 @@ def check_consistency(con, col_a: str, col_b: str, rules: dict | None = None) ->
                    f"neither can validate the other.")
     elif cramers_v is None:
         verdict, why = NOISE, "One of the two columns is constant: nothing to compare."
+    elif a_fixes_b and b_fixes_a:
+        verdict = ARTEFACT
+        why = (f"{col_a} and {col_b} are the same column under different labels on all {total:,} rows: "
+               f"one piece of information, not two.")
+        off.append(_off("pattern", f"{col_a} and {col_b} counted as two independent signals",
+                        "identical columns",
+                        {"n_rows": total, "n_values": len(row_tot), "n_pairs": len(cells)}))
     elif a_fixes_b or b_fixes_a:
         first, second = (col_a, col_b) if a_fixes_b else (col_b, col_a)
         verdict, why = CLEAN, f"{first} fully determines {second}: the two are consistent."
@@ -437,7 +549,7 @@ def check_consistency(con, col_a: str, col_b: str, rules: dict | None = None) ->
     else:
         verdict = INCONCLUSIVE
         why = f"{col_a} and {col_b} are related (Cramer's V {cramers_v:.3f}) but neither determines the other."
-    return _finding("check_consistency", args, question, sql, result, verdict, why)
+    return _finding("check_consistency", args, question, sql, result, verdict, why, off)
 
 
 # --- 4. check_ranges ----------------------------------------------------------
@@ -645,15 +757,6 @@ def find_outliers(con, feature: str, group: str, rules: dict | None = None) -> d
 
 # --- 6. check_distribution ----------------------------------------------------
 
-def _equal_split(counts: list[int]) -> tuple[float | None, float | None]:
-    """(chi-square per degree of freedom against equal shares, relative spread)."""
-    if len(counts) < 2:
-        return None, None
-    mean = sum(counts) / len(counts)
-    chi2 = sum((n - mean) ** 2 for n in counts) / mean
-    return chi2 / (len(counts) - 1), (max(counts) - min(counts)) / mean
-
-
 @_tool
 def check_distribution(con, column: str, rules: dict | None = None) -> dict:
     rules = rules or load_rules(con)
@@ -691,19 +794,20 @@ def check_distribution(con, column: str, rules: dict | None = None) -> dict:
     numeric = col.kind == "num"
     major = values if numeric else [v for v in values if v["share"] >= rare_max]
     rare = [] if numeric else [v for v in values if v["share"] < rare_max]
-    chi2_dof, spread = _equal_split([v["rows"] for v in major])
-    rare_chi2_dof, _ = _equal_split([v["rows"] for v in rare])
-    max_chi2 = rules["uniform_max_chi2_per_dof"]
-    even = chi2_dof is not None and chi2_dof <= max_chi2
-    rare_even = rare_chi2_dof is not None and rare_chi2_dof <= max_chi2
+    counts = [v["rows"] for v in major]
+    mean = sum(counts) / len(counts) if counts else 0
+    fit = _fit(counts, [mean] * len(counts))
+    spread = (max(counts) - min(counts)) / mean if len(counts) > 1 else None
+    even = _is_even(fit, spread, rules)
+    tie_p = _tie_probability([v["rows"] for v in rare])
+    tied = tie_p is not None and tie_p < rules["tie_max_probability"]
     result = {
         "n_rows": total, "n_values": n_values,
         "n_major_values": len(major), "n_rare_values": len(rare),
         "rows_in_rare_values": sum(v["rows"] for v in rare),
-        "major_chi2_per_dof_vs_equal": _js(chi2_dof),
-        "major_relative_spread": _js(spread),
-        "major_split_is_even": even,
-        "rare_split_is_even": rare_even,
+        "equal_split_test": {**fit, "relative_spread": _js(spread), "is_even": even},
+        "rare_counts_identical": tie_p is not None,
+        "rare_tie_probability": _js(tie_p),
         "values": values,
     }
     benford_mad = None
@@ -711,17 +815,24 @@ def check_distribution(con, column: str, rules: dict | None = None) -> dict:
         seen = {v["value"]: v["share"] for v in values}
         benford_mad = sum(abs(seen.get(str(d), 0.0) - math.log10(1 + 1 / d)) for d in range(1, 10)) / 9
         result["benford_mad"] = _js(benford_mad)
-    rare_note = ""
-    if rare:
-        rare_note = (f" Rare: {', '.join(v['value'] for v in rare[:5])} "
-                     f"({result['rows_in_rare_values']:,} rows"
-                     + (", near-identical counts)." if rare_even else ")."))
+    off, parts = [], []
+    if even:
+        parts.append(f"{len(major)} {what}s split evenly ({_pct(1 / len(major))} each, spread {_pct(spread)}, "
+                     f"equal-split p {_p(fit['p_value'])}), as a random generator would")
+        off.append(_off("field", f"{column} (how often each {what} occurs)", "too-even distribution",
+                        {"n_values": len(major), "relative_spread": _js(spread), **fit}))
+    if tied:
+        parts.append(f"{len(rare)} rare values have exactly the same count ({rare[0]['rows']:,} rows each, "
+                     f"chance {_p(tie_p)})")
+        off.append(_off("pattern", f"row counts of the rare values of {column}", "identical rare counts",
+                        {"n_rare_values": len(rare), "rows_each": rare[0]["rows"], "tie_probability": _js(tie_p)}))
+    rare_note = (f" Rare: {', '.join(v['value'] for v in rare[:5])} ({result['rows_in_rare_values']:,} rows)."
+                 if rare else "")
     if n_values == 1:
         verdict, why = NOISE, f"{column} is constant: it carries no information."
-    elif even:
-        verdict = TRAP
-        why = (f"{column}: {len(major)} {what}s split evenly within random noise ({_pct(1 / len(major))} each, "
-               f"spread {_pct(spread)}), as a random generator would; do not read meaning into it.{rare_note}")
+    elif off:
+        verdict = ARTEFACT
+        why = f"{column}: " + "; ".join(parts) + f". Do not read meaning into it.{'' if tied else rare_note}"
     elif numeric:
         if benford_mad <= rules["benford_max_mad"]:
             verdict, why = CLEAN, f"{column} first digits follow the natural (Benford) curve (MAD {benford_mad:.4f})."
@@ -733,7 +844,202 @@ def check_distribution(con, column: str, rules: dict | None = None) -> dict:
         verdict, why = SIGNAL, f"{column} is dominated by {len(major)} main value(s).{rare_note}"
     else:
         verdict, why = CLEAN, f"{column} is spread unevenly across {n_values} values with no rare one."
-    return _finding("check_distribution", args, question, sql, result, verdict, why)
+    return _finding("check_distribution", args, question, sql, result, verdict, why, off)
+
+
+# --- 7. check_row_position ----------------------------------------------------
+
+@_tool
+def check_row_position(con, column: str, rules: dict | None = None) -> dict:
+    """Do the rows that carry a rare value of `column` sit together in the file?"""
+    rules = rules or load_rules(con)
+    col = _resolve(con, column)
+    if col.kind not in ("cat", "bool"):
+        raise ToolInputError(f"{column} is not categorical; check_row_position needs rare categories.")
+    pos = _position(con, col.table)
+    bins = int(rules["position_bins"])
+    rare_max = float(rules["rare_share_max"])
+    ts = EVENT_TIME.get(col.table)
+    has_ts = ts is not None and ts in _catalog(con)[col.table]
+    ordered = f"t.{ts} >= lag(t.{ts}) OVER (ORDER BY t.{pos})" if has_ts else "NULL"
+    sql = _sql(f"""
+        WITH v AS (
+            SELECT CAST({col.expr} AS VARCHAR) AS v, count(*) AS n FROM {col.table} t GROUP BY 1
+        ),
+        rare AS (
+            SELECT v FROM v WHERE v IS NOT NULL AND n < {rare_max!r} * (SELECT sum(n) FROM v)
+        ),
+        d AS (
+            SELECT ntile({bins}) OVER (ORDER BY t.{pos}) AS bin,
+                   CAST({col.expr} AS VARCHAR) IN (SELECT v FROM rare) AS unusual,
+                   {ordered} AS in_time_order
+            FROM {col.table} t
+        )
+        SELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,
+               count(*) FILTER (in_time_order) AS n_in_time_order
+        FROM d
+        GROUP BY bin
+        ORDER BY bin
+    """)
+    rows = con.execute(sql).fetchall()
+    args = {"column": column}
+    question = f"Do rows with a rare {column} value cluster by position in the file ({pos} order)?"
+    total = sum(r[1] for r in rows)
+    unusual = sum(r[2] for r in rows)
+    time_sorted_share = _share(sum(r[3] for r in rows), total - 1) if has_ts and total > 1 else None
+    expected = [unusual * r[1] / total for r in rows] if total else []
+    fit = _fit([r[2] for r in rows], expected) if unusual else {"chi2": None, "dof": len(rows) - 1,
+                                                                "p_value": None, "min_expected": None}
+    lifts = [r[2] / e if e else 0.0 for r, e in zip(rows, expected)]
+    top_lift = max(lifts) if lifts else None
+    result = {
+        "n_rows": total, "n_unusual_rows": unusual, "n_bins": len(rows),
+        "position_test": fit,
+        "max_bin_lift": _js(top_lift),
+        "bins_holding_unusual_rows": sum(1 for r in rows if r[2] > 0),
+        "time_sorted_share": time_sorted_share,
+        "unusual_rows_per_bin": [r[2] for r in rows],
+    }
+    off = []
+    if unusual == 0:
+        verdict, why = CLEAN, f"{column} has no rare value, so no unusual rows to place."
+    elif fit["p_value"] is None or fit["min_expected"] < rules["min_expected_per_cell"]:
+        verdict = INCONCLUSIVE
+        why = f"{column}: {unusual:,} unusual rows are too few to test over {len(rows)} file segments."
+    elif fit["p_value"] < rules["artefact_max_p_value"] and top_lift >= rules["position_min_lift"]:
+        held = result["bins_holding_unusual_rows"]
+        if time_sorted_share is not None and time_sorted_share >= rules["time_sorted_min_share"]:
+            verdict = SIGNAL
+            why = (f"{column}: unusual rows sit in {held} of {len(rows)} file segments, and the file is in "
+                   f"time order, so they cluster in time (peak {top_lift:.1f}x).")
+        else:
+            verdict = ARTEFACT
+            why = (f"{column}: {unusual:,} unusual rows sit in {held} of {len(rows)} file segments "
+                   f"(peak {top_lift:.1f}x, p {_p(fit['p_value'])}) although the file is not in time order: "
+                   f"row position gives them away.")
+            off.append(_off("pattern", f"row position ({pos} order) of rows with a rare {column} value",
+                            "unusual rows concentrated by row position",
+                            {"n_unusual_rows": unusual, "bins_holding_unusual_rows": held, "n_bins": len(rows),
+                             "max_bin_lift": _js(top_lift), "time_sorted_share": time_sorted_share, **fit}))
+    else:
+        verdict = CLEAN
+        why = f"{column}: {unusual:,} unusual rows are spread through the file (p {_p(fit['p_value'])})."
+    return _finding("check_row_position", args, question, sql, result, verdict, why, off)
+
+
+# --- 8. check_adjacency -------------------------------------------------------
+
+@_tool
+def check_adjacency(con, col_a: str, col_b: str, rules: dict | None = None) -> dict:
+    """Is a row's `col_a` equal to the NEXT row's `col_b` more often than chance?"""
+    rules = rules or load_rules(con)
+    a, b = _resolve(con, col_a), _resolve(con, col_b)
+    if a.table != b.table:
+        raise ToolInputError(f"{col_a} ({a.table}) and {col_b} ({b.table}) are not in the same table.")
+    for name, c in ((col_a, a), (col_b, b)):
+        if c.kind not in ("id", "cat"):
+            raise ToolInputError(f"{name} cannot link rows; check_adjacency needs identifier or category columns.")
+    pos = _position(con, a.table)
+    sql = _sql(f"""
+        WITH d AS (
+            SELECT CAST({a.expr} AS VARCHAR) AS a, CAST({b.expr} AS VARCHAR) AS b,
+                   lead(CAST({b.expr} AS VARCHAR)) OVER (ORDER BY t.{pos}) AS next_b
+            FROM {a.table} t
+        ),
+        pa AS (SELECT a AS v, count(*) AS n FROM d WHERE a IS NOT NULL GROUP BY 1),
+        pb AS (SELECT b AS v, count(*) AS n FROM d WHERE b IS NOT NULL GROUP BY 1)
+        SELECT (SELECT count(*) FROM d WHERE a IS NOT NULL AND next_b IS NOT NULL) AS n_pairs,
+               (SELECT count(*) FROM d WHERE a = next_b) AS n_linked,
+               (SELECT coalesce(sum(CAST(pa.n AS DOUBLE) * pb.n), 0) FROM pa JOIN pb ON pa.v = pb.v)
+                   / ((SELECT sum(n) FROM pa) * (SELECT sum(n) FROM pb)) AS p_chance
+    """)
+    n_pairs, n_linked, p_chance = con.execute(sql).fetchone()
+    args = {"col_a": col_a, "col_b": col_b}
+    question = f"Is a row's {col_a} the next row's {col_b} more often than chance ({pos} order)?"
+    if not n_pairs or p_chance is None:
+        return _finding("check_adjacency", args, question, sql, {"n_pairs": n_pairs or 0}, INCONCLUSIVE,
+                        "No neighbouring rows to compare.")
+    expected = n_pairs * p_chance
+    sd = math.sqrt(expected * (1 - p_chance)) if 0 < p_chance < 1 else 0.0
+    z = (n_linked - expected) / sd if sd else None
+    p_value = 0.5 * math.erfc(z / math.sqrt(2)) if z is not None else None
+    ratio = n_linked / expected if expected else None
+    result = {
+        "n_pairs": n_pairs, "n_linked_neighbours": n_linked,
+        "chance_link_probability": _js(p_chance), "expected_by_chance": _js(expected),
+        "ratio_to_chance": _js(ratio), "z": _js(z), "p_value": _js(p_value),
+    }
+    off = []
+    excess = n_linked > 0 and (expected == 0 or (
+        p_value is not None and p_value < rules["artefact_max_p_value"]
+        and ratio >= rules["adjacency_min_ratio"]))
+    if excess:
+        verdict = ARTEFACT
+        times = f"{ratio:,.0f}x chance" if ratio is not None else "none expected by chance"
+        why = (f"{n_linked:,} neighbouring rows are linked ({col_a} = next {col_b}) against "
+               f"{expected:,.1f} expected ({times}): linked rows were written next to each other.")
+        off.append(_off("pattern", f"adjacency in {pos} order of rows linked by {col_a} = next {col_b}",
+                        "linked rows adjacent more than chance", dict(result)))
+    else:
+        verdict = CLEAN
+        why = (f"{n_linked:,} neighbouring rows are linked ({col_a} = next {col_b}) against "
+               f"{expected:,.1f} expected by chance: no more than chance.")
+    return _finding("check_adjacency", args, question, sql, result, verdict, why, off)
+
+
+# --- 9. check_time_pattern ----------------------------------------------------
+
+@_tool
+def check_time_pattern(con, column: str, rules: dict | None = None) -> dict:
+    """Does activity follow a daily / weekly rhythm, or is it flat?"""
+    rules = rules or load_rules(con)
+    col = _resolve(con, column)
+    if col.kind != "ts":
+        raise ToolInputError(f"{column} is not a timestamp.")
+    selects = [
+        f"SELECT '{name}' AS cycle, {slot} AS slot, count(*) AS n, count(DISTINCT CAST(x AS DATE)) AS n_dates "
+        f"FROM d GROUP BY 2"
+        for name, (slot, _) in CYCLES.items()
+    ]
+    sql = _sql(f"""
+        WITH d AS (SELECT {col.expr} AS x FROM {col.table} t WHERE {col.expr} IS NOT NULL)
+        {' UNION ALL '.join(selects)}
+        ORDER BY 1, 2
+    """)
+    rows = con.execute(sql).fetchall()
+    args = {"column": column}
+    question = f"Does {column} show a daily and weekly rhythm, or is activity unrealistically flat?"
+    cycles, off, flat, tested = {}, [], [], 0
+    for name, (_, full) in CYCLES.items():
+        slots = [(n, dates) for cyc, _, n, dates in rows if cyc == name]
+        total, total_dates = sum(n for n, _ in slots), sum(d for _, d in slots)
+        info = {"n_rows": total, "n_slots": len(slots), "slots_in_full_cycle": full, "complete": len(slots) == full}
+        if len(slots) == full and total_dates:
+            # each slot is expected in proportion to the number of dates it was open
+            fit = _fit([n for n, _ in slots], [total * d / total_dates for _, d in slots])
+            rates = [n / d for n, d in slots]
+            mean = sum(rates) / len(rates)
+            spread = (max(rates) - min(rates)) / mean if mean else None
+            even = _is_even(fit, spread, rules)
+            tested += fit["p_value"] is not None and fit["min_expected"] >= rules["min_expected_per_cell"]
+            info.update({"flat_test": fit, "relative_spread": _js(spread), "is_flat": even,
+                         "rows_per_slot": [n for n, _ in slots]})
+            if even:
+                flat.append(f"{name.replace('_', ' ')} (spread {_pct(spread)}, flat p {_p(fit['p_value'])})")
+                off.append(_off("pattern", f"{name} of {column} as evidence of unusual timing",
+                                "unrealistically flat time pattern",
+                                {"n_slots": full, "relative_spread": _js(spread), **fit}))
+        cycles[name] = info
+    result = {"cycles": cycles}
+    if off:
+        verdict = ARTEFACT
+        why = (f"{column} is flat across " + " and ".join(flat) + ": no human rhythm, so the time of day "
+               f"or week of an event says nothing by itself.")
+    elif not tested:
+        verdict, why = INCONCLUSIVE, f"{column} does not cover a full cycle with enough rows to test."
+    else:
+        verdict, why = CLEAN, f"{column} is uneven across its time cycles: it has a rhythm."
+    return _finding("check_time_pattern", args, question, sql, result, verdict, why, off)
 
 
 TOOLS = {
@@ -743,4 +1049,7 @@ TOOLS = {
     "check_ranges": check_ranges,
     "find_outliers": find_outliers,
     "check_distribution": check_distribution,
+    "check_row_position": check_row_position,
+    "check_adjacency": check_adjacency,
+    "check_time_pattern": check_time_pattern,
 }

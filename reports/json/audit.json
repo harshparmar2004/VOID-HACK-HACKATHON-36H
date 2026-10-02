@@ -7,25 +7,33 @@
       "accounts": 24873
     },
     "duckdb_version": "1.5.6",
-    "runtime_s": 3.049,
-    "n_findings": 68,
+    "runtime_s": 4.496,
+    "n_findings": 78,
     "n_failures": 0
   },
   "rules": {
     "max_shapes": 20,
-    "max_categories": 50,
+    "max_categories": 64,
     "max_pairs": 400,
     "label_max_len": 40,
     "rare_share_max": 0.01,
     "near_unique_min_ratio": 0.99,
     "independence_max_cramers_v": 0.05,
-    "uniform_max_chi2_per_dof": 3.0,
+    "min_expected_per_cell": 5,
+    "even_min_p_value": 0.01,
+    "even_max_relative_spread": 0.1,
+    "tie_max_probability": 0.05,
     "benford_max_mad": 0.015,
     "systemic_violation_min_share": 0.05,
     "outlier_iqr_k": 1.5,
     "outlier_min_group_size": 30,
     "outlier_signal_min_lift": 3.0,
     "outlier_signal_min_group_share": 0.25,
+    "artefact_max_p_value": 0.001,
+    "position_bins": 20,
+    "position_min_lift": 2.0,
+    "time_sorted_min_share": 0.99,
+    "adjacency_min_ratio": 3.0,
     "ranges": {
       "amount_paise": {
         "min": 1,
@@ -45,16 +53,181 @@
     },
     "_source": {
       "file": "audit_rules.json",
+      "limits_file": "payment_limits.json",
       "profile_id": "v1-verified",
       "profile_overrides": []
     }
   },
   "summary": {
-    "CLEAN": 21,
-    "TRAP": 7,
+    "CLEAN": 26,
+    "TRAP": 3,
     "SIGNAL": 18,
     "NOISE": 14,
+    "ARTEFACT": 9,
     "INCONCLUSIVE": 8
+  },
+  "do_not_use": {
+    "semantics": "Off-only. Each entry names a field or pattern that must not be used as evidence, with the test that found it. The list can only switch a signal off: it never enables a signal and carries no weight, threshold or value for scoring.",
+    "entries": [
+      {
+        "finding": "check_consistency:is_foreign_ip,is_headless",
+        "kind": "pattern",
+        "name": "is_foreign_ip and is_headless counted as two independent signals",
+        "test": "identical columns",
+        "evidence": {
+          "n_rows": 2000000,
+          "n_values": 2,
+          "n_pairs": 2
+        }
+      },
+      {
+        "finding": "check_distribution:device",
+        "kind": "field",
+        "name": "device (how often each value occurs)",
+        "test": "too-even distribution",
+        "evidence": {
+          "n_values": 3,
+          "relative_spread": 0.00087,
+          "chi2": 0.292826,
+          "dof": 2,
+          "p_value": 0.863801,
+          "min_expected": 665782.0
+        }
+      },
+      {
+        "finding": "check_distribution:device",
+        "kind": "pattern",
+        "name": "row counts of the rare values of device",
+        "test": "identical rare counts",
+        "evidence": {
+          "n_rare_values": 2,
+          "rows_each": 1327,
+          "tie_probability": 0.007744
+        }
+      },
+      {
+        "finding": "check_distribution:bank",
+        "kind": "field",
+        "name": "bank (how often each value occurs)",
+        "test": "too-even distribution",
+        "evidence": {
+          "n_values": 10,
+          "relative_spread": 0.048647,
+          "chi2": 6.139227,
+          "dof": 9,
+          "p_value": 0.725907,
+          "min_expected": 2487.3
+        }
+      },
+      {
+        "finding": "check_distribution:ifsc_bank",
+        "kind": "field",
+        "name": "ifsc_bank (how often each value occurs)",
+        "test": "too-even distribution",
+        "evidence": {
+          "n_values": 10,
+          "relative_spread": 0.048647,
+          "chi2": 6.139227,
+          "dof": 9,
+          "p_value": 0.725907,
+          "min_expected": 2487.3
+        }
+      },
+      {
+        "finding": "check_time_pattern:ts",
+        "kind": "pattern",
+        "name": "hour_of_day of ts as evidence of unusual timing",
+        "test": "unrealistically flat time pattern",
+        "evidence": {
+          "n_slots": 24,
+          "relative_spread": 0.010572,
+          "chi2": 10.28608,
+          "dof": 23,
+          "p_value": 0.989364,
+          "min_expected": 83333.333333
+        }
+      },
+      {
+        "finding": "check_time_pattern:ts",
+        "kind": "pattern",
+        "name": "day_of_week of ts as evidence of unusual timing",
+        "test": "unrealistically flat time pattern",
+        "evidence": {
+          "n_slots": 7,
+          "relative_spread": 0.006515,
+          "chi2": 8.592719,
+          "dof": 6,
+          "p_value": 0.197812,
+          "min_expected": 266666.666667
+        }
+      },
+      {
+        "finding": "check_row_position:device",
+        "kind": "pattern",
+        "name": "row position (tx_key order) of rows with a rare device value",
+        "test": "unusual rows concentrated by row position",
+        "evidence": {
+          "n_unusual_rows": 2654,
+          "bins_holding_unusual_rows": 1,
+          "n_bins": 20,
+          "max_bin_lift": 20.0,
+          "time_sorted_share": 0.500192,
+          "chi2": 50426.0,
+          "dof": 19,
+          "p_value": 0.0,
+          "min_expected": 132.7
+        }
+      },
+      {
+        "finding": "check_row_position:is_foreign_ip",
+        "kind": "pattern",
+        "name": "row position (tx_key order) of rows with a rare is_foreign_ip value",
+        "test": "unusual rows concentrated by row position",
+        "evidence": {
+          "n_unusual_rows": 2654,
+          "bins_holding_unusual_rows": 1,
+          "n_bins": 20,
+          "max_bin_lift": 20.0,
+          "time_sorted_share": 0.500192,
+          "chi2": 50426.0,
+          "dof": 19,
+          "p_value": 0.0,
+          "min_expected": 132.7
+        }
+      },
+      {
+        "finding": "check_row_position:is_headless",
+        "kind": "pattern",
+        "name": "row position (tx_key order) of rows with a rare is_headless value",
+        "test": "unusual rows concentrated by row position",
+        "evidence": {
+          "n_unusual_rows": 2654,
+          "bins_holding_unusual_rows": 1,
+          "n_bins": 20,
+          "max_bin_lift": 20.0,
+          "time_sorted_share": 0.500192,
+          "chi2": 50426.0,
+          "dof": 19,
+          "p_value": 0.0,
+          "min_expected": 132.7
+        }
+      },
+      {
+        "finding": "check_adjacency:dst,src",
+        "kind": "pattern",
+        "name": "adjacency in tx_key order of rows linked by dst = next src",
+        "test": "linked rows adjacent more than chance",
+        "evidence": {
+          "n_pairs": 1999999,
+          "n_linked_neighbours": 1708,
+          "chance_link_probability": 4.2e-05,
+          "expected_by_chance": 84.863273,
+          "ratio_to_chance": 20.126492,
+          "z": 176.199402,
+          "p_value": 0.0
+        }
+      }
+    ]
   },
   "findings": [
     {
@@ -82,7 +255,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "tx_id has one shape, A9, on every row."
+      "explanation": "tx_id has one shape, A9, on every row.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:utr",
@@ -101,7 +275,8 @@
         "shapes": []
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "utr is empty (all 2,000,000 rows NULL)."
+      "explanation": "utr is empty (all 2,000,000 rows NULL).",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:mode",
@@ -128,7 +303,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "mode has one shape, A, on every row."
+      "explanation": "mode has one shape, A, on every row.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:narration",
@@ -190,7 +366,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "narration has 6 shapes; 3 are rare (2,954 rows, each under 1.00%)."
+      "explanation": "narration has 6 shapes; 3 are rare (2,954 rows, each under 1.00%).",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:narr_rail",
@@ -199,7 +376,7 @@
         "column": "narr_rail"
       },
       "question": "Which formats does narr_rail take, and are any of them rare?",
-      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(split_part(t.narration, '/', 1) AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(split_part(t.narration, '/', 1) AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(regexp_extract(t.narration, '^[A-Za-z]+') AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(regexp_extract(t.narration, '^[A-Za-z]+') AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
       "result": {
         "n_rows": 2000000,
         "n_null": 0,
@@ -217,7 +394,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "narr_rail has one shape, A, on every row."
+      "explanation": "narr_rail has one shape, A, on every row.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:ip",
@@ -244,7 +422,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "ip has one shape, 9.9.9.9, on every row."
+      "explanation": "ip has one shape, 9.9.9.9, on every row.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:device",
@@ -278,7 +457,8 @@
         ]
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "device mixes 2 common shapes; none is rare."
+      "explanation": "device mixes 2 common shapes; none is rare.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:acct_no",
@@ -305,7 +485,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "acct_no has one shape, A9, on every row."
+      "explanation": "acct_no has one shape, A9, on every row.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:ifsc",
@@ -332,7 +513,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "ifsc has one shape, A9, on every row."
+      "explanation": "ifsc has one shape, A9, on every row.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:bank",
@@ -359,7 +541,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "bank has one shape, A, on every row."
+      "explanation": "bank has one shape, A, on every row.",
+      "do_not_use": []
     },
     {
       "id": "profile_shapes:ifsc_bank",
@@ -368,7 +551,7 @@
         "column": "ifsc_bank"
       },
       "question": "Which formats does ifsc_bank take, and are any of them rare?",
-      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(substr(t.ifsc, 1, 4) AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(substr(t.ifsc, 1, 4) AS VARCHAR)) AS len\n    FROM accounts t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(regexp_extract(t.ifsc, '^[A-Za-z]+') AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(regexp_extract(t.ifsc, '^[A-Za-z]+') AS VARCHAR)) AS len\n    FROM accounts t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
       "result": {
         "n_rows": 24873,
         "n_null": 0,
@@ -386,7 +569,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "ifsc_bank has one shape, A, on every row."
+      "explanation": "ifsc_bank has one shape, A, on every row.",
+      "do_not_use": []
     },
     {
       "id": "check_uniqueness:tx_key",
@@ -408,7 +592,8 @@
         "n_exact_copy_values": 0
       },
       "verdict": "CLEAN",
-      "explanation": "tx_key is unique: 2,000,000 values on 2,000,000 rows."
+      "explanation": "tx_key is unique: 2,000,000 values on 2,000,000 rows.",
+      "do_not_use": []
     },
     {
       "id": "check_uniqueness:tx_id",
@@ -430,7 +615,8 @@
         "n_exact_copy_values": 0
       },
       "verdict": "TRAP",
-      "explanation": "tx_id looks like an identifier but 2,250 values repeat across 4,502 rows; 2,250 of them label different records, so it cannot be used as a key."
+      "explanation": "tx_id looks like an identifier but 2,250 values repeat across 4,502 rows; 2,250 of them label different records, so it cannot be used as a key.",
+      "do_not_use": []
     },
     {
       "id": "check_uniqueness:utr",
@@ -452,7 +638,8 @@
         "n_exact_copy_values": 0
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "utr is empty (all 2,000,000 rows NULL)."
+      "explanation": "utr is empty (all 2,000,000 rows NULL).",
+      "do_not_use": []
     },
     {
       "id": "check_uniqueness:acct_id",
@@ -474,7 +661,8 @@
         "n_exact_copy_values": 0
       },
       "verdict": "CLEAN",
-      "explanation": "acct_id is unique: 24,873 values on 24,873 rows."
+      "explanation": "acct_id is unique: 24,873 values on 24,873 rows.",
+      "do_not_use": []
     },
     {
       "id": "check_uniqueness:acct_no",
@@ -496,7 +684,8 @@
         "n_exact_copy_values": 0
       },
       "verdict": "CLEAN",
-      "explanation": "acct_no is unique: 24,873 values on 24,873 rows."
+      "explanation": "acct_no is unique: 24,873 values on 24,873 rows.",
+      "do_not_use": []
     },
     {
       "id": "check_consistency:narr_rail,mode",
@@ -505,8 +694,8 @@
         "col_a": "narr_rail",
         "col_b": "mode"
       },
-      "question": "Do narr_rail and mode agree, or does one tell us nothing about the other?",
-      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(split_part(t.narration, '/', 1) AS VARCHAR) AS a, CAST(t.mode AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
+      "question": "Do narr_rail and mode agree, repeat each other, or say nothing about each other?",
+      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(regexp_extract(t.narration, '^[A-Za-z]+') AS VARCHAR) AS a, CAST(t.mode AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
       "result": {
         "n_rows": 2000000,
         "n_values_a": 3,
@@ -598,7 +787,8 @@
         ]
       },
       "verdict": "TRAP",
-      "explanation": "narr_rail and mode disagree on 978,058 of 2,000,000 rows (48.90%) and are statistically independent (Cramer's V 0.002): neither can validate the other."
+      "explanation": "narr_rail and mode disagree on 978,058 of 2,000,000 rows (48.90%) and are statistically independent (Cramer's V 0.002): neither can validate the other.",
+      "do_not_use": []
     },
     {
       "id": "check_consistency:device,is_headless",
@@ -607,7 +797,7 @@
         "col_a": "device",
         "col_b": "is_headless"
       },
-      "question": "Do device and is_headless agree, or does one tell us nothing about the other?",
+      "question": "Do device and is_headless agree, repeat each other, or say nothing about each other?",
       "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.device AS VARCHAR) AS a, CAST(t.is_headless AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
       "result": {
         "n_rows": 2000000,
@@ -654,7 +844,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "device fully determines is_headless: the two are consistent."
+      "explanation": "device fully determines is_headless: the two are consistent.",
+      "do_not_use": []
     },
     {
       "id": "check_consistency:mode,device",
@@ -663,7 +854,7 @@
         "col_a": "mode",
         "col_b": "device"
       },
-      "question": "Do mode and device agree, or does one tell us nothing about the other?",
+      "question": "Do mode and device agree, repeat each other, or say nothing about each other?",
       "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.mode AS VARCHAR) AS a, CAST(t.device AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
       "result": {
         "n_rows": 2000000,
@@ -764,7 +955,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "mode and device are statistically independent (Cramer's V 0.030)."
+      "explanation": "mode and device are statistically independent (Cramer's V 0.030).",
+      "do_not_use": []
     },
     {
       "id": "check_consistency:is_foreign_ip,is_headless",
@@ -773,19 +965,16 @@
         "col_a": "is_foreign_ip",
         "col_b": "is_headless"
       },
-      "question": "Do is_foreign_ip and is_headless agree, or does one tell us nothing about the other?",
+      "question": "Do is_foreign_ip and is_headless agree, repeat each other, or say nothing about each other?",
       "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.is_foreign_ip AS VARCHAR) AS a, CAST(t.is_headless AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
       "result": {
         "n_rows": 2000000,
         "n_values_a": 2,
         "n_values_b": 2,
         "n_pairs": 2,
-        "shared_values": [
-          "false",
-          "true"
-        ],
-        "n_mismatch": 0,
-        "mismatch_share": 0.0,
+        "shared_values": [],
+        "n_mismatch": null,
+        "mismatch_share": null,
         "cramers_v": 1.0,
         "a_determines_b": true,
         "b_determines_a": true,
@@ -804,8 +993,20 @@
           }
         ]
       },
-      "verdict": "CLEAN",
-      "explanation": "is_foreign_ip and is_headless agree on all 2,000,000 rows."
+      "verdict": "ARTEFACT",
+      "explanation": "is_foreign_ip and is_headless are the same column under different labels on all 2,000,000 rows: one piece of information, not two.",
+      "do_not_use": [
+        {
+          "kind": "pattern",
+          "name": "is_foreign_ip and is_headless counted as two independent signals",
+          "test": "identical columns",
+          "evidence": {
+            "n_rows": 2000000,
+            "n_values": 2,
+            "n_pairs": 2
+          }
+        }
+      ]
     },
     {
       "id": "check_consistency:bank,ifsc_bank",
@@ -814,8 +1015,8 @@
         "col_a": "bank",
         "col_b": "ifsc_bank"
       },
-      "question": "Do bank and ifsc_bank agree, or does one tell us nothing about the other?",
-      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.bank AS VARCHAR) AS a, CAST(substr(t.ifsc, 1, 4) AS VARCHAR) AS b\n    FROM accounts t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
+      "question": "Do bank and ifsc_bank agree, repeat each other, or say nothing about each other?",
+      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.bank AS VARCHAR) AS a, CAST(regexp_extract(t.ifsc, '^[A-Za-z]+') AS VARCHAR) AS b\n    FROM accounts t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
       "result": {
         "n_rows": 24873,
         "n_values_a": 10,
@@ -902,7 +1103,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "bank and ifsc_bank agree on all 24,873 rows."
+      "explanation": "bank and ifsc_bank agree on all 24,873 rows.",
+      "do_not_use": []
     },
     {
       "id": "check_ranges:amount_paise",
@@ -964,7 +1166,8 @@
         ]
       },
       "verdict": "TRAP",
-      "explanation": "amount_paise: 59,747 of 59,823 rows in mode=RTGS are below the minimum (99.87%); the field ignores this real-world limit (2 limits broken in all)."
+      "explanation": "amount_paise: 59,747 of 59,823 rows in mode=RTGS are below the minimum (99.87%); the field ignores this real-world limit (2 limits broken in all).",
+      "do_not_use": []
     },
     {
       "id": "check_ranges:ts",
@@ -985,7 +1188,8 @@
         "limits": []
       },
       "verdict": "CLEAN",
-      "explanation": "ts has no NULLs; no limit is configured for it."
+      "explanation": "ts has no NULLs; no limit is configured for it.",
+      "do_not_use": []
     },
     {
       "id": "check_ranges:first_seen",
@@ -1006,7 +1210,8 @@
         "limits": []
       },
       "verdict": "CLEAN",
-      "explanation": "first_seen has no NULLs; no limit is configured for it."
+      "explanation": "first_seen has no NULLs; no limit is configured for it.",
+      "do_not_use": []
     },
     {
       "id": "check_ranges:last_seen",
@@ -1027,7 +1232,8 @@
         "limits": []
       },
       "verdict": "CLEAN",
-      "explanation": "last_seen has no NULLs; no limit is configured for it."
+      "explanation": "last_seen has no NULLs; no limit is configured for it.",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:amount_paise",
@@ -1036,17 +1242,23 @@
         "column": "amount_paise"
       },
       "question": "Is the spread of amount_paise (first digit) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT left(CAST(abs(t.amount_paise) AS VARCHAR), 1) AS v FROM tx t WHERE t.amount_paise <> 0)\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT left(CAST(abs(t.amount_paise) AS VARCHAR), 1) AS v FROM tx t WHERE t.amount_paise <> 0)\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 9,
         "n_major_values": 9,
         "n_rare_values": 0,
         "rows_in_rare_values": 0,
-        "major_chi2_per_dof_vs_equal": 120917.253722,
-        "major_relative_spread": 2.302857,
-        "major_split_is_even": false,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": 967338.029779,
+          "dof": 8,
+          "p_value": 0.0,
+          "min_expected": 222222.222222,
+          "relative_spread": 2.302857,
+          "is_even": false
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "1",
@@ -1097,151 +1309,8 @@
         "benford_mad": 0.002404
       },
       "verdict": "CLEAN",
-      "explanation": "amount_paise first digits follow the natural (Benford) curve (MAD 0.0024)."
-    },
-    {
-      "id": "check_distribution:ts_hour",
-      "tool": "check_distribution",
-      "args": {
-        "column": "ts_hour"
-      },
-      "question": "Is the spread of ts_hour (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(hour(t.ts) AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
-      "result": {
-        "n_rows": 2000000,
-        "n_values": 24,
-        "n_major_values": 24,
-        "n_rare_values": 0,
-        "rows_in_rare_values": 0,
-        "major_chi2_per_dof_vs_equal": 0.447221,
-        "major_relative_spread": 0.010572,
-        "major_split_is_even": true,
-        "rare_split_is_even": false,
-        "values": [
-          {
-            "value": "22",
-            "rows": 83906,
-            "share": 0.041953
-          },
-          {
-            "value": "13",
-            "rows": 83654,
-            "share": 0.041827
-          },
-          {
-            "value": "1",
-            "rows": 83522,
-            "share": 0.041761
-          },
-          {
-            "value": "21",
-            "rows": 83502,
-            "share": 0.041751
-          },
-          {
-            "value": "0",
-            "rows": 83462,
-            "share": 0.041731
-          },
-          {
-            "value": "12",
-            "rows": 83430,
-            "share": 0.041715
-          },
-          {
-            "value": "7",
-            "rows": 83409,
-            "share": 0.041704
-          },
-          {
-            "value": "9",
-            "rows": 83396,
-            "share": 0.041698
-          },
-          {
-            "value": "6",
-            "rows": 83367,
-            "share": 0.041683
-          },
-          {
-            "value": "5",
-            "rows": 83365,
-            "share": 0.041682
-          },
-          {
-            "value": "20",
-            "rows": 83360,
-            "share": 0.04168
-          },
-          {
-            "value": "11",
-            "rows": 83331,
-            "share": 0.041666
-          },
-          {
-            "value": "23",
-            "rows": 83293,
-            "share": 0.041647
-          },
-          {
-            "value": "2",
-            "rows": 83286,
-            "share": 0.041643
-          },
-          {
-            "value": "15",
-            "rows": 83268,
-            "share": 0.041634
-          },
-          {
-            "value": "10",
-            "rows": 83255,
-            "share": 0.041627
-          },
-          {
-            "value": "8",
-            "rows": 83244,
-            "share": 0.041622
-          },
-          {
-            "value": "19",
-            "rows": 83242,
-            "share": 0.041621
-          },
-          {
-            "value": "14",
-            "rows": 83182,
-            "share": 0.041591
-          },
-          {
-            "value": "16",
-            "rows": 83164,
-            "share": 0.041582
-          },
-          {
-            "value": "17",
-            "rows": 83123,
-            "share": 0.041562
-          },
-          {
-            "value": "3",
-            "rows": 83110,
-            "share": 0.041555
-          },
-          {
-            "value": "18",
-            "rows": 83104,
-            "share": 0.041552
-          },
-          {
-            "value": "4",
-            "rows": 83025,
-            "share": 0.041513
-          }
-        ]
-      },
-      "verdict": "TRAP",
-      "explanation": "ts_hour: 24 values split evenly within random noise (4.17% each, spread 1.06%), as a random generator would; do not read meaning into it."
+      "explanation": "amount_paise first digits follow the natural (Benford) curve (MAD 0.0024).",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:mode",
@@ -1250,17 +1319,23 @@
         "column": "mode"
       },
       "question": "Is the spread of mode (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.mode AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.mode AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 4,
         "n_major_values": 4,
         "n_rare_values": 0,
         "rows_in_rare_values": 0,
-        "major_chi2_per_dof_vs_equal": 618322.748815,
-        "major_relative_spread": 2.480042,
-        "major_split_is_even": false,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": 1854968.246444,
+          "dof": 3,
+          "p_value": 0.0,
+          "min_expected": 500000.0,
+          "relative_spread": 2.480042,
+          "is_even": false
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "UPI",
@@ -1285,7 +1360,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "mode is spread unevenly across 4 values with no rare one."
+      "explanation": "mode is spread unevenly across 4 values with no rare one.",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:narr_rail",
@@ -1294,17 +1370,23 @@
         "column": "narr_rail"
       },
       "question": "Is the spread of narr_rail (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(split_part(t.narration, '/', 1) AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(regexp_extract(t.narration, '^[A-Za-z]+') AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 3,
         "n_major_values": 3,
         "n_rare_values": 0,
         "rows_in_rare_values": 0,
-        "major_chi2_per_dof_vs_equal": 654144.103789,
-        "major_relative_spread": 1.71718,
-        "major_split_is_even": false,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": 1308288.207577,
+          "dof": 2,
+          "p_value": 0.0,
+          "min_expected": 666666.666667,
+          "relative_spread": 1.71718,
+          "is_even": false
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "UPI",
@@ -1324,7 +1406,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "narr_rail is spread unevenly across 3 values with no rare one."
+      "explanation": "narr_rail is spread unevenly across 3 values with no rare one.",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:device",
@@ -1333,17 +1416,23 @@
         "column": "device"
       },
       "question": "Is the spread of device (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.device AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.device AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 5,
         "n_major_values": 3,
         "n_rare_values": 2,
         "rows_in_rare_values": 2654,
-        "major_chi2_per_dof_vs_equal": 0.146413,
-        "major_relative_spread": 0.00087,
-        "major_split_is_even": true,
-        "rare_split_is_even": true,
+        "equal_split_test": {
+          "chi2": 0.292826,
+          "dof": 2,
+          "p_value": 0.863801,
+          "min_expected": 665782.0,
+          "relative_spread": 0.00087,
+          "is_even": true
+        },
+        "rare_counts_identical": true,
+        "rare_tie_probability": 0.007744,
         "values": [
           {
             "value": "Windows_Browser",
@@ -1372,8 +1461,33 @@
           }
         ]
       },
-      "verdict": "TRAP",
-      "explanation": "device: 3 values split evenly within random noise (33.33% each, spread 0.09%), as a random generator would; do not read meaning into it. Rare: Linux_Script, Web_Emulator (2,654 rows, near-identical counts)."
+      "verdict": "ARTEFACT",
+      "explanation": "device: 3 values split evenly (33.33% each, spread 0.09%, equal-split p 0.864), as a random generator would; 2 rare values have exactly the same count (1,327 rows each, chance 0.00774). Do not read meaning into it.",
+      "do_not_use": [
+        {
+          "kind": "field",
+          "name": "device (how often each value occurs)",
+          "test": "too-even distribution",
+          "evidence": {
+            "n_values": 3,
+            "relative_spread": 0.00087,
+            "chi2": 0.292826,
+            "dof": 2,
+            "p_value": 0.863801,
+            "min_expected": 665782.0
+          }
+        },
+        {
+          "kind": "pattern",
+          "name": "row counts of the rare values of device",
+          "test": "identical rare counts",
+          "evidence": {
+            "n_rare_values": 2,
+            "rows_each": 1327,
+            "tie_probability": 0.007744
+          }
+        }
+      ]
     },
     {
       "id": "check_distribution:is_foreign_ip",
@@ -1382,17 +1496,23 @@
         "column": "is_foreign_ip"
       },
       "question": "Is the spread of is_foreign_ip (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_foreign_ip AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_foreign_ip AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 2,
         "n_major_values": 1,
         "n_rare_values": 1,
         "rows_in_rare_values": 2654,
-        "major_chi2_per_dof_vs_equal": null,
-        "major_relative_spread": null,
-        "major_split_is_even": false,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": null,
+          "dof": 0,
+          "p_value": null,
+          "min_expected": null,
+          "relative_spread": null,
+          "is_even": false
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "false",
@@ -1407,7 +1527,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "is_foreign_ip is dominated by 1 main value(s). Rare: true (2,654 rows)."
+      "explanation": "is_foreign_ip is dominated by 1 main value(s). Rare: true (2,654 rows).",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:is_reserved_ip",
@@ -1416,17 +1537,23 @@
         "column": "is_reserved_ip"
       },
       "question": "Is the spread of is_reserved_ip (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_reserved_ip AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_reserved_ip AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 1,
         "n_major_values": 1,
         "n_rare_values": 0,
         "rows_in_rare_values": 0,
-        "major_chi2_per_dof_vs_equal": null,
-        "major_relative_spread": null,
-        "major_split_is_even": false,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": null,
+          "dof": 0,
+          "p_value": null,
+          "min_expected": null,
+          "relative_spread": null,
+          "is_even": false
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "false",
@@ -1436,7 +1563,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "is_reserved_ip is constant: it carries no information."
+      "explanation": "is_reserved_ip is constant: it carries no information.",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:is_headless",
@@ -1445,17 +1573,23 @@
         "column": "is_headless"
       },
       "question": "Is the spread of is_headless (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_headless AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_headless AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 2,
         "n_major_values": 1,
         "n_rare_values": 1,
         "rows_in_rare_values": 2654,
-        "major_chi2_per_dof_vs_equal": null,
-        "major_relative_spread": null,
-        "major_split_is_even": false,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": null,
+          "dof": 0,
+          "p_value": null,
+          "min_expected": null,
+          "relative_spread": null,
+          "is_even": false
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "false",
@@ -1470,7 +1604,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "is_headless is dominated by 1 main value(s). Rare: true (2,654 rows)."
+      "explanation": "is_headless is dominated by 1 main value(s). Rare: true (2,654 rows).",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:is_dup_tx_id",
@@ -1479,17 +1614,23 @@
         "column": "is_dup_tx_id"
       },
       "question": "Is the spread of is_dup_tx_id (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_dup_tx_id AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_dup_tx_id AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 2000000,
         "n_values": 2,
         "n_major_values": 1,
         "n_rare_values": 1,
         "rows_in_rare_values": 4502,
-        "major_chi2_per_dof_vs_equal": null,
-        "major_relative_spread": null,
-        "major_split_is_even": false,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": null,
+          "dof": 0,
+          "p_value": null,
+          "min_expected": null,
+          "relative_spread": null,
+          "is_even": false
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "false",
@@ -1504,7 +1645,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "is_dup_tx_id is dominated by 1 main value(s). Rare: true (4,502 rows)."
+      "explanation": "is_dup_tx_id is dominated by 1 main value(s). Rare: true (4,502 rows).",
+      "do_not_use": []
     },
     {
       "id": "check_distribution:bank",
@@ -1513,17 +1655,23 @@
         "column": "bank"
       },
       "question": "Is the spread of bank (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.bank AS VARCHAR) AS v FROM accounts t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.bank AS VARCHAR) AS v FROM accounts t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 24873,
         "n_values": 10,
         "n_major_values": 10,
         "n_rare_values": 0,
         "rows_in_rare_values": 0,
-        "major_chi2_per_dof_vs_equal": 0.682136,
-        "major_relative_spread": 0.048647,
-        "major_split_is_even": true,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": 6.139227,
+          "dof": 9,
+          "p_value": 0.725907,
+          "min_expected": 2487.3,
+          "relative_spread": 0.048647,
+          "is_even": true
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "SBIN",
@@ -1577,8 +1725,23 @@
           }
         ]
       },
-      "verdict": "TRAP",
-      "explanation": "bank: 10 values split evenly within random noise (10.00% each, spread 4.86%), as a random generator would; do not read meaning into it."
+      "verdict": "ARTEFACT",
+      "explanation": "bank: 10 values split evenly (10.00% each, spread 4.86%, equal-split p 0.726), as a random generator would. Do not read meaning into it.",
+      "do_not_use": [
+        {
+          "kind": "field",
+          "name": "bank (how often each value occurs)",
+          "test": "too-even distribution",
+          "evidence": {
+            "n_values": 10,
+            "relative_spread": 0.048647,
+            "chi2": 6.139227,
+            "dof": 9,
+            "p_value": 0.725907,
+            "min_expected": 2487.3
+          }
+        }
+      ]
     },
     {
       "id": "check_distribution:ifsc_bank",
@@ -1587,17 +1750,23 @@
         "column": "ifsc_bank"
       },
       "question": "Is the spread of ifsc_bank (value) natural, artificially even, or hiding rare values?",
-      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(substr(t.ifsc, 1, 4) AS VARCHAR) AS v FROM accounts t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(regexp_extract(t.ifsc, '^[A-Za-z]+') AS VARCHAR) AS v FROM accounts t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 65",
       "result": {
         "n_rows": 24873,
         "n_values": 10,
         "n_major_values": 10,
         "n_rare_values": 0,
         "rows_in_rare_values": 0,
-        "major_chi2_per_dof_vs_equal": 0.682136,
-        "major_relative_spread": 0.048647,
-        "major_split_is_even": true,
-        "rare_split_is_even": false,
+        "equal_split_test": {
+          "chi2": 6.139227,
+          "dof": 9,
+          "p_value": 0.725907,
+          "min_expected": 2487.3,
+          "relative_spread": 0.048647,
+          "is_even": true
+        },
+        "rare_counts_identical": false,
+        "rare_tie_probability": null,
         "values": [
           {
             "value": "SBIN",
@@ -1651,8 +1820,597 @@
           }
         ]
       },
-      "verdict": "TRAP",
-      "explanation": "ifsc_bank: 10 values split evenly within random noise (10.00% each, spread 4.86%), as a random generator would; do not read meaning into it."
+      "verdict": "ARTEFACT",
+      "explanation": "ifsc_bank: 10 values split evenly (10.00% each, spread 4.86%, equal-split p 0.726), as a random generator would. Do not read meaning into it.",
+      "do_not_use": [
+        {
+          "kind": "field",
+          "name": "ifsc_bank (how often each value occurs)",
+          "test": "too-even distribution",
+          "evidence": {
+            "n_values": 10,
+            "relative_spread": 0.048647,
+            "chi2": 6.139227,
+            "dof": 9,
+            "p_value": 0.725907,
+            "min_expected": 2487.3
+          }
+        }
+      ]
+    },
+    {
+      "id": "check_time_pattern:ts",
+      "tool": "check_time_pattern",
+      "args": {
+        "column": "ts"
+      },
+      "question": "Does ts show a daily and weekly rhythm, or is activity unrealistically flat?",
+      "sql": "WITH d AS (SELECT t.ts AS x FROM tx t WHERE t.ts IS NOT NULL)\nSELECT 'hour_of_day' AS cycle, hour(x) AS slot, count(*) AS n, count(DISTINCT CAST(x AS DATE)) AS n_dates FROM d GROUP BY 2 UNION ALL SELECT 'day_of_week' AS cycle, dayofweek(x) AS slot, count(*) AS n, count(DISTINCT CAST(x AS DATE)) AS n_dates FROM d GROUP BY 2\nORDER BY 1, 2",
+      "result": {
+        "cycles": {
+          "hour_of_day": {
+            "n_rows": 2000000,
+            "n_slots": 24,
+            "slots_in_full_cycle": 24,
+            "complete": true,
+            "flat_test": {
+              "chi2": 10.28608,
+              "dof": 23,
+              "p_value": 0.989364,
+              "min_expected": 83333.333333
+            },
+            "relative_spread": 0.010572,
+            "is_flat": true,
+            "rows_per_slot": [
+              83462,
+              83522,
+              83286,
+              83110,
+              83025,
+              83365,
+              83367,
+              83409,
+              83244,
+              83396,
+              83255,
+              83331,
+              83430,
+              83654,
+              83182,
+              83268,
+              83164,
+              83123,
+              83104,
+              83242,
+              83360,
+              83502,
+              83906,
+              83293
+            ]
+          },
+          "day_of_week": {
+            "n_rows": 2000000,
+            "n_slots": 7,
+            "slots_in_full_cycle": 7,
+            "complete": true,
+            "flat_test": {
+              "chi2": 8.592719,
+              "dof": 6,
+              "p_value": 0.197812,
+              "min_expected": 266666.666667
+            },
+            "relative_spread": 0.006515,
+            "is_flat": true,
+            "rows_per_slot": [
+              266145,
+              266647,
+              400785,
+              265601,
+              266670,
+              266814,
+              267338
+            ]
+          }
+        }
+      },
+      "verdict": "ARTEFACT",
+      "explanation": "ts is flat across hour of day (spread 1.06%, flat p 0.989) and day of week (spread 0.65%, flat p 0.198): no human rhythm, so the time of day or week of an event says nothing by itself.",
+      "do_not_use": [
+        {
+          "kind": "pattern",
+          "name": "hour_of_day of ts as evidence of unusual timing",
+          "test": "unrealistically flat time pattern",
+          "evidence": {
+            "n_slots": 24,
+            "relative_spread": 0.010572,
+            "chi2": 10.28608,
+            "dof": 23,
+            "p_value": 0.989364,
+            "min_expected": 83333.333333
+          }
+        },
+        {
+          "kind": "pattern",
+          "name": "day_of_week of ts as evidence of unusual timing",
+          "test": "unrealistically flat time pattern",
+          "evidence": {
+            "n_slots": 7,
+            "relative_spread": 0.006515,
+            "chi2": 8.592719,
+            "dof": 6,
+            "p_value": 0.197812,
+            "min_expected": 266666.666667
+          }
+        }
+      ]
+    },
+    {
+      "id": "check_row_position:mode",
+      "tool": "check_row_position",
+      "args": {
+        "column": "mode"
+      },
+      "question": "Do rows with a rare mode value cluster by position in the file (tx_key order)?",
+      "sql": "WITH v AS (\n    SELECT CAST(t.mode AS VARCHAR) AS v, count(*) AS n FROM tx t GROUP BY 1\n),\nrare AS (\n    SELECT v FROM v WHERE v IS NOT NULL AND n < 0.01 * (SELECT sum(n) FROM v)\n),\nd AS (\n    SELECT ntile(20) OVER (ORDER BY t.tx_key) AS bin,\n           CAST(t.mode AS VARCHAR) IN (SELECT v FROM rare) AS unusual,\n           t.ts >= lag(t.ts) OVER (ORDER BY t.tx_key) AS in_time_order\n    FROM tx t\n)\nSELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,\n       count(*) FILTER (in_time_order) AS n_in_time_order\nFROM d\nGROUP BY bin\nORDER BY bin",
+      "result": {
+        "n_rows": 2000000,
+        "n_unusual_rows": 0,
+        "n_bins": 20,
+        "position_test": {
+          "chi2": null,
+          "dof": 19,
+          "p_value": null,
+          "min_expected": null
+        },
+        "max_bin_lift": 0.0,
+        "bins_holding_unusual_rows": 0,
+        "time_sorted_share": 0.500192,
+        "unusual_rows_per_bin": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "mode has no rare value, so no unusual rows to place.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_row_position:narr_rail",
+      "tool": "check_row_position",
+      "args": {
+        "column": "narr_rail"
+      },
+      "question": "Do rows with a rare narr_rail value cluster by position in the file (tx_key order)?",
+      "sql": "WITH v AS (\n    SELECT CAST(regexp_extract(t.narration, '^[A-Za-z]+') AS VARCHAR) AS v, count(*) AS n FROM tx t GROUP BY 1\n),\nrare AS (\n    SELECT v FROM v WHERE v IS NOT NULL AND n < 0.01 * (SELECT sum(n) FROM v)\n),\nd AS (\n    SELECT ntile(20) OVER (ORDER BY t.tx_key) AS bin,\n           CAST(regexp_extract(t.narration, '^[A-Za-z]+') AS VARCHAR) IN (SELECT v FROM rare) AS unusual,\n           t.ts >= lag(t.ts) OVER (ORDER BY t.tx_key) AS in_time_order\n    FROM tx t\n)\nSELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,\n       count(*) FILTER (in_time_order) AS n_in_time_order\nFROM d\nGROUP BY bin\nORDER BY bin",
+      "result": {
+        "n_rows": 2000000,
+        "n_unusual_rows": 0,
+        "n_bins": 20,
+        "position_test": {
+          "chi2": null,
+          "dof": 19,
+          "p_value": null,
+          "min_expected": null
+        },
+        "max_bin_lift": 0.0,
+        "bins_holding_unusual_rows": 0,
+        "time_sorted_share": 0.500192,
+        "unusual_rows_per_bin": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "narr_rail has no rare value, so no unusual rows to place.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_row_position:device",
+      "tool": "check_row_position",
+      "args": {
+        "column": "device"
+      },
+      "question": "Do rows with a rare device value cluster by position in the file (tx_key order)?",
+      "sql": "WITH v AS (\n    SELECT CAST(t.device AS VARCHAR) AS v, count(*) AS n FROM tx t GROUP BY 1\n),\nrare AS (\n    SELECT v FROM v WHERE v IS NOT NULL AND n < 0.01 * (SELECT sum(n) FROM v)\n),\nd AS (\n    SELECT ntile(20) OVER (ORDER BY t.tx_key) AS bin,\n           CAST(t.device AS VARCHAR) IN (SELECT v FROM rare) AS unusual,\n           t.ts >= lag(t.ts) OVER (ORDER BY t.tx_key) AS in_time_order\n    FROM tx t\n)\nSELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,\n       count(*) FILTER (in_time_order) AS n_in_time_order\nFROM d\nGROUP BY bin\nORDER BY bin",
+      "result": {
+        "n_rows": 2000000,
+        "n_unusual_rows": 2654,
+        "n_bins": 20,
+        "position_test": {
+          "chi2": 50426.0,
+          "dof": 19,
+          "p_value": 0.0,
+          "min_expected": 132.7
+        },
+        "max_bin_lift": 20.0,
+        "bins_holding_unusual_rows": 1,
+        "time_sorted_share": 0.500192,
+        "unusual_rows_per_bin": [
+          2654,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "verdict": "ARTEFACT",
+      "explanation": "device: 2,654 unusual rows sit in 1 of 20 file segments (peak 20.0x, p 0) although the file is not in time order: row position gives them away.",
+      "do_not_use": [
+        {
+          "kind": "pattern",
+          "name": "row position (tx_key order) of rows with a rare device value",
+          "test": "unusual rows concentrated by row position",
+          "evidence": {
+            "n_unusual_rows": 2654,
+            "bins_holding_unusual_rows": 1,
+            "n_bins": 20,
+            "max_bin_lift": 20.0,
+            "time_sorted_share": 0.500192,
+            "chi2": 50426.0,
+            "dof": 19,
+            "p_value": 0.0,
+            "min_expected": 132.7
+          }
+        }
+      ]
+    },
+    {
+      "id": "check_row_position:is_foreign_ip",
+      "tool": "check_row_position",
+      "args": {
+        "column": "is_foreign_ip"
+      },
+      "question": "Do rows with a rare is_foreign_ip value cluster by position in the file (tx_key order)?",
+      "sql": "WITH v AS (\n    SELECT CAST(t.is_foreign_ip AS VARCHAR) AS v, count(*) AS n FROM tx t GROUP BY 1\n),\nrare AS (\n    SELECT v FROM v WHERE v IS NOT NULL AND n < 0.01 * (SELECT sum(n) FROM v)\n),\nd AS (\n    SELECT ntile(20) OVER (ORDER BY t.tx_key) AS bin,\n           CAST(t.is_foreign_ip AS VARCHAR) IN (SELECT v FROM rare) AS unusual,\n           t.ts >= lag(t.ts) OVER (ORDER BY t.tx_key) AS in_time_order\n    FROM tx t\n)\nSELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,\n       count(*) FILTER (in_time_order) AS n_in_time_order\nFROM d\nGROUP BY bin\nORDER BY bin",
+      "result": {
+        "n_rows": 2000000,
+        "n_unusual_rows": 2654,
+        "n_bins": 20,
+        "position_test": {
+          "chi2": 50426.0,
+          "dof": 19,
+          "p_value": 0.0,
+          "min_expected": 132.7
+        },
+        "max_bin_lift": 20.0,
+        "bins_holding_unusual_rows": 1,
+        "time_sorted_share": 0.500192,
+        "unusual_rows_per_bin": [
+          2654,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "verdict": "ARTEFACT",
+      "explanation": "is_foreign_ip: 2,654 unusual rows sit in 1 of 20 file segments (peak 20.0x, p 0) although the file is not in time order: row position gives them away.",
+      "do_not_use": [
+        {
+          "kind": "pattern",
+          "name": "row position (tx_key order) of rows with a rare is_foreign_ip value",
+          "test": "unusual rows concentrated by row position",
+          "evidence": {
+            "n_unusual_rows": 2654,
+            "bins_holding_unusual_rows": 1,
+            "n_bins": 20,
+            "max_bin_lift": 20.0,
+            "time_sorted_share": 0.500192,
+            "chi2": 50426.0,
+            "dof": 19,
+            "p_value": 0.0,
+            "min_expected": 132.7
+          }
+        }
+      ]
+    },
+    {
+      "id": "check_row_position:is_reserved_ip",
+      "tool": "check_row_position",
+      "args": {
+        "column": "is_reserved_ip"
+      },
+      "question": "Do rows with a rare is_reserved_ip value cluster by position in the file (tx_key order)?",
+      "sql": "WITH v AS (\n    SELECT CAST(t.is_reserved_ip AS VARCHAR) AS v, count(*) AS n FROM tx t GROUP BY 1\n),\nrare AS (\n    SELECT v FROM v WHERE v IS NOT NULL AND n < 0.01 * (SELECT sum(n) FROM v)\n),\nd AS (\n    SELECT ntile(20) OVER (ORDER BY t.tx_key) AS bin,\n           CAST(t.is_reserved_ip AS VARCHAR) IN (SELECT v FROM rare) AS unusual,\n           t.ts >= lag(t.ts) OVER (ORDER BY t.tx_key) AS in_time_order\n    FROM tx t\n)\nSELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,\n       count(*) FILTER (in_time_order) AS n_in_time_order\nFROM d\nGROUP BY bin\nORDER BY bin",
+      "result": {
+        "n_rows": 2000000,
+        "n_unusual_rows": 0,
+        "n_bins": 20,
+        "position_test": {
+          "chi2": null,
+          "dof": 19,
+          "p_value": null,
+          "min_expected": null
+        },
+        "max_bin_lift": 0.0,
+        "bins_holding_unusual_rows": 0,
+        "time_sorted_share": 0.500192,
+        "unusual_rows_per_bin": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "is_reserved_ip has no rare value, so no unusual rows to place.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_row_position:is_headless",
+      "tool": "check_row_position",
+      "args": {
+        "column": "is_headless"
+      },
+      "question": "Do rows with a rare is_headless value cluster by position in the file (tx_key order)?",
+      "sql": "WITH v AS (\n    SELECT CAST(t.is_headless AS VARCHAR) AS v, count(*) AS n FROM tx t GROUP BY 1\n),\nrare AS (\n    SELECT v FROM v WHERE v IS NOT NULL AND n < 0.01 * (SELECT sum(n) FROM v)\n),\nd AS (\n    SELECT ntile(20) OVER (ORDER BY t.tx_key) AS bin,\n           CAST(t.is_headless AS VARCHAR) IN (SELECT v FROM rare) AS unusual,\n           t.ts >= lag(t.ts) OVER (ORDER BY t.tx_key) AS in_time_order\n    FROM tx t\n)\nSELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,\n       count(*) FILTER (in_time_order) AS n_in_time_order\nFROM d\nGROUP BY bin\nORDER BY bin",
+      "result": {
+        "n_rows": 2000000,
+        "n_unusual_rows": 2654,
+        "n_bins": 20,
+        "position_test": {
+          "chi2": 50426.0,
+          "dof": 19,
+          "p_value": 0.0,
+          "min_expected": 132.7
+        },
+        "max_bin_lift": 20.0,
+        "bins_holding_unusual_rows": 1,
+        "time_sorted_share": 0.500192,
+        "unusual_rows_per_bin": [
+          2654,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "verdict": "ARTEFACT",
+      "explanation": "is_headless: 2,654 unusual rows sit in 1 of 20 file segments (peak 20.0x, p 0) although the file is not in time order: row position gives them away.",
+      "do_not_use": [
+        {
+          "kind": "pattern",
+          "name": "row position (tx_key order) of rows with a rare is_headless value",
+          "test": "unusual rows concentrated by row position",
+          "evidence": {
+            "n_unusual_rows": 2654,
+            "bins_holding_unusual_rows": 1,
+            "n_bins": 20,
+            "max_bin_lift": 20.0,
+            "time_sorted_share": 0.500192,
+            "chi2": 50426.0,
+            "dof": 19,
+            "p_value": 0.0,
+            "min_expected": 132.7
+          }
+        }
+      ]
+    },
+    {
+      "id": "check_row_position:is_dup_tx_id",
+      "tool": "check_row_position",
+      "args": {
+        "column": "is_dup_tx_id"
+      },
+      "question": "Do rows with a rare is_dup_tx_id value cluster by position in the file (tx_key order)?",
+      "sql": "WITH v AS (\n    SELECT CAST(t.is_dup_tx_id AS VARCHAR) AS v, count(*) AS n FROM tx t GROUP BY 1\n),\nrare AS (\n    SELECT v FROM v WHERE v IS NOT NULL AND n < 0.01 * (SELECT sum(n) FROM v)\n),\nd AS (\n    SELECT ntile(20) OVER (ORDER BY t.tx_key) AS bin,\n           CAST(t.is_dup_tx_id AS VARCHAR) IN (SELECT v FROM rare) AS unusual,\n           t.ts >= lag(t.ts) OVER (ORDER BY t.tx_key) AS in_time_order\n    FROM tx t\n)\nSELECT bin, count(*) AS n, count(*) FILTER (unusual) AS n_unusual,\n       count(*) FILTER (in_time_order) AS n_in_time_order\nFROM d\nGROUP BY bin\nORDER BY bin",
+      "result": {
+        "n_rows": 2000000,
+        "n_unusual_rows": 4502,
+        "n_bins": 20,
+        "position_test": {
+          "chi2": 16.54287,
+          "dof": 19,
+          "p_value": 0.620807,
+          "min_expected": 225.1
+        },
+        "max_bin_lift": 1.177255,
+        "bins_holding_unusual_rows": 20,
+        "time_sorted_share": 0.500192,
+        "unusual_rows_per_bin": [
+          227,
+          265,
+          231,
+          238,
+          225,
+          209,
+          211,
+          209,
+          211,
+          235,
+          231,
+          232,
+          210,
+          229,
+          226,
+          215,
+          220,
+          212,
+          224,
+          242
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "is_dup_tx_id: 4,502 unusual rows are spread through the file (p 0.621).",
+      "do_not_use": []
+    },
+    {
+      "id": "check_adjacency:dst,src",
+      "tool": "check_adjacency",
+      "args": {
+        "col_a": "dst",
+        "col_b": "src"
+      },
+      "question": "Is a row's dst the next row's src more often than chance (tx_key order)?",
+      "sql": "WITH d AS (\n    SELECT CAST(t.dst AS VARCHAR) AS a, CAST(t.src AS VARCHAR) AS b,\n           lead(CAST(t.src AS VARCHAR)) OVER (ORDER BY t.tx_key) AS next_b\n    FROM tx t\n),\npa AS (SELECT a AS v, count(*) AS n FROM d WHERE a IS NOT NULL GROUP BY 1),\npb AS (SELECT b AS v, count(*) AS n FROM d WHERE b IS NOT NULL GROUP BY 1)\nSELECT (SELECT count(*) FROM d WHERE a IS NOT NULL AND next_b IS NOT NULL) AS n_pairs,\n       (SELECT count(*) FROM d WHERE a = next_b) AS n_linked,\n       (SELECT coalesce(sum(CAST(pa.n AS DOUBLE) * pb.n), 0) FROM pa JOIN pb ON pa.v = pb.v)\n           / ((SELECT sum(n) FROM pa) * (SELECT sum(n) FROM pb)) AS p_chance",
+      "result": {
+        "n_pairs": 1999999,
+        "n_linked_neighbours": 1708,
+        "chance_link_probability": 4.2e-05,
+        "expected_by_chance": 84.863273,
+        "ratio_to_chance": 20.126492,
+        "z": 176.199402,
+        "p_value": 0.0
+      },
+      "verdict": "ARTEFACT",
+      "explanation": "1,708 neighbouring rows are linked (dst = next src) against 84.9 expected (20x chance): linked rows were written next to each other.",
+      "do_not_use": [
+        {
+          "kind": "pattern",
+          "name": "adjacency in tx_key order of rows linked by dst = next src",
+          "test": "linked rows adjacent more than chance",
+          "evidence": {
+            "n_pairs": 1999999,
+            "n_linked_neighbours": 1708,
+            "chance_link_probability": 4.2e-05,
+            "expected_by_chance": 84.863273,
+            "ratio_to_chance": 20.126492,
+            "z": 176.199402,
+            "p_value": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "check_adjacency:src,src",
+      "tool": "check_adjacency",
+      "args": {
+        "col_a": "src",
+        "col_b": "src"
+      },
+      "question": "Is a row's src the next row's src more often than chance (tx_key order)?",
+      "sql": "WITH d AS (\n    SELECT CAST(t.src AS VARCHAR) AS a, CAST(t.src AS VARCHAR) AS b,\n           lead(CAST(t.src AS VARCHAR)) OVER (ORDER BY t.tx_key) AS next_b\n    FROM tx t\n),\npa AS (SELECT a AS v, count(*) AS n FROM d WHERE a IS NOT NULL GROUP BY 1),\npb AS (SELECT b AS v, count(*) AS n FROM d WHERE b IS NOT NULL GROUP BY 1)\nSELECT (SELECT count(*) FROM d WHERE a IS NOT NULL AND next_b IS NOT NULL) AS n_pairs,\n       (SELECT count(*) FROM d WHERE a = next_b) AS n_linked,\n       (SELECT coalesce(sum(CAST(pa.n AS DOUBLE) * pb.n), 0) FROM pa JOIN pb ON pa.v = pb.v)\n           / ((SELECT sum(n) FROM pa) * (SELECT sum(n) FROM pb)) AS p_chance",
+      "result": {
+        "n_pairs": 1999999,
+        "n_linked_neighbours": 95,
+        "chance_link_probability": 4.3e-05,
+        "expected_by_chance": 85.858011,
+        "ratio_to_chance": 1.106478,
+        "z": 0.986642,
+        "p_value": 0.161909
+      },
+      "verdict": "CLEAN",
+      "explanation": "95 neighbouring rows are linked (src = next src) against 85.9 expected by chance: no more than chance.",
+      "do_not_use": []
+    },
+    {
+      "id": "check_adjacency:dst,dst",
+      "tool": "check_adjacency",
+      "args": {
+        "col_a": "dst",
+        "col_b": "dst"
+      },
+      "question": "Is a row's dst the next row's dst more often than chance (tx_key order)?",
+      "sql": "WITH d AS (\n    SELECT CAST(t.dst AS VARCHAR) AS a, CAST(t.dst AS VARCHAR) AS b,\n           lead(CAST(t.dst AS VARCHAR)) OVER (ORDER BY t.tx_key) AS next_b\n    FROM tx t\n),\npa AS (SELECT a AS v, count(*) AS n FROM d WHERE a IS NOT NULL GROUP BY 1),\npb AS (SELECT b AS v, count(*) AS n FROM d WHERE b IS NOT NULL GROUP BY 1)\nSELECT (SELECT count(*) FROM d WHERE a IS NOT NULL AND next_b IS NOT NULL) AS n_pairs,\n       (SELECT count(*) FROM d WHERE a = next_b) AS n_linked,\n       (SELECT coalesce(sum(CAST(pa.n AS DOUBLE) * pb.n), 0) FROM pa JOIN pb ON pa.v = pb.v)\n           / ((SELECT sum(n) FROM pa) * (SELECT sum(n) FROM pb)) AS p_chance",
+      "result": {
+        "n_pairs": 1999999,
+        "n_linked_neighbours": 86,
+        "chance_link_probability": 4.3e-05,
+        "expected_by_chance": 85.857614,
+        "ratio_to_chance": 1.001658,
+        "z": 0.015367,
+        "p_value": 0.49387
+      },
+      "verdict": "CLEAN",
+      "explanation": "86 neighbouring rows are linked (dst = next dst) against 85.9 expected by chance: no more than chance.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:amount_paise,mode",
@@ -1722,7 +2480,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "amount_paise has 170,236 outliers (8.51%) spread across mode groups (highest lift 1.0x, mode=IMPS): they do not separate a group."
+      "explanation": "amount_paise has 170,236 outliers (8.51%) spread across mode groups (highest lift 1.0x, mode=IMPS): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:amount_paise,device",
@@ -1803,7 +2562,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "amount_paise outliers concentrate in device=Web_Emulator: 93.67% of that group against 8.51% overall (11.0x)."
+      "explanation": "amount_paise outliers concentrate in device=Web_Emulator: 93.67% of that group against 8.51% overall (11.0x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:amount_paise,is_headless",
@@ -1851,7 +2611,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "amount_paise outliers concentrate in is_headless=true: 93.48% of that group against 8.51% overall (11.0x)."
+      "explanation": "amount_paise outliers concentrate in is_headless=true: 93.48% of that group against 8.51% overall (11.0x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:amount_paise,is_foreign_ip",
@@ -1899,7 +2660,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "amount_paise outliers concentrate in is_foreign_ip=true: 93.48% of that group against 8.51% overall (11.0x)."
+      "explanation": "amount_paise outliers concentrate in is_foreign_ip=true: 93.48% of that group against 8.51% overall (11.0x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:tx_count,flow_class",
@@ -1958,7 +2720,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "tx_count outliers concentrate in flow_class=send_only: 100.00% of that group against 5.92% overall (16.9x)."
+      "explanation": "tx_count outliers concentrate in flow_class=send_only: 100.00% of that group against 5.92% overall (16.9x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:n_in,flow_class",
@@ -2017,7 +2780,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "n_in outliers concentrate in flow_class=send_only: 100.00% of that group against 5.73% overall (17.5x)."
+      "explanation": "n_in outliers concentrate in flow_class=send_only: 100.00% of that group against 5.73% overall (17.5x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:n_out,flow_class",
@@ -2076,7 +2840,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "n_out outliers concentrate in flow_class=send_only: 100.00% of that group against 5.75% overall (17.4x)."
+      "explanation": "n_out outliers concentrate in flow_class=send_only: 100.00% of that group against 5.75% overall (17.4x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:days_active,flow_class",
@@ -2135,7 +2900,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "days_active outliers concentrate in flow_class=send_only: 100.00% of that group against 5.53% overall (18.1x)."
+      "explanation": "days_active outliers concentrate in flow_class=send_only: 100.00% of that group against 5.53% overall (18.1x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:pass_through_share,flow_class",
@@ -2194,7 +2960,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "pass_through_share has 965 outliers (3.93%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "pass_through_share has 965 outliers (3.93%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:forward_lag_median_s,flow_class",
@@ -2253,7 +3020,8 @@
         ]
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "forward_lag_median_s has 258 outliers but fewer than two flow_class groups of at least 30 to compare."
+      "explanation": "forward_lag_median_s has 258 outliers but fewer than two flow_class groups of at least 30 to compare.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:split_count_median,flow_class",
@@ -2312,7 +3080,8 @@
         ]
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "split_count_median has 135 outliers but fewer than two flow_class groups of at least 30 to compare."
+      "explanation": "split_count_median has 135 outliers but fewer than two flow_class groups of at least 30 to compare.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:commission_ratio_median,flow_class",
@@ -2371,7 +3140,8 @@
         ]
       },
       "verdict": "CLEAN",
-      "explanation": "commission_ratio_median has no value outside the 1.5x IQR fences."
+      "explanation": "commission_ratio_median has no value outside the 1.5x IQR fences.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:commission_ratio_iqr,flow_class",
@@ -2430,7 +3200,8 @@
         ]
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "commission_ratio_iqr has 1,193 outliers but fewer than two flow_class groups of at least 30 to compare."
+      "explanation": "commission_ratio_iqr has 1,193 outliers but fewer than two flow_class groups of at least 30 to compare.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:forwarding_episodes,flow_class",
@@ -2489,7 +3260,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "forwarding_episodes outliers concentrate in flow_class=receive_only: 100.00% of that group against 5.09% overall (19.7x)."
+      "explanation": "forwarding_episodes outliers concentrate in flow_class=receive_only: 100.00% of that group against 5.09% overall (19.7x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:flagged_out_share,flow_class",
@@ -2548,7 +3320,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "flagged_out_share has 688 outliers (2.81%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "flagged_out_share has 688 outliers (2.81%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:flagged_in_share,flow_class",
@@ -2607,7 +3380,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "flagged_in_share outliers concentrate in flow_class=receive_only: 100.00% of that group against 3.84% overall (26.0x)."
+      "explanation": "flagged_in_share outliers concentrate in flow_class=receive_only: 100.00% of that group against 3.84% overall (26.0x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:amount_vs_population,flow_class",
@@ -2666,7 +3440,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "amount_vs_population outliers concentrate in flow_class=send_only: 100.00% of that group against 5.94% overall (16.8x)."
+      "explanation": "amount_vs_population outliers concentrate in flow_class=send_only: 100.00% of that group against 5.94% overall (16.8x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:amount_diversity,flow_class",
@@ -2725,7 +3500,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "amount_diversity has 5,158 outliers (20.74%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "amount_diversity has 5,158 outliers (20.74%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:reciprocity,flow_class",
@@ -2784,7 +3560,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "reciprocity has 271 outliers (1.09%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "reciprocity has 271 outliers (1.09%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:median_hold_hours,flow_class",
@@ -2843,7 +3620,8 @@
         ]
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "median_hold_hours has 271 outliers but fewer than two flow_class groups of at least 30 to compare."
+      "explanation": "median_hold_hours has 271 outliers but fewer than two flow_class groups of at least 30 to compare.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:recurring_sender_share,flow_class",
@@ -2902,7 +3680,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "recurring_sender_share has 3 outliers (0.01%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "recurring_sender_share has 3 outliers (0.01%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:device_consistency,flow_class",
@@ -2961,7 +3740,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "device_consistency outliers concentrate in flow_class=send_only: 100.00% of that group against 1.23% overall (81.6x)."
+      "explanation": "device_consistency outliers concentrate in flow_class=send_only: 100.00% of that group against 1.23% overall (81.6x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:victim_inflow_share,flow_class",
@@ -3020,7 +3800,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "victim_inflow_share has 129 outliers (0.52%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "victim_inflow_share has 129 outliers (0.52%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:burst_fan_in,flow_class",
@@ -3079,7 +3860,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "burst_fan_in has 37 outliers (0.15%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "burst_fan_in has 37 outliers (0.15%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:shared_ip_cluster_size,flow_class",
@@ -3138,7 +3920,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "shared_ip_cluster_size has 20 outliers (0.08%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "shared_ip_cluster_size has 20 outliers (0.08%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:ip_churn,flow_class",
@@ -3197,7 +3980,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "ip_churn has 6 outliers (0.02%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "ip_churn has 6 outliers (0.02%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:structuring_share,flow_class",
@@ -3256,7 +4040,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "structuring_share has 16 outliers (0.07%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "structuring_share has 16 outliers (0.07%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:timing_regularity,flow_class",
@@ -3315,7 +4100,8 @@
         ]
       },
       "verdict": "INCONCLUSIVE",
-      "explanation": "timing_regularity has 399 outliers but fewer than two flow_class groups of at least 30 to compare."
+      "explanation": "timing_regularity has 399 outliers but fewer than two flow_class groups of at least 30 to compare.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:odd_hour_share,flow_class",
@@ -3374,7 +4160,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "odd_hour_share outliers concentrate in flow_class=send_only: 100.00% of that group against 5.67% overall (17.6x)."
+      "explanation": "odd_hour_share outliers concentrate in flow_class=send_only: 100.00% of that group against 5.67% overall (17.6x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:upstream_l1_share,flow_class",
@@ -3433,7 +4220,8 @@
         ]
       },
       "verdict": "NOISE",
-      "explanation": "upstream_l1_share has 559 outliers (2.27%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+      "explanation": "upstream_l1_share has 559 outliers (2.27%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group.",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:upstream_l2_share,flow_class",
@@ -3492,7 +4280,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "upstream_l2_share outliers concentrate in flow_class=receive_only: 100.00% of that group against 1.57% overall (63.8x)."
+      "explanation": "upstream_l2_share outliers concentrate in flow_class=receive_only: 100.00% of that group against 1.57% overall (63.8x).",
+      "do_not_use": []
     },
     {
       "id": "find_outliers:neighbour_risk,flow_class",
@@ -3551,7 +4340,8 @@
         ]
       },
       "verdict": "SIGNAL",
-      "explanation": "neighbour_risk outliers concentrate in flow_class=send_only: 100.00% of that group against 5.52% overall (18.1x)."
+      "explanation": "neighbour_risk outliers concentrate in flow_class=send_only: 100.00% of that group against 5.52% overall (18.1x).",
+      "do_not_use": []
     }
   ],
   "failures": []
