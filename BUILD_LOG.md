@@ -631,3 +631,28 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - `verify()` cannot detect a rewrite that also recomputes every hash and resets `sqlite_sequence`.
 - Only the two Section 15 legal defaults are in the config; the case-diary reference (4.5: CrPC 172 ≈ BNSS 192) is not.
 - `PROJECT_CONTEXT.md` shows as modified in git (Sections 14-17 added by the user); not committed here.
+
+## 2026-10-02 — Step 8b: evidence object and freeze notices
+
+**Step** — Section 15 freeze notices: evidence builder, Jinja2 notice per bank, audit. Case-diary reference added to the config.
+
+**Files** — new `legal\evidence.py`, `legal\notices.py`, `legal\templates\freeze_notice.html.j2`, `audits\check_notices.py`; changed `legal\config.yaml` (`legal_references.case_diary`; `confirmed_with_mentors` still false).
+
+**Key names** — `evidence.build_evidence(victim, case_id, fir_number, db)`, `load_legal_config`, `EvidenceError`; evidence keys `case_id`, `fir_number`, `generated_at`, `generator`, `profile_id`, `dataset.sha256`, `fingerprint`, `victim`, `trace`, `freeze_candidates`, `banks[]` (directory row + `accounts` + `holding_total_paise`), `legal`. `notices.render_notices`, `write_notices`, `rupees` filter; file `freeze_notice_<case>_<bank>.html`.
+
+**What was built**
+- Evidence = one `trace_victim` call + IFSC (`accounts`), Nodal Officer block (`bank_directory`), dataset SHA-256 (latest `ingest_meta`), read-only. Only sum computed: holding per bank.
+- Notice: A4 print CSS, no outside resource, autoescape, `StrictUndefined` (a missing value is an error). Shows officer block, both legal references, accounts with IFSC and holding, proving tx_ids with timestamp / amount / complainant's part, signature lines left blank, footer with case id, generated at, profile id, generator, dataset SHA-256, fingerprint, DRAFT label.
+- Evidence refuses (no document) if the trace is not found, a bank has no directory block, or an IFSC is missing.
+
+**Results**
+- CLI `--victim SBIN10000294 --case TEST-1`: 7 notices (AIRP, AXIS, BARB, HDFC, IPOS, KKBK, SBIN), 11 accounts, 0.49 s.
+- `check_notices.py`: 300 send-only accounts, 1937 notices, 2946 accounts, 2956 proving transactions, 0 failures, 10.9 s. Tampered copies (amount, account, tx_id, timestamp, hash, label, "sent") are each caught.
+- `check_case_store.py` still 40 checks, 0 failed.
+
+**Deviations**
+- One template rendered once per bank, not one template file per bank (4.5 wording).
+- Notices are not recorded in `data\cases.db`: the store is append-only, so the CLI and the audit do not write to it; `add_output` is left for the API step.
+- While `confirmed_with_mentors` is false each notice prints a line saying the legal references are unconfirmed; a low-confidence or truncated trace prints a review warning.
+- `jinja2` and `PyYAML` are installed in `.venv` but still not listed in `requirements.txt` (as logged in 7e for `duckdb` / `PyYAML`).
+- The `run.bat` server left running on port 8000 was stopped by the harness time limit; not restarted.

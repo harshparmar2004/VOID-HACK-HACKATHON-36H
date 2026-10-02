@@ -1,0 +1,130 @@
+{# Freeze notice, one per bank. Reads `ev` (legal\evidence.py) and `bank`
+   (one entry of ev.banks). Every value comes from there; no account, amount,
+   name, address or legal section is typed in this file. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Freeze notice {{ ev.case_id }} {{ bank.bank_prefix }}</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Times New Roman", Times, serif; font-size: 11.5pt; line-height: 1.4;
+         color: #111; background: #e9e9e9; margin: 0; }
+  .page { background: #fff; width: 210mm; min-height: 297mm; margin: 8mm auto; padding: 18mm 16mm; }
+  .draft { border: 2px solid #b00020; color: #b00020; font-weight: bold; text-align: center;
+           letter-spacing: 0.06em; padding: 4px 8px; margin-bottom: 12px; text-transform: uppercase; }
+  .warn { border: 1px dashed #b00020; color: #b00020; font-size: 10pt; padding: 3px 8px; margin-bottom: 10px; }
+  .meta { display: flex; justify-content: space-between; margin-bottom: 12px; }
+  .to { white-space: pre-line; margin-bottom: 12px; }
+  h1 { font-size: 12.5pt; margin: 12px 0 8px; text-align: center; text-decoration: underline; }
+  p { margin: 0 0 8px; text-align: justify; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; font-size: 10.5pt; }
+  th, td { border: 1px solid #444; padding: 3px 6px; vertical-align: top; text-align: left; }
+  th { background: #eee; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .mono { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; word-break: break-all; }
+  tr, .sign { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  .sign { margin-top: 26px; width: 60%; margin-left: 40%; }
+  .sign div { border-bottom: 1px solid #444; height: 22px; margin-bottom: 4px; }
+  .sign span { font-size: 10pt; }
+  .foot { margin-top: 18px; border-top: 1px solid #444; padding-top: 6px; font-size: 9pt; }
+  .foot td, .foot th { border: 0; padding: 1px 6px 1px 0; font-size: 9pt; background: none; }
+  @media print {
+    body { background: #fff; }
+    .page { width: auto; min-height: 0; margin: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="draft">{{ ev.legal.draft_label }}</div>
+  {% if not ev.legal.confirmed_with_mentors %}
+  <div class="warn">Legal references on this page are defaults and have not yet been confirmed.</div>
+  {% endif %}
+  {% if ev.trace.low_confidence or ev.trace.truncated %}
+  <div class="warn">
+    {% if ev.trace.low_confidence %}The first transfer of this trace was followed on low confidence. {% endif %}
+    {% if ev.trace.truncated %}This trace was cut short at the account limit. {% endif %}
+    Review before signing.
+  </div>
+  {% endif %}
+
+  <div class="meta">
+    <div>
+      Case id: <strong>{{ ev.case_id }}</strong><br>
+      FIR number: {% if ev.fir_number %}<strong>{{ ev.fir_number }}</strong>{% else %}____________________{% endif %}
+    </div>
+    <div>Generated at: {{ ev.generated_at }}</div>
+  </div>
+
+  <div class="to">To,
+{{ bank.nodal_officer_title }}
+{{ bank.bank_name }}
+{{ bank.address_block }}</div>
+
+  <h1>Requisition under {{ ev.legal.production_of_records }} and request to freeze under {{ ev.legal.freezing }}</h1>
+
+  <p>
+    In the case cited above, a sum of <strong>{{ ev.victim.paid_paise | rupees }}</strong> was transferred from
+    the complainant's account <strong>{{ ev.victim.acct_no }}</strong> (IFSC {{ ev.victim.ifsc }}) between
+    {{ ev.trace.first_ts }} and {{ ev.trace.last_ts }}. Analysis of the transaction records shows that part of
+    this sum was credited to the {{ bank.accounts | length }} account(s) of {{ bank.bank_name }} listed below,
+    where <strong>{{ bank.holding_total_paise | rupees }}</strong> of it is assessed to be still held.
+  </p>
+  <p>
+    Under {{ ev.legal.freezing }}, you are requested to place a debit freeze on each account listed below to the
+    extent of the amount shown against it, and under {{ ev.legal.production_of_records }} to furnish the account
+    opening form, KYC documents and the statement of account for each of them.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>Account number</th><th>IFSC</th><th class="num">Amount to be frozen</th></tr>
+    </thead>
+    <tbody>
+      {% for a in bank.accounts %}
+      <tr><td>{{ loop.index }}</td><td>{{ a.acct_no }}</td><td>{{ a.ifsc }}</td>
+          <td class="num">{{ a.holding_paise | rupees }}</td></tr>
+      {% endfor %}
+      <tr><th colspan="3">Total for {{ bank.bank_name }}</th>
+          <th class="num">{{ bank.holding_total_paise | rupees }}</th></tr>
+    </tbody>
+  </table>
+
+  <p>Transactions proving receipt of the complainant's money in these accounts:</p>
+  <table>
+    <thead>
+      <tr><th>Account number</th><th>Transaction ID</th><th>Date and time</th>
+          <th class="num">Amount credited</th><th class="num">Of which complainant's money</th></tr>
+    </thead>
+    <tbody>
+      {% for a in bank.accounts %}
+      {% for r in a.receipts %}
+      <tr><td>{{ a.acct_no }}</td><td>{{ r.tx_id }}</td><td>{{ r.ts }}</td>
+          <td class="num">{{ r.amount_paise | rupees }}</td><td class="num">{{ r.tainted_paise | rupees }}</td></tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="sign">
+    <div></div><span>Signature</span>
+    <div></div><span>Name and rank</span>
+    <div></div><span>Police station / unit</span>
+    <div></div><span>Date</span>
+  </div>
+
+  <div class="foot">
+    <table>
+      <tr><th>Case id</th><td>{{ ev.case_id }}</td><th>Generated at</th><td>{{ ev.generated_at }}</td></tr>
+      <tr><th>Profile id</th><td>{{ ev.profile_id }}</td><th>Generator</th><td>{{ ev.generator }}</td></tr>
+      <tr><th>Dataset SHA-256</th><td colspan="3" class="mono">{{ ev.dataset.sha256 }}</td></tr>
+      <tr><th>Trace fingerprint</th><td colspan="3" class="mono">{{ ev.fingerprint }}</td></tr>
+    </table>
+    <strong>{{ ev.legal.draft_label }}</strong>
+  </div>
+</div>
+</body>
+</html>
