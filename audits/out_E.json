@@ -1,0 +1,644 @@
+{
+  "section": "E",
+  "written_at": "2026-10-02T08:12:34",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 3.44,
+  "checks": [
+    {
+      "id": "E1",
+      "result": "non-numeric=0, comma=0, currency-symbol=0, spaced=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Reject non-numeric amounts; none seen.",
+      "extra": {}
+    },
+    {
+      "id": "E2",
+      "result": "zero=0, negative=0, amount_paise<=0=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Reject amount <= 0; do not ABS.",
+      "extra": {}
+    },
+    {
+      "id": "E3",
+      "result": "no decimal=0, 1dp=208046, 2dp=1791954, >2dp=0, ends .0=28604, ends .00=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "NOISE",
+      "handling": "Store integer paise; 1 vs 2 decimal formatting is a generator artefact, not fraud.",
+      "extra": {}
+    },
+    {
+      "id": "E4",
+      "result": "min=50.0 max=499823.99 median=899.7591245346181 p90=3700.7658026389954 p99=12236.56190178954 p99.9=49222.971037134485 avg=1760.8844264649972",
+      "count": 0,
+      "examples": [
+        {
+          "tx_id": "TXN956268943",
+          "amount": 499823.99,
+          "src_acct": "SBIN10000294",
+          "dst_acct": "IPOS10000334",
+          "ts": "2026-09-29 00:04:07",
+          "device": "Android"
+        },
+        {
+          "tx_id": "TXN188248885",
+          "amount": 496878.67,
+          "src_acct": "AXIS10000018",
+          "dst_acct": "SBIN10000392",
+          "ts": "2026-09-24 05:00:30",
+          "device": "Android"
+        },
+        {
+          "tx_id": "TXN214503073",
+          "amount": 496130.24,
+          "src_acct": "HDFC10000062",
+          "dst_acct": "HDFC10000429",
+          "ts": "2026-09-24 10:07:30",
+          "device": "Android"
+        },
+        {
+          "tx_id": "TXN701118692",
+          "amount": 495985.75,
+          "src_acct": "SBIN10000268",
+          "dst_acct": "IPOS10000387",
+          "ts": "2026-09-20 01:40:24",
+          "device": "Android"
+        },
+        {
+          "tx_id": "TXN838033148",
+          "amount": 495577.76,
+          "src_acct": "IPOS10000095",
+          "dst_acct": "KKBK10000389",
+          "ts": "2026-09-27 08:31:52",
+          "device": "Android"
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Cap is under \u20b910 lakh as profiled; no extra outlier reject needed.",
+      "extra": {
+        "hist": [
+          {
+            "bucket": 3,
+            "n": 45982,
+            "min": 50.0,
+            "max": 99.99
+          },
+          {
+            "bucket": 4,
+            "n": 296583,
+            "min": 100.0,
+            "max": 316.22
+          },
+          {
+            "bucket": 5,
+            "n": 734581,
+            "min": 316.23,
+            "max": 999.99
+          },
+          {
+            "bucket": 6,
+            "n": 669150,
+            "min": 1000.0,
+            "max": 3162.27
+          },
+          {
+            "bucket": 7,
+            "n": 223091,
+            "min": 3162.28,
+            "max": 9999.74
+          },
+          {
+            "bucket": 8,
+            "n": 27651,
+            "min": 10000.05,
+            "max": 31621.63
+          },
+          {
+            "bucket": 9,
+            "n": 2136,
+            "min": 31624.7,
+            "max": 99945.24
+          },
+          {
+            "bucket": 10,
+            "n": 677,
+            "min": 100086.73,
+            "max": 315660.42
+          },
+          {
+            "bucket": 11,
+            "n": 149,
+            "min": 316958.02,
+            "max": 499823.99
+          }
+        ]
+      }
+    },
+    {
+      "id": "E5",
+      "result": "share multiples of 100=0.0001, 500=0.0000, 1000=0.0000, 10000=0.0000",
+      "count": 198,
+      "examples": [
+        {
+          "is_headless": false,
+          "is_foreign": false,
+          "n": 1997346,
+          "p_mult100": 9.913154756361692e-05
+        },
+        {
+          "is_headless": true,
+          "is_foreign": true,
+          "n": 2654,
+          "p_mult100": 0.0
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Round-amount share is a structuring feature (M8), not an ingest reject. Compare rates by device in extra.",
+      "extra": {
+        "by_flag": [
+          {
+            "is_headless": false,
+            "is_foreign": false,
+            "n": 1997346,
+            "p_mult100": 9.913154756361692e-05
+          },
+          {
+            "is_headless": true,
+            "is_foreign": true,
+            "n": 2654,
+            "p_mult100": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "E6",
+      "result": "just-below-limit \u00b11% counts: 9999=684, 49999=11, 99999=15, 199999=7, 499999=6, 999999=0",
+      "count": 723,
+      "examples": [
+        {
+          "limit": 9999,
+          "lo": 9899.01,
+          "hi": 9999,
+          "n": 684,
+          "example": {
+            "tx_id": "TXN661631450",
+            "amount": 9940.97,
+            "mode": "UPI",
+            "device": "Linux_Script"
+          }
+        },
+        {
+          "limit": 49999,
+          "lo": 49499.01,
+          "hi": 49999,
+          "n": 11,
+          "example": {
+            "tx_id": "TXN146348660",
+            "amount": 49993.7,
+            "mode": "IMPS",
+            "device": "Web_Emulator"
+          }
+        },
+        {
+          "limit": 99999,
+          "lo": 98999.01,
+          "hi": 99999,
+          "n": 15,
+          "example": {
+            "tx_id": "TXN836852142",
+            "amount": 99710.28,
+            "mode": "UPI",
+            "device": "Linux_Script"
+          }
+        },
+        {
+          "limit": 199999,
+          "lo": 197999.01,
+          "hi": 199999,
+          "n": 7,
+          "example": {
+            "tx_id": "TXN146218948",
+            "amount": 198004.22,
+            "mode": "UPI",
+            "device": "Linux_Script"
+          }
+        },
+        {
+          "limit": 499999,
+          "lo": 494999.01,
+          "hi": 499999,
+          "n": 6,
+          "example": {
+            "tx_id": "TXN188248885",
+            "amount": 496878.67,
+            "mode": "UPI",
+            "device": "Android"
+          }
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Use as M8 structuring feature; do not auto-flag a single near-limit payment.",
+      "extra": {
+        "bands": [
+          {
+            "limit": 9999,
+            "lo": 9899.01,
+            "hi": 9999,
+            "n": 684,
+            "example": {
+              "tx_id": "TXN661631450",
+              "amount": 9940.97,
+              "mode": "UPI",
+              "device": "Linux_Script"
+            }
+          },
+          {
+            "limit": 49999,
+            "lo": 49499.01,
+            "hi": 49999,
+            "n": 11,
+            "example": {
+              "tx_id": "TXN146348660",
+              "amount": 49993.7,
+              "mode": "IMPS",
+              "device": "Web_Emulator"
+            }
+          },
+          {
+            "limit": 99999,
+            "lo": 98999.01,
+            "hi": 99999,
+            "n": 15,
+            "example": {
+              "tx_id": "TXN836852142",
+              "amount": 99710.28,
+              "mode": "UPI",
+              "device": "Linux_Script"
+            }
+          },
+          {
+            "limit": 199999,
+            "lo": 197999.01,
+            "hi": 199999,
+            "n": 7,
+            "example": {
+              "tx_id": "TXN146218948",
+              "amount": 198004.22,
+              "mode": "UPI",
+              "device": "Linux_Script"
+            }
+          },
+          {
+            "limit": 499999,
+            "lo": 494999.01,
+            "hi": 499999,
+            "n": 6,
+            "example": {
+              "tx_id": "TXN188248885",
+              "amount": 496878.67,
+              "mode": "UPI",
+              "device": "Android"
+            }
+          },
+          {
+            "limit": 999999,
+            "lo": 989999.01,
+            "hi": 999999,
+            "n": 0,
+            "example": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "E7",
+      "result": "most frequent exact amount appears 8698 times; top-5=[{'amount_raw': '50.0', 'n': 8698}, {'amount_raw': '314.74', 'n': 32}, {'amount_raw': '313.95', 'n': 32}, {'amount_raw': '372.38', 'n': 31}, {'amount_raw': '200.47', 'n': 29}]",
+      "count": 8698,
+      "examples": [
+        {
+          "amount_raw": "50.0",
+          "n": 8698
+        },
+        {
+          "amount_raw": "314.74",
+          "n": 32
+        },
+        {
+          "amount_raw": "313.95",
+          "n": 32
+        },
+        {
+          "amount_raw": "372.38",
+          "n": 31
+        },
+        {
+          "amount_raw": "200.47",
+          "n": 29
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Repeated exact rupee amounts are a generator/structuring clue; keep as a feature.",
+      "extra": {
+        "top30": [
+          {
+            "amount_raw": "50.0",
+            "n": 8698
+          },
+          {
+            "amount_raw": "314.74",
+            "n": 32
+          },
+          {
+            "amount_raw": "313.95",
+            "n": 32
+          },
+          {
+            "amount_raw": "372.38",
+            "n": 31
+          },
+          {
+            "amount_raw": "200.47",
+            "n": 29
+          },
+          {
+            "amount_raw": "387.57",
+            "n": 29
+          },
+          {
+            "amount_raw": "182.81",
+            "n": 29
+          },
+          {
+            "amount_raw": "411.09",
+            "n": 29
+          },
+          {
+            "amount_raw": "216.56",
+            "n": 29
+          },
+          {
+            "amount_raw": "145.84",
+            "n": 29
+          },
+          {
+            "amount_raw": "242.28",
+            "n": 29
+          },
+          {
+            "amount_raw": "270.6",
+            "n": 28
+          },
+          {
+            "amount_raw": "391.39",
+            "n": 28
+          },
+          {
+            "amount_raw": "405.73",
+            "n": 28
+          },
+          {
+            "amount_raw": "211.82",
+            "n": 28
+          },
+          {
+            "amount_raw": "277.54",
+            "n": 28
+          },
+          {
+            "amount_raw": "315.25",
+            "n": 28
+          },
+          {
+            "amount_raw": "245.07",
+            "n": 28
+          },
+          {
+            "amount_raw": "571.53",
+            "n": 28
+          },
+          {
+            "amount_raw": "337.9",
+            "n": 28
+          },
+          {
+            "amount_raw": "303.45",
+            "n": 28
+          },
+          {
+            "amount_raw": "312.98",
+            "n": 28
+          },
+          {
+            "amount_raw": "275.41",
+            "n": 27
+          },
+          {
+            "amount_raw": "284.47",
+            "n": 27
+          },
+          {
+            "amount_raw": "262.15",
+            "n": 27
+          },
+          {
+            "amount_raw": "333.5",
+            "n": 27
+          },
+          {
+            "amount_raw": "272.69",
+            "n": 27
+          },
+          {
+            "amount_raw": "270.0",
+            "n": 27
+          },
+          {
+            "amount_raw": "364.59",
+            "n": 27
+          },
+          {
+            "amount_raw": "245.81",
+            "n": 27
+          }
+        ]
+      }
+    },
+    {
+      "id": "E8",
+      "result": "UPI>1e5: 355/1299844; RTGS<2e5: 59747/59823; IMPS>5e5: 0/441199",
+      "count": 60102,
+      "examples": [
+        {
+          "tx_id": "TXN583175063",
+          "mode": "UPI",
+          "amount": 177797.14,
+          "src_acct": "PYTM10000639",
+          "dst_acct": "KKBK10001330"
+        },
+        {
+          "tx_id": "TXN287031124",
+          "mode": "UPI",
+          "amount": 163532.28,
+          "src_acct": "BARB10000610",
+          "dst_acct": "PYTM10001167"
+        },
+        {
+          "tx_id": "TXN825647943",
+          "mode": "UPI",
+          "amount": 144911.95,
+          "src_acct": "AXIS10001045",
+          "dst_acct": "IPOS10001151"
+        },
+        {
+          "tx_id": "TXN880426739",
+          "mode": "UPI",
+          "amount": 102517.66,
+          "src_acct": "BARB10000003",
+          "dst_acct": "AIRP10000329"
+        },
+        {
+          "tx_id": "TXN552971441",
+          "mode": "UPI",
+          "amount": 188085.63,
+          "src_acct": "HDFC10000850",
+          "dst_acct": "AIRP10001353"
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Real rail limits are NOT respected by the generator \u2014 do not reject on them; optional weak feature only.",
+      "extra": {}
+    },
+    {
+      "id": "E9",
+      "result": "Benford chi-square=1364.9 (df=8; 5% crit\u224815.5). shares=[{'d': 1, 'share': 0.3028}, {'d': 2, 'share': 0.1719}, {'d': 3, 'share': 0.1213}, {'d': 4, 'share': 0.0939}, {'d': 5, 'share': 0.0839}, {'d': 6, 'share': 0.0676}, {'d': 7, 'share': 0.0591}, {'d': 8, 'share': 0.0525}, {'d': 9, 'share': 0.047}]",
+      "count": 1364.9,
+      "examples": [
+        {
+          "d": 1,
+          "obs": 605663,
+          "exp": 602060.0,
+          "share": 0.3028
+        },
+        {
+          "d": 2,
+          "obs": 343799,
+          "exp": 352182.5,
+          "share": 0.1719
+        },
+        {
+          "d": 3,
+          "obs": 242573,
+          "exp": 249877.5,
+          "share": 0.1213
+        },
+        {
+          "d": 4,
+          "obs": 187868,
+          "exp": 193820.0,
+          "share": 0.0939
+        },
+        {
+          "d": 5,
+          "obs": 167772,
+          "exp": 158362.5,
+          "share": 0.0839
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Do not use Benford as a mule detector here; deviation is likely the generator.",
+      "extra": {
+        "chi2": 1364.9018382162078,
+        "digits": [
+          {
+            "d": 1,
+            "obs": 605663,
+            "exp": 602060.0,
+            "share": 0.3028
+          },
+          {
+            "d": 2,
+            "obs": 343799,
+            "exp": 352182.5,
+            "share": 0.1719
+          },
+          {
+            "d": 3,
+            "obs": 242573,
+            "exp": 249877.5,
+            "share": 0.1213
+          },
+          {
+            "d": 4,
+            "obs": 187868,
+            "exp": 193820.0,
+            "share": 0.0939
+          },
+          {
+            "d": 5,
+            "obs": 167772,
+            "exp": 158362.5,
+            "share": 0.0839
+          },
+          {
+            "d": 6,
+            "obs": 135229,
+            "exp": 133893.6,
+            "share": 0.0676
+          },
+          {
+            "d": 7,
+            "obs": 118216,
+            "exp": 115983.9,
+            "share": 0.0591
+          },
+          {
+            "d": 8,
+            "obs": 104963,
+            "exp": 102305.0,
+            "share": 0.0525
+          },
+          {
+            "d": 9,
+            "obs": 93917,
+            "exp": 91515.0,
+            "share": 0.047
+          }
+        ]
+      }
+    },
+    {
+      "id": "E10",
+      "result": "amount by headless=[{'is_headless': False, 'n': 1997346, 'min': 50.0, 'p50': 898.6900103272002, 'p90': 3667.912582145097, 'max': 499823.99, 'avg': 1681.7060112819665}, {'is_headless': True, 'n': 2654, 'min': 96.85, 'p50': 41164.62547590721, 'p90': 147650.88124013902, 'max': 452221.09, 'avg': 61348.936744536484}]",
+      "count": 2654,
+      "examples": [
+        {
+          "is_headless": false,
+          "n": 1997346,
+          "min": 50.0,
+          "p50": 898.6900103272002,
+          "p90": 3667.912582145097,
+          "max": 499823.99,
+          "avg": 1681.7060112819665
+        },
+        {
+          "is_headless": true,
+          "n": 2654,
+          "min": 96.85,
+          "p50": 41164.62547590721,
+          "p90": 147650.88124013902,
+          "max": 452221.09,
+          "avg": 61348.936744536484
+        }
+      ],
+      "verdict": "SIGNAL",
+      "handling": "Keep amount distribution by device as an L3/M4 input, not a hard rule.",
+      "extra": {}
+    }
+  ],
+  "extra": {}
+}

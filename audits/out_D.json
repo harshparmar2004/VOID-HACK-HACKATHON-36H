@@ -1,0 +1,239 @@
+{
+  "section": "D",
+  "written_at": "2026-10-02T08:12:01",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 2.74,
+  "checks": [
+    {
+      "id": "D1",
+      "result": "src IFSC ok 2000000/2000000, dst 2000000/2000000; 5th char '0' src 2000000/2000000 dst 2000000/2000000; bad_len=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Keep IFSC regex [A-Z]{4}0[A-Z0-9]{6}; 5th character is 0 on this file.",
+      "extra": {}
+    },
+    {
+      "id": "D2",
+      "result": "10 distinct IFSC prefixes (PS said 10): [{'bank': 'AXIS', 'n': 406989}, {'bank': 'IPOS', 'n': 406489}, {'bank': 'KKBK', 'n': 406058}, {'bank': 'SBIN', 'n': 405811}, {'bank': 'PUNB', 'n': 404501}, {'bank': 'HDFC', 'n': 404102}, {'bank': 'ICIC', 'n': 395354}, {'bank': 'PYTM', 'n': 392764}, {'bank': 'BARB', 'n': 389453}, {'bank': 'AIRP', 'n': 388479}]",
+      "count": 10,
+      "examples": [
+        {
+          "bank": "AXIS",
+          "n": 406989
+        },
+        {
+          "bank": "IPOS",
+          "n": 406489
+        },
+        {
+          "bank": "KKBK",
+          "n": 406058
+        },
+        {
+          "bank": "SBIN",
+          "n": 405811
+        },
+        {
+          "bank": "PUNB",
+          "n": 404501
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Use the observed 10 prefixes in bank_directory, not a hard-coded list of 10.",
+      "extra": {
+        "prefixes": [
+          {
+            "bank": "AXIS",
+            "n": 406989
+          },
+          {
+            "bank": "IPOS",
+            "n": 406489
+          },
+          {
+            "bank": "KKBK",
+            "n": 406058
+          },
+          {
+            "bank": "SBIN",
+            "n": 405811
+          },
+          {
+            "bank": "PUNB",
+            "n": 404501
+          },
+          {
+            "bank": "HDFC",
+            "n": 404102
+          },
+          {
+            "bank": "ICIC",
+            "n": 395354
+          },
+          {
+            "bank": "PYTM",
+            "n": 392764
+          },
+          {
+            "bank": "BARB",
+            "n": 389453
+          },
+          {
+            "bank": "AIRP",
+            "n": 388479
+          }
+        ]
+      }
+    },
+    {
+      "id": "D3",
+      "result": "branch codes (chars 5-11) per bank=[{'bank': 'IPOS', 'n_branches': 2316}, {'bank': 'KKBK', 'n_branches': 2311}, {'bank': 'AXIS', 'n_branches': 2306}, {'bank': 'SBIN', 'n_branches': 2305}, {'bank': 'PUNB', 'n_branches': 2270}, {'bank': 'HDFC', 'n_branches': 2268}, {'bank': 'ICIC', 'n_branches': 2251}, {'bank': 'BARB', 'n_branches': 2229}, {'bank': 'AIRP', 'n_branches': 2221}, {'bank': 'PYTM', 'n_branches': 2201}]; 6-char codes reused across banks=8708",
+      "count": 8708,
+      "examples": [
+        {
+          "code": "001000",
+          "n_banks": 3,
+          "banks": [
+            "PYTM",
+            "AXIS",
+            "KKBK"
+          ]
+        },
+        {
+          "code": "001004",
+          "n_banks": 3,
+          "banks": [
+            "KKBK",
+            "IPOS",
+            "SBIN"
+          ]
+        },
+        {
+          "code": "001006",
+          "n_banks": 3,
+          "banks": [
+            "ICIC",
+            "PYTM",
+            "BARB"
+          ]
+        },
+        {
+          "code": "001007",
+          "n_banks": 3,
+          "banks": [
+            "IPOS",
+            "KKBK",
+            "HDFC"
+          ]
+        },
+        {
+          "code": "001009",
+          "n_banks": 3,
+          "banks": [
+            "BARB",
+            "HDFC",
+            "IPOS"
+          ]
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Branch codes are not globally unique; always key by full IFSC / (bank, branch).",
+      "extra": {
+        "branches_per_bank": [
+          {
+            "bank": "IPOS",
+            "n_branches": 2316
+          },
+          {
+            "bank": "KKBK",
+            "n_branches": 2311
+          },
+          {
+            "bank": "AXIS",
+            "n_branches": 2306
+          },
+          {
+            "bank": "SBIN",
+            "n_branches": 2305
+          },
+          {
+            "bank": "PUNB",
+            "n_branches": 2270
+          },
+          {
+            "bank": "HDFC",
+            "n_branches": 2268
+          },
+          {
+            "bank": "ICIC",
+            "n_branches": 2251
+          },
+          {
+            "bank": "BARB",
+            "n_branches": 2229
+          },
+          {
+            "bank": "AIRP",
+            "n_branches": 2221
+          },
+          {
+            "bank": "PYTM",
+            "n_branches": 2201
+          }
+        ]
+      }
+    },
+    {
+      "id": "D4",
+      "result": "intra-bank (same prefix)=200460/2000000 (0.1002); exact same IFSC=19/2000000",
+      "count": 200460,
+      "examples": [
+        {
+          "tx_id": "TXN754684980",
+          "src_ifsc": "PYTM0003049",
+          "dst_ifsc": "PYTM0003049",
+          "src_acct": "PYTM10002049",
+          "dst_acct": "PYTM10011048",
+          "amount": 296.79
+        },
+        {
+          "tx_id": "TXN226325898",
+          "src_ifsc": "PUNB0001053",
+          "dst_ifsc": "PUNB0001053",
+          "src_acct": "PUNB10009052",
+          "dst_acct": "PUNB10018051",
+          "amount": 3336.29
+        },
+        {
+          "tx_id": "TXN467913410",
+          "src_ifsc": "AIRP0005064",
+          "dst_ifsc": "AIRP0005064",
+          "src_acct": "AIRP10022062",
+          "dst_acct": "AIRP10004064",
+          "amount": 258.6
+        },
+        {
+          "tx_id": "TXN627001995",
+          "src_ifsc": "AXIS0004004",
+          "dst_ifsc": "AXIS0004004",
+          "src_acct": "AXIS10021002",
+          "dst_acct": "AXIS10003004",
+          "amount": 284.8
+        },
+        {
+          "tx_id": "TXN710390809",
+          "src_ifsc": "HDFC0004298",
+          "dst_ifsc": "HDFC0004298",
+          "src_acct": "HDFC10021296",
+          "dst_acct": "HDFC10003298",
+          "amount": 1211.68
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Intra-bank share is a context feature, not a reject rule.",
+      "extra": {}
+    }
+  ],
+  "extra": {}
+}

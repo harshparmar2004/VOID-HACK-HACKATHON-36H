@@ -1,0 +1,119 @@
+{
+  "section": "B",
+  "written_at": "2026-10-02T08:10:29",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 1.91,
+  "checks": [
+    {
+      "id": "B1",
+      "result": "duplicate IDs=2250, covering 4502 rows; twice=2248, thrice=2, >3=0, max=3",
+      "count": 4502,
+      "examples": [
+        {
+          "tx_id": "TXN391364739",
+          "n": 3
+        },
+        {
+          "tx_id": "TXN642182041",
+          "n": 3
+        },
+        {
+          "tx_id": "TXN102279870",
+          "n": 2
+        },
+        {
+          "tx_id": "TXN102343436",
+          "n": 2
+        },
+        {
+          "tx_id": "TXN102648856",
+          "n": 2
+        }
+      ],
+      "verdict": "NOISE",
+      "handling": "Keep both rows; join on tx_key not tx_id; cite tx_id with ts/amount/parties on notices.",
+      "extra": {
+        "ids_twice": 2248,
+        "ids_thrice": 2
+      }
+    },
+    {
+      "id": "B2",
+      "result": "leading/trailing space=0, not upper=0, prefix not txn=0, len!=12=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Reject IDs with whitespace or unexpected prefix; do not trim-to-fix silently.",
+      "extra": {}
+    },
+    {
+      "id": "B3",
+      "result": "rows not matching ^TXN[0-9]{9}$ : 0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Validate ^TXN[0-9]{9}$ at ingest; keep original ID even when duplicated.",
+      "extra": {}
+    },
+    {
+      "id": "B4",
+      "result": "corr(id_numeric, epoch(ts))=-0.00042162915283270664; time-ordered ID decreases=999990/2000000 share=0.499995",
+      "count": 999990,
+      "examples": [
+        {
+          "corr": -0.00042162915283270664,
+          "decrease_share": 0.499995
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Do not treat ID magnitude as time or as a feature. IDs look assigned independently of ts.",
+      "extra": {}
+    },
+    {
+      "id": "B5",
+      "result": "headless id range [100279986,999633739] vs normal [100000589,999999237] disjoint=False; foreign [100279986,999633739]",
+      "count": 0,
+      "examples": [
+        {
+          "is_headless": false,
+          "is_foreign": false,
+          "n": 1997346,
+          "id_min": 100000589,
+          "id_p50": 550181743,
+          "id_max": 999999237
+        },
+        {
+          "is_headless": true,
+          "is_foreign": true,
+          "n": 2654,
+          "id_min": 100279986,
+          "id_p50": 557589065,
+          "id_max": 999633739
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Do NOT score on Transaction_ID numeric range (leakage). Ranges overlap \u2014 no shortcut.",
+      "extra": {
+        "groups": [
+          {
+            "is_headless": false,
+            "is_foreign": false,
+            "n": 1997346,
+            "id_min": 100000589,
+            "id_p50": 550181743,
+            "id_max": 999999237
+          },
+          {
+            "is_headless": true,
+            "is_foreign": true,
+            "n": 2654,
+            "id_min": 100279986,
+            "id_p50": 557589065,
+            "id_max": 999633739
+          }
+        ]
+      }
+    }
+  ],
+  "extra": {}
+}

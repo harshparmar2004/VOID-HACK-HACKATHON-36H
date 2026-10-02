@@ -1,0 +1,36 @@
+# legal/config.yaml -- text shown on every Step 8 document (PROJECT_CONTEXT.md Section 15).
+#
+# The legal references below are DEFAULTS. They must be confirmed with the
+# police mentors before any document is relied on; edit them here, never in
+# code or in a template. Set confirmed_with_mentors to true only once they are.
+
+legal_references:
+  # Authority to call for records from a bank (freeze notice heading).
+  production_of_records: "Section 94 BNSS (corresponding to Section 91 CrPC)"
+  # Authority to freeze / seize the balance of an account.
+  freezing: "Section 106 BNSS / Section 102 CrPC"
+  # Authority the case diary is kept under (case diary heading).
+  case_diary: "Case diary maintained under Section 192 BNSS (corresponding to Section 172 CrPC)"
+  # Provision an FIR is registered under (FIR draft heading).
+  fir: "First Information Report under Section 173 BNSS (corresponding to Section 154 CrPC)"
+  confirmed_with_mentors: false
+
+# Printed on every document. A document is a draft until an officer signs it;
+# nothing here may say that a notice was sent.
+draft_label: "DRAFT — for officer review and signature"
+
+# Local model for the case-diary summary. Loopback only: the code refuses
+# any host other than 127.0.0.1 / localhost. On any failure the diary is built
+# from the template alone (generator TEMPLATE_FALLBACK).
+llm:
+  url: "http://127.0.0.1:11434"
+  # Any model Ollama has pulled (ollama list). Change it here, never in code.
+  # Alternative: "qwen2.5:3b" -- 1.5 s per summary against 5.2 s for qwen2.5:7b
+  # (3 Oct, both validated), with plainer wording.
+  model: "qwen2.5:7b"
+  timeout_seconds: 60
+  # Cap on the length of the answer, in tokens (the summary is 3 to 5 sentences).
+  num_predict: 200
+  # How long Ollama keeps the model loaded after a request. The API loads the
+  # model when it starts, so the first summary has no cold start.
+  keep_alive: "30m"

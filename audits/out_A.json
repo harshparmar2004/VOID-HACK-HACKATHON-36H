@@ -1,0 +1,131 @@
+{
+  "section": "A",
+  "written_at": "2026-10-02T08:10:58",
+  "duckdb_version": "1.5.6",
+  "runtime_s": 30.914,
+  "checks": [
+    {
+      "id": "A1",
+      "result": "UTF-8 (no BOM); first3=547261",
+      "count": 0,
+      "examples": [
+        {
+          "first3_hex": "547261",
+          "bom": false
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Open as UTF-8; if BOM appears strip it (utf-8-sig). Do not re-encode.",
+      "extra": {}
+    },
+    {
+      "id": "A2",
+      "result": "header ['Transaction_ID', 'Sender_Account', 'Receiver_Account', 'Sender_IFSC', 'Receiver_IFSC', 'Amount', 'Timestamp', 'Payment_Mode', 'Narration', 'IP_Address', 'Device_Type'] match=True; hidden=[]",
+      "count": 0,
+      "examples": [
+        {
+          "raw": "Transaction_ID,Sender_Account,Receiver_Account,Sender_IFSC,Receiver_IFSC,Amount,Timestamp,Payment_Mode,Narration,IP_Address,Device_Type",
+          "hidden": []
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Keep exact header names; reject files whose header differs.",
+      "extra": {}
+    },
+    {
+      "id": "A3",
+      "result": "DuckDB parsed 2000000 rows \u00d7 11 columns; extra-null probe 0. No store_rejects needed \u2014 parse succeeded for 2,000,000 rows.",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Keep read_csv(all_varchar=true); quarantine any future row that fails 11-field parse.",
+      "extra": {}
+    },
+    {
+      "id": "A4",
+      "result": "physical lines = header + parsed rows (file ends with newline). physical_lines=2000001, parsed_rows=2000000, trailing_nl=True",
+      "count": 0,
+      "examples": [
+        {
+          "physical_lines": 2000001,
+          "parsed_rows": 2000000
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Do not treat a trailing newline as a data row.",
+      "extra": {}
+    },
+    {
+      "id": "A5",
+      "result": "Unix LF only (2000001 LF). trailing_nl=True",
+      "count": 0,
+      "examples": [
+        {
+          "size": 286788986,
+          "bom": false,
+          "first3_hex": "547261",
+          "n_crlf": 0,
+          "n_lf_only": 2000001,
+          "n_cr_only": 0,
+          "physical_lines": 2000001,
+          "trailing_newline": true,
+          "utf8_ok": true,
+          "utf8_error": null,
+          "control_hits": 0,
+          "control_examples": [],
+          "quote_bytes": 0,
+          "non_ascii_bytes": 0
+        }
+      ],
+      "verdict": "CLEAN",
+      "handling": "Normalise to LF at ingest if mixed endings ever appear; current file is consistent.",
+      "extra": {}
+    },
+    {
+      "id": "A6",
+      "result": "quote bytes=0; rows with quote in any field=0; Narration contains comma=0, quote=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "CSV is unquoted. Keep all_varchar parse; if quotes appear, rely on DuckDB CSV quoting.",
+      "extra": {}
+    },
+    {
+      "id": "A7",
+      "result": "utf8_ok=True err=None; control_bytes(excluding TAB/CR/LF)=0; non_ascii_bytes=0",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "Reject rows with NUL/control bytes; keep UTF-8 as-is.",
+      "extra": {}
+    },
+    {
+      "id": "A8",
+      "result": "0 duplicate groups covering 0 rows (all 11 columns equal)",
+      "count": 0,
+      "examples": [],
+      "verdict": "CLEAN",
+      "handling": "If full-row duplicates appear, keep one copy and log; do not drop silently.",
+      "extra": {}
+    }
+  ],
+  "extra": {
+    "file": {
+      "size": 286788986,
+      "bom": false,
+      "first3_hex": "547261",
+      "n_crlf": 0,
+      "n_lf_only": 2000001,
+      "n_cr_only": 0,
+      "physical_lines": 2000001,
+      "trailing_newline": true,
+      "utf8_ok": true,
+      "utf8_error": null,
+      "control_hits": 0,
+      "control_examples": [],
+      "quote_bytes": 0,
+      "non_ascii_bytes": 0
+    },
+    "parsed_rows": 2000000
+  }
+}
