@@ -52,13 +52,15 @@ def initialize_core():
     global scorer, graph, scanner, is_initialized
     if not is_initialized:
         print("[*] Initializing Abhedya-Chakra Forensics Core...")
-        engine.load_dataset()
+        cyber_crime_csv = os.path.join(DATA_DIR, "cyber_crime_sample.csv")
+        target_dataset = cyber_crime_csv if os.path.exists(cyber_crime_csv) else DEFAULT_PARQUET
+        engine.load_dataset(target_dataset)
         scorer = MuleScorer(engine.con)
         scorer.compute_all_scores()
         graph = GraphEngine(engine.con)
         scanner = FraudScanner(engine.con)
         is_initialized = True
-        print("[+] Core Forensics Engine fully initialized and ready!")
+        print(f"[+] Core Forensics Engine initialized with {os.path.basename(target_dataset)} ({engine.total_records} records)!")
 
 @app.on_event("startup")
 def startup_event():
@@ -191,7 +193,8 @@ def get_benchmark_victims():
     detected_ids = [d["account_id"] for d in detected]
     
     bench_ids = []
-    if os.path.exists(VICTIMS_FILE):
+    # Only append synthetic benchmark victims if dataset is >= 100k (synthetic 2M benchmark)
+    if engine.total_records >= 100000 and os.path.exists(VICTIMS_FILE):
         try:
             with open(VICTIMS_FILE) as f:
                 data = json.load(f)
@@ -201,6 +204,130 @@ def get_benchmark_victims():
             
     combined = list(dict.fromkeys(detected_ids + bench_ids))
     return {"victims": combined, "detected_victims": detected}
+
+BANK_NAME_MAP = {
+    "SBIN": "State Bank of India",
+    "HDFC": "HDFC Bank",
+    "ICIC": "ICICI Bank",
+    "UTIB": "Axis Bank",
+    "AXIS": "Axis Bank",
+    "PUNB": "Punjab National Bank",
+    "PYTM": "Paytm Payments Bank",
+    "IPOS": "India Post Payments Bank",
+    "BARB": "Bank of Baroda",
+    "KKBK": "Kotak Mahindra Bank",
+    "UBIN": "Union Bank of India",
+    "CNRB": "Canara Bank",
+    "IOBA": "Indian Overseas Bank",
+    "YESB": "Yes Bank",
+    "IDIB": "Indian Bank",
+    "CBIN": "Central Bank of India"
+}
+
+@app.get("/api/entities")
+def get_entity_directory(limit: int = 500, bank_filter: Optional[str] = None):
+    if not is_initialized:
+        initialize_core()
+        
+    query = """
+        WITH flow_summary AS (
+            SELECT 
+                account_id,
+                MAX(ifsc) AS ifsc,
+                SUM(inflow) AS total_in,
+                SUM(outflow) AS total_out,
+                SUM(inflow) - SUM(outflow) AS balance
+            FROM (
+                SELECT receiver_account AS account_id, receiver_ifsc AS ifsc, Amount_INR AS inflow, 0.0 AS outflow FROM transactions
+                UNION ALL
+                SELECT sender_account AS account_id, sender_ifsc AS ifsc, 0.0 AS inflow, Amount_INR AS outflow FROM transactions
+            )
+            GROUP BY account_id
+        )
+        SELECT 
+            f.account_id,
+            f.ifsc,
+            f.total_in,
+            f.total_out,
+            f.balance,
+            COALESCE(s.role, CASE 
+                WHEN f.total_in = 0 AND f.total_out > 0 THEN 'VICTIM'
+                WHEN f.total_out = 0 AND f.total_in > 0 THEN 'L3_CASHOUT'
+                ELSE 'TRANSACTING'
+            END) AS role,
+            COALESCE(s.risk_band, CASE 
+                WHEN f.total_in = 0 AND f.total_out > 0 THEN 'CLEAN'
+                WHEN f.balance > 0 THEN 'SUSPECTED_MULE'
+                ELSE 'CLEAN'
+            END) AS risk_band,
+            COALESCE(s.risk_index, CASE WHEN f.total_in = 0 THEN 0 ELSE 75 END) AS risk_index
+        FROM flow_summary f
+        LEFT JOIN scored_mules s ON f.account_id = s.account_id
+        ORDER BY f.total_in DESC, f.balance DESC
+        LIMIT ?;
+    """
+    rows = engine.con.execute(query, [limit]).fetchall()
+    
+    entities = []
+    bank_counts = {}
+    total_accs = len(rows)
+    
+    for r in rows:
+        acc_id, ifsc, tin, tout, bal, role, rband, rindex = r
+        ifsc_code = ifsc or "BANK0000000"
+        prefix = ifsc_code[:4].upper()
+        b_name = BANK_NAME_MAP.get(prefix, f"{prefix} Bank")
+        
+        bank_counts[prefix] = bank_counts.get(prefix, 0) + 1
+        
+        # Category label
+        if role == "VICTIM" or (tin == 0 and tout > 0):
+            cat = "Victim / Complainant"
+        elif "L1" in role or "COLLECTOR" in role:
+            cat = "Suspected L1 Collector"
+        elif "L2" in role or "DISTRIBUTOR" in role:
+            cat = "Suspected L2 Distributor"
+        elif "L3" in role or "CASHOUT" in role or "EXIT" in role:
+            cat = "Suspected L3 Cashout"
+        elif rband in ("HIGH_CONFIDENCE_MULE", "SUSPECTED_MULE"):
+            cat = "Layered Mule"
+        else:
+            cat = "Transacting Account"
+            
+        risk_label = "CLEAN"
+        if rband == "HIGH_CONFIDENCE_MULE":
+            risk_label = f"CRITICAL ({int(rindex)})"
+        elif rband == "SUSPECTED_MULE":
+            risk_label = f"HIGH RISK ({int(rindex)})"
+        elif rindex > 50:
+            risk_label = f"FLAGGED ({int(rindex)})"
+
+        entities.append({
+            "account": str(acc_id),
+            "bank": b_name,
+            "ifsc": ifsc_code,
+            "type": cat,
+            "totalIn": round(float(tin), 2),
+            "totalOut": round(float(tout), 2),
+            "balance": round(float(bal), 2),
+            "risk": risk_label
+        })
+        
+    bank_stats = []
+    for code, count in sorted(bank_counts.items(), key=lambda x: x[1], reverse=True)[:8]:
+        share_pct = round((count / max(total_accs, 1)) * 100, 1)
+        bank_stats.append({
+            "code": code,
+            "name": BANK_NAME_MAP.get(code, f"{code} Bank"),
+            "count": f"{count:,} accounts",
+            "share": f"{share_pct}%"
+        })
+        
+    return {
+        "total_accounts": total_accs,
+        "entities": entities,
+        "bank_stats": bank_stats
+    }
 
 @app.get("/api/trace/{victim_account}")
 def trace_victim_flow(victim_account: str, max_hops: int = 4, time_window: int = 180):

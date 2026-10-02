@@ -98,4 +98,11 @@ export async function fetchDetectedVictims() {
   return res.json();
 }
 
+export async function fetchEntities(limit = 500) {
+  const res = await fetch(`${API_BASE}/entities?limit=${limit}`);
+  if (!res.ok) throw new Error("Failed to fetch entity directory");
+  return res.json();
+}
+
+
 

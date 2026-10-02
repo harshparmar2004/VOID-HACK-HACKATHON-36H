@@ -75,11 +75,14 @@ export default function MuleDossierView({
           HDFC: "HDFC Bank",
           ICIC: "ICICI Bank",
           UTIB: "Axis Bank",
+          AXIS: "Axis Bank",
           PUNB: "Punjab National Bank",
           UBIN: "Union Bank of India",
           BARB: "Bank of Baroda",
           KKBK: "Kotak Mahindra Bank",
-          CNRB: "Canara Bank"
+          CNRB: "Canara Bank",
+          PYTM: "Paytm Payments Bank",
+          IPOS: "India Post Payments Bank"
         };
         const bankName = bankNames[bankCode] || `${bankCode} Bank`;
 

@@ -112,10 +112,11 @@ export default function App() {
         if (victimsList?.victims?.length) {
           setCases(victimsList.victims);
           const savedCase = localStorage.getItem("abhedya_active_case");
-          const initialCase = savedCase && (victimsList.victims.includes(savedCase) || savedCase.length > 3)
+          const initialCase = savedCase && victimsList.victims.includes(savedCase)
             ? savedCase
             : victimsList.victims[0];
           setActiveCase(initialCase);
+          localStorage.setItem("abhedya_active_case", initialCase);
           loadCaseData(initialCase);
         } else {
           loadCaseData(activeCase);

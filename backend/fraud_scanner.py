@@ -26,9 +26,12 @@ class FraudScanner:
 
     def _seed_heavy_whales_if_needed(self):
         try:
-            whale_check = self.con.execute("SELECT COUNT(*) FROM transactions WHERE Amount_INR >= 15000000.0;").fetchone()[0]
-            if whale_check == 0:
-                print("[*] Seeding heavy whale transactions (INR 1.85 Cr - 2.98 Cr) into DuckDB...")
+            total_count = self.con.execute("SELECT COUNT(*) FROM transactions;").fetchone()[0]
+            # Never contaminate real cyber crime data (< 100,000 txns) with synthetic whales
+            if total_count >= 100000:
+                whale_check = self.con.execute("SELECT COUNT(*) FROM transactions WHERE Amount_INR >= 15000000.0;").fetchone()[0]
+                if whale_check == 0:
+                    print("[*] Seeding heavy whale transactions for 2M benchmark into DuckDB...")
                 whales = [
                     ("TXNWHALE001", "100000000088", "200000000002", "HDFC0000250", "UTIB0000971", 2850000000, 28500000.00, "2026-10-12 14:20:00", "RTGS", "URGENT-SUPREME-COURT-SECURITY-DEPOSIT-DIGITAL-ARREST", "185.220.101.45", "Web_Emulator", 1, 1, 1),
                     ("TXNWHALE002", "100000000092", "200000000003", "SBIN0001044", "SBIN0001044", 2450000000, 24500000.00, "2026-10-11 11:15:00", "RTGS", "CBI-NATIONAL-SECURITY-ESCROW-TRANSFER", "194.26.29.11", "Linux_Script", 1, 1, 1),
