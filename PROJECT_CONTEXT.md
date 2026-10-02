@@ -471,6 +471,9 @@ Record each result and the threshold chosen in a notebook Markdown cell. Dev-onl
   tested including JSON-schema output.
 - In progress: `engine/sql/schema.sql` + `engine/ingest.py` (ingest step).
 - Done: fixed-schema tables `scores`, `layer_links`, `rings` in schema.sql (verified).
-- NOT YET APPLIED (verified 2 Oct): `tx_key` / `is_dup_tx_id` missing from tx. Next: add them, switch layer_links PK to
-  (profile_id, tx_key), drop `raw`, align `scores` to the final spec, seed `v1-verified`; then features.
+- DONE (verified 2 Oct, 24/24 checks): tx_key + is_dup_tx_id, explicit account rule, layer_links PK
+  (profile_id, tx_key), scores aligned to the final spec (mp1..mp8, victim_score, override_applied,
+  param_points), exploration tables dropped, v1-verified profile seeded. Project is a git repo
+  (.gitignore excludes data\, .venv\, wheels\, abhedya\, data files).
+- NEXT: Step 3 — build the `features` table (Final Parameters Spec, "Features table").
 
