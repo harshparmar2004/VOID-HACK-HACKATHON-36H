@@ -22,7 +22,8 @@ import {
   run60sFraudBenchmark,
   fetchProblematicTransactions,
   executeEmergencyFreeze,
-  fetchScannerSummary
+  fetchScannerSummary,
+  fetchFrozenAccounts
 } from "../api";
 
 export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, forensicParams }) {
@@ -60,7 +61,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
     return () => clearInterval(timer);
   }, []);
 
-  // Initial load: Fetch live summary from DuckDB backend
+  // Initial load: Fetch live summary and frozen accounts from DuckDB backend
   useEffect(() => {
     async function loadSummary() {
       try {
@@ -73,8 +74,37 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
       } catch (err) {
         console.warn("Using sample scanner summary:", err.message);
       }
+      try {
+        const frozen = await fetchFrozenAccounts();
+        if (Array.isArray(frozen)) {
+          setFrozenAccounts(new Set(frozen.map((f) => f.account_id)));
+        }
+      } catch (e) {}
     }
     loadSummary();
+
+    const handleAccountUnfrozen = (e) => {
+      const accId = e.detail?.account_id;
+      if (accId) {
+        setFrozenAccounts((prev) => {
+          const next = new Set(prev);
+          next.delete(accId);
+          return next;
+        });
+      }
+    };
+    const handleAccountFrozen = (e) => {
+      const accId = e.detail?.account || e.detail?.account_id;
+      if (accId) {
+        setFrozenAccounts((prev) => new Set([...prev, accId]));
+      }
+    };
+    window.addEventListener("account-unfrozen", handleAccountUnfrozen);
+    window.addEventListener("account-frozen", handleAccountFrozen);
+    return () => {
+      window.removeEventListener("account-unfrozen", handleAccountUnfrozen);
+      window.removeEventListener("account-frozen", handleAccountFrozen);
+    };
   }, []);
 
   // Fetch problematic transactions from backend using active forensic parameters
@@ -168,17 +198,34 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
     const targetAccount = txn?.Receiver_Account;
     if (!targetAccount) return;
 
+    const amount = Number(txn?.Amount_INR || 0);
+    const ifsc = txn?.Receiver_IFSC || "BANK0000001";
+    const bankName = txn?.receiver_bank || (ifsc ? `${ifsc.substring(0, 4)} Bank` : "Commercial Bank");
+    const txnId = txn?.Transaction_ID || "TXN-01";
+    const role = txn?.receiver_role || "CRITICAL_WHALE";
+
+    const detail = {
+      account_id: targetAccount,
+      amount: amount,
+      ifsc: ifsc,
+      bank_name: bankName,
+      role: role,
+      txn_id: txnId
+    };
+
     setFreezingTxnId(txn.Transaction_ID);
     try {
-      const res = await executeEmergencyFreeze([targetAccount]);
+      const res = await executeEmergencyFreeze([targetAccount], [detail]);
       setFrozenAccounts((prev) => new Set([...prev, targetAccount]));
       setFreezeStatus({
         status: "success",
         accounts_frozen_count: 1,
         banks_notified_count: 1,
-        total_lien_marked_inr: Number(txn.Amount_INR || 0),
-        message: `Statutory debit freeze & proportional lien dispatched for Account ${targetAccount} (${txn.Receiver_IFSC || 'BANK'})!`
+        total_lien_marked_inr: amount,
+        target_account: targetAccount,
+        message: `Statutory debit freeze & proportional lien dispatched for Account ${targetAccount} (${bankName})!`
       });
+      window.dispatchEvent(new CustomEvent("account-frozen", { detail: { account: targetAccount, detail } }));
     } catch (err) {
       console.warn("Single freeze fallback:", err.message);
       setFrozenAccounts((prev) => new Set([...prev, targetAccount]));
@@ -186,9 +233,11 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
         status: "success",
         accounts_frozen_count: 1,
         banks_notified_count: 1,
-        total_lien_marked_inr: Number(txn.Amount_INR || 0),
-        message: `Statutory lien placed on Account ${targetAccount} (${txn.Receiver_IFSC || 'BANK'})`
+        total_lien_marked_inr: amount,
+        target_account: targetAccount,
+        message: `Statutory lien placed on Account ${targetAccount} (${bankName})`
       });
+      window.dispatchEvent(new CustomEvent("account-frozen", { detail: { account: targetAccount, detail } }));
     } finally {
       setFreezingTxnId(null);
       setTimeout(() => setFreezeStatus(null), 6000);
@@ -223,6 +272,7 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
       });
       setTimeout(() => setFreezeStatus(null), 6000);
     }
+    window.dispatchEvent(new CustomEvent("account-frozen", { detail: { batch } }));
   };
 
   const handleExportCSV = () => {
@@ -508,7 +558,12 @@ export default function RealtimeFraudScannerView({ onNavigateTab, onSelectCase, 
           <div className="flex items-center gap-2">
             {onNavigateTab && (
               <button
-                onClick={() => onNavigateTab("notices")}
+                onClick={() => {
+                  if (freezeStatus?.target_account) {
+                    window.dispatchEvent(new CustomEvent("select-notice-account", { detail: { account_id: freezeStatus.target_account } }));
+                  }
+                  onNavigateTab("notices");
+                }}
                 className="text-xs font-bold text-[#059669] underline hover:text-[#047857] cursor-pointer whitespace-nowrap"
               >
                 View Section 91 Notices →

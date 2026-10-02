@@ -180,14 +180,33 @@ export default function App() {
     loadInitial();
   }, []);
 
+  // Live dynamic synchronization across freeze & unfreeze actions without requiring browser refresh
+  useEffect(() => {
+    const handleSyncNotices = () => {
+      if (activeCase) {
+        fetchBankNotices(activeCase).then((n) => {
+          if (n && Array.isArray(n.notices)) setNoticesData(n);
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener("account-frozen", handleSyncNotices);
+    window.addEventListener("account-unfrozen", handleSyncNotices);
+    return () => {
+      window.removeEventListener("account-frozen", handleSyncNotices);
+      window.removeEventListener("account-unfrozen", handleSyncNotices);
+    };
+  }, [activeCase]);
+
   const handleFilterMuleRole = (role) => {
     setMuleFilter(role);
   };
 
   const loadCaseData = async (victimId, params = forensicParams) => {
     setLoading(true);
+    const p = params || forensicParams;
+    
+    // 1. Trace victim graph
     try {
-      const p = params || forensicParams;
       const trace = await traceVictim(
         victimId,
         p.maxHops,
@@ -197,15 +216,25 @@ export default function App() {
         p.narrationKeyword,
         p.customRules
       );
-      if (trace && trace.nodes) setTraceData(trace);
-      
+      if (trace && Array.isArray(trace.nodes)) setTraceData(trace);
+    } catch (err) {
+      console.warn("Using active trace for victim:", victimId, err.message);
+    }
+
+    // 2. Legal notices (independent of trace filter!)
+    try {
       const notices = await fetchBankNotices(victimId);
-      if (notices && notices.notices) setNoticesData(notices);
-      
+      if (notices && Array.isArray(notices.notices)) setNoticesData(notices);
+    } catch (err) {
+      console.warn("Could not fetch bank notices:", err.message);
+    }
+
+    // 3. Case diary
+    try {
       const diary = await fetchCaseDiary(victimId);
       if (diary && diary.case_diary) setDiaryData(diary);
     } catch (err) {
-      console.warn("Using active trace for victim:", victimId);
+      console.warn("Could not fetch case diary:", err.message);
     } finally {
       setLoading(false);
     }
@@ -452,6 +481,7 @@ export default function App() {
                 victimAccount={activeCase}
                 victimName={victimName}
                 firNumber={firNumber}
+                isActive={activeTab === "notices"}
               />
             </ErrorBoundary>
           </div>
