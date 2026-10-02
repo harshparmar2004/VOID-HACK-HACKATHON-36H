@@ -1,5 +1,5 @@
 """
-audits/check_trace.py -- checks engine/trace.py against an independent chain.
+audits/check_trace.py -- checks engine/victim_trace.py against an independent chain.
 
 Read-only. Nothing here feeds the pipeline.
 
@@ -26,6 +26,12 @@ is the one stored in `scores`.
 
 Reported: mismatching victims (expect 0), median / max / slowest trace time.
 
+Cells (Section 4.4b): for every cell, the victims reverse_trace_cell walks back
+to must be exactly the victims whose FORWARD trace reaches that cell's L1, and
+their count and total must equal the `cells` row. The same is checked for each
+network, and a merged trace of each cell's victims must add up to the single
+traces.
+
 Usage:  .venv\\Scripts\\python.exe audits\\check_trace.py [--db PATH]
 """
 
@@ -42,7 +48,7 @@ import duckdb
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "engine"))
 
-import trace as tracer  # noqa: E402  (engine/trace.py, found through sys.path)
+import victim_trace as tracer  # noqa: E402  (engine/victim_trace.py, through sys.path)
 from features import active_profile  # noqa: E402
 
 DEFAULT_DB = ROOT / "data" / "case.duckdb"
@@ -114,6 +120,10 @@ def main() -> None:
         roles = dict(con.execute(
             "SELECT a.acct_no, s.role FROM scores s JOIN accounts a USING (acct_id) "
             "WHERE s.profile_id = ?", [profile_id]).fetchall())
+        cells = con.execute(
+            "SELECT c.cell_id, c.network_id, a.acct_no, c.victim_count, c.total_in_paise "
+            "FROM cells c JOIN accounts a ON a.acct_id = c.l1_acct "
+            "WHERE c.profile_id = ? ORDER BY c.cell_id", [profile_id]).fetchall()
     finally:
         con.close()
 
@@ -124,6 +134,8 @@ def main() -> None:
     times: list[tuple[float, str]] = []
     acct_mismatch, tx_mismatch, not_conserved, over_held, role_wrong, fallback = [], [], [], [], [], []
     sizes = []
+    reached: dict[str, set] = {}       # account -> victims whose forward trace reaches it
+    paid: dict[str, int] = {}
     for v in victims:
         t0 = time.perf_counter()
         r = tracer.trace_victim(v, args.db)
@@ -133,6 +145,9 @@ def main() -> None:
             acct_mismatch.append((v, "not found", 0, 0))
             continue
         got_accts = {a["acct_no"] for a in r["accounts"]}
+        paid[v] = r["summary"]["tainted_total"]
+        for a in got_accts:
+            reached.setdefault(a, set()).add(v)
         got_tx = {t["tx_key"] for t in r["transfers"]}
         sizes.append(len(got_accts))
         if got_accts != expected_accts[v]:
@@ -153,6 +168,44 @@ def main() -> None:
             role_wrong.append(v)
         if s["used_fallback"]:
             fallback.append(v)
+
+    # ------------------------------------------------------------- cells
+    cell_mismatch, cell_rows_wrong, merge_wrong = [], [], []
+    rev_secs, merge_secs, sum_secs = [], [], []
+    by_network: dict[int, set] = {}
+    for cell_id, network_id, l1_no, victim_count, total_in in cells:
+        t0 = time.perf_counter()
+        rev = tracer.reverse_trace_cell(cell_id, args.db)
+        rev_secs.append(time.perf_counter() - t0)
+        got = {x["acct_no"] for x in rev["victims"]}
+        forward = reached.get(l1_no, set())
+        by_network.setdefault(network_id, set()).update(forward)
+        if got != forward:
+            cell_mismatch.append((cell_id, len(got - forward), len(forward - got)))
+        t0 = time.perf_counter()
+        cs = tracer.cell_summary(cell_id, args.db)
+        sum_secs.append(time.perf_counter() - t0)
+        if (rev["victim_count"] != victim_count or rev["total_in"] != total_in
+                or cs["victim_count"] != victim_count or cs["total_in"] != total_in
+                or cs["mules"] != sum(cs["mules_by_role"].values())):
+            cell_rows_wrong.append(cell_id)
+        # Merged trace of the cell's victims: per-victim parts add up to the
+        # single traces, and every account's parts add up to its total.
+        t0 = time.perf_counter()
+        m = tracer.trace_victims(sorted(got), args.db)
+        merge_secs.append(time.perf_counter() - t0)
+        if (m["summary"]["tainted_total"] != sum(paid.get(v, 0) for v in got)
+                or any(a[k] != sum(p[k] for p in a["by_victim"].values())
+                       for a in m["accounts"] for k in ("tainted_in", "holding"))
+                or any(t["tainted"] > t["amount"] + len(t["by_victim"]) for t in m["transfers"])):
+            merge_wrong.append(cell_id)
+    net_mismatch = []
+    t0 = time.perf_counter()
+    for network_id, forward in sorted(by_network.items()):
+        got = {x["acct_no"] for x in tracer.reverse_trace_network(network_id, args.db)["victims"]}
+        if got != forward:
+            net_mismatch.append(network_id)
+    net_seconds = time.perf_counter() - t0
 
     secs = [t for t, _ in times]
     slow_t, slow_v = max(times)
@@ -179,6 +232,24 @@ def main() -> None:
           f" max {slow_t * 1000:.2f} ms (slowest: {slow_v})")
     print(f"all traces   : {sum(secs):.2f} s")
 
+    print(f"\ncells checked          : {len(cells)}")
+    print(f"cell victim mismatches (reverse vs forward) : {len(cell_mismatch)}   (expect 0)")
+    for cell_id, extra, missing in cell_mismatch[:10]:
+        print(f"    cell {cell_id}: {extra} only in reverse, {missing} only in forward")
+    print(f"cells disagreeing with the cells table      : {len(cell_rows_wrong)}")
+    print(f"merged traces that do not add up            : {len(merge_wrong)}")
+    print(f"networks checked {len(by_network)}, victim mismatches : {len(net_mismatch)}")
+    if cells:
+        print(f"reverse cell : median {statistics.median(rev_secs) * 1000:.3f} ms,"
+              f" max {max(rev_secs) * 1000:.3f} ms")
+        print(f"cell summary : median {statistics.median(sum_secs) * 1000:.3f} ms,"
+              f" max {max(sum_secs) * 1000:.3f} ms")
+        print(f"merged trace : median {statistics.median(merge_secs) * 1000:.2f} ms,"
+              f" max {max(merge_secs) * 1000:.2f} ms (all victims of one cell)")
+        print(f"reverse network : {net_seconds * 1000:.2f} ms for {len(by_network)} network(s)")
+
+    if cell_mismatch or cell_rows_wrong or merge_wrong or net_mismatch:
+        raise SystemExit("check_trace FAILED (see above)")
     if acct_mismatch or tx_mismatch or not_conserved or over_held or role_wrong:
         raise SystemExit("check_trace FAILED (see above)")
     print("\ncheck_trace PASSED")

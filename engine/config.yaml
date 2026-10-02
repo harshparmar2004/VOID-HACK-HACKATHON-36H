@@ -406,14 +406,14 @@ trust_index:
       name: Device / network consistency
       index: trust
       features: [device_consistency]
-      rule: {type: threshold_asc, feature: device_consistency, full_at: null, half_at: null}
-      rule_text: "device/network consistency -- threshold NOT specified in the spec"
+      rule: {type: threshold_asc, feature: device_consistency, full_at: 1, half_at: null}
+      rule_text: "device_consistency = 1 (one device family, domestic IPs only)"
       weight: 5
       enabled: true
       notes: >
-        The spec gives T7 a weight but no threshold. full_at is left null
-        deliberately rather than inventing a number; set it when the
-        device_consistency feature is defined, or T7 contributes 0.
+        device_consistency is a 0 / 1 feature (Section 4.6), so full_at is 1:
+        a step, full points only when the account is consistent. The Trust
+        Index still needs min_tx_for_trust transactions.
 
 # ---------------------------------------------------------------------------
 # Final index and the flag decision (Section 4.3).
@@ -466,6 +466,16 @@ final:
     - {name: high_confidence, min_inclusive: 85}
     - {name: suspected, min_inclusive: 65, max_exclusive: 85}
     - {name: clean, max_exclusive: 65}
+
+  # Freeze recommendation (scores.freeze_recommended). It does NOT read the
+  # band: bands are confidence labels only. An account is recommended for a
+  # freeze when it is flagged, its role is confirmed by a layer link, and it
+  # still holds money: holding = all money received - all money sent.
+  freeze:
+    requires_flag: true
+    requires_role_confirmed: true
+    min_holding_paise_exclusive: 0
+    rule_text: "is_flagged AND role_confirmed AND holding > 0 (holding = received - sent)"
 
   # Not a flag: a watch list for an officer to look at by hand.
   review_rule:
@@ -540,7 +550,7 @@ roles:
         works.
 
 # ---------------------------------------------------------------------------
-# Victim trace (Section 4.4). engine/trace.py hard-codes none of these.
+# Victim trace (Section 4.4). engine/victim_trace.py hard-codes none of these.
 # ---------------------------------------------------------------------------
 trace:
   max_hops: 4
@@ -548,18 +558,31 @@ trace:
   # this window after tainted money arrived (a key of the `windows` block;
   # Section 4.4: "trace window starts at 60 min").
   fallback_window: single_forward_max_minutes
-  # Fallback only: follow receivers ranked by final_index until this share of
-  # the tainted amount is covered.
+  # Fallback only: every in-window outflow to a flagged receiver is followed;
+  # unflagged receivers are then followed, ranked by final_index and amount,
+  # until this share of the remaining tainted amount is covered.
   coverage_target: 0.90
   # Safety cap for a very connected account: stop expanding, mark truncated.
   max_accounts: 500
+  # Findings: at most this many evidence sentences per pattern (the rest are
+  # counted in a closing "and N more"). The pattern cut-offs themselves are
+  # final.override.conditions (forwarded share, split count), `windows` and
+  # rings.patterns -- the trace adds none of its own.
+  max_evidence_sentences: 10
 
 # ---------------------------------------------------------------------------
 # Rings (Section 4.4b): connected components of layer_links. Pattern cut-offs
 # live here so engine/rings.py hard-codes none.
 # ---------------------------------------------------------------------------
 rings:
+  # The connected component is the NETWORK (rings.ring_id = network_id).
   method: connected_components
+  # Cells are the working unit inside a network: one cell per confirmed L1,
+  # with every account downstream of it through layer links and the victims
+  # that paid it. An account reached from several L1s is in each such cell.
+  # Cells use the same pattern cut-offs as the network.
+  cells:
+    method: confirmed_l1_downstream
   patterns:
     # SCATTER_GATHER: one account's forwards reconverge on the same account
     # through at least this many DIFFERENT intermediaries.

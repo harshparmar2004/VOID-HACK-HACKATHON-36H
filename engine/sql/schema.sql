@@ -107,7 +107,14 @@ CREATE TABLE IF NOT EXISTS scores (
     param_points JSON,
 
     reasons VARCHAR[],
-    ring_id INTEGER,
+    ring_id INTEGER,            -- the network (connected component), rings.ring_id
+
+    -- holding_paise = all money received - all money sent (from tx).
+    -- freeze_recommended = is_flagged AND role_confirmed AND holding > 0
+    -- (profile: final.freeze). It never reads the band: bands are confidence
+    -- labels only. Both are NULL after pass 1 (no roles yet).
+    holding_paise      BIGINT,
+    freeze_recommended BOOLEAN,
 
     PRIMARY KEY (acct_id, profile_id),
 
@@ -118,6 +125,11 @@ CREATE TABLE IF NOT EXISTS scores (
         CHECK (role IS NULL
                OR role IN ('L1', 'L2', 'L3', 'UNCLASSIFIED_MULE', 'VICTIM'))
 );
+
+-- Databases created before these two columns existed get them here; a no-op
+-- otherwise, and it never touches existing rows.
+ALTER TABLE scores ADD COLUMN IF NOT EXISTS holding_paise BIGINT;
+ALTER TABLE scores ADD COLUMN IF NOT EXISTS freeze_recommended BOOLEAN;
 
 -- 8. layer_links -- one row per PROVEN inter-layer transfer, per profile.
 --    A layer link is a specific transaction that proves money moved from one
@@ -171,6 +183,43 @@ CREATE TABLE IF NOT EXISTS rings (
     fingerprint         VARCHAR,
 
     PRIMARY KEY (profile_id, ring_id)
+);
+
+-- 9b. cells -- one row per cell per profile. A ring is the whole NETWORK (the
+--     connected component, network_id = rings.ring_id); a cell is the working
+--     unit inside it: one confirmed L1, every account downstream of it through
+--     layer links, and the victims that paid it. Same fields as rings.
+--     Cells OVERLAP (a shared L2 / L3 is in every cell that reaches it), so
+--     cell totals do not add up to the network totals.
+CREATE TABLE IF NOT EXISTS cells (
+    profile_id          VARCHAR NOT NULL,
+    cell_id             INTEGER NOT NULL,
+    network_id          INTEGER,     -- rings.ring_id
+    l1_acct             INTEGER,     -- the confirmed L1 the cell is built from
+    size                INTEGER,     -- mule accounts; victims are counted apart
+    l1_count            INTEGER,
+    l2_count            INTEGER,
+    l3_count            INTEGER,
+    unclassified_count  INTEGER,
+    victim_count        INTEGER,
+    total_in_paise      BIGINT,
+    holding_paise       BIGINT,
+    first_ts            TIMESTAMP,
+    last_ts             TIMESTAMP,
+    patterns            VARCHAR[],
+    fingerprint         VARCHAR,     -- SHA-256 of the cell's sorted tx_keys
+
+    PRIMARY KEY (profile_id, cell_id)
+);
+
+-- 9c. cell_members -- which accounts are in which cell (many-to-many).
+CREATE TABLE IF NOT EXISTS cell_members (
+    profile_id VARCHAR NOT NULL,
+    cell_id    INTEGER NOT NULL,
+    acct_id    INTEGER NOT NULL,
+    role       VARCHAR,              -- scores.role at build time (VICTIM, L1, ...)
+
+    PRIMARY KEY (profile_id, cell_id, acct_id)
 );
 
 -- 10. cases -- one row per investigation (a set of victims and/or rings).

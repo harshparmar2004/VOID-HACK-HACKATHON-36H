@@ -1,8 +1,9 @@
 """
-engine/rings.py -- Step 4d of the Abhedya-Chakra pipeline: rings.
+engine/rings.py -- Step 4d of the Abhedya-Chakra pipeline: rings and cells.
 
     layer_links + scores (pass 2) + tx  ->  rings
                                             + ring_id on layer_links and scores
+                                            + cells, cell_members
                                             (DELETE for the profile, then INSERT)
 
 A ring is a connected component of the proven layer links: every account
@@ -18,6 +19,13 @@ Sections 4.4b and 9). Per ring:
   * fingerprint     SHA-256 of the ring's sorted tx_keys, comma-joined --
                     the same evidence always gives the same hash. tx_key (not
                     tx_id) because Transaction_ID is not unique in this file.
+
+The ring is the whole NETWORK (network_id = ring_id). A CELL is the unit to
+work a case on: one cell per confirmed L1, with every account downstream of it
+through layer links and the victims that paid it. An account reached from
+several L1s belongs to each such cell, so cells overlap and their totals do
+not add up to the network's. Cells carry the same fields as rings; a cell's
+holding is the sum of its mule accounts' holdings.
 
 Run AFTER scoring.py pass 2: role counts read scores.role, and pass 2 resets
 scores.ring_id to NULL, so this script must be rerun after every scoring run.
@@ -58,7 +66,10 @@ SQL_PATH = ENGINE_DIR / "sql" / "rings.sql"
 
 MEMORY_LIMIT = "3GB"
 
-SECTIONS = ("LINKS", "EDGES", "INIT", "STEP", "CHANGED", "RINGS")
+SECTIONS = ("LINKS", "EDGES", "INIT", "STEP", "CHANGED", "MEMBERS", "RINGS", "CELLS")
+
+RING_FIELDS = ("size, l1_count, l2_count, l3_count, unclassified_count, victim_count, "
+               "total_in_paise, holding_paise, first_ts, last_ts, patterns, fingerprint")
 
 
 def ring_params(profile_id: str, profile: dict) -> dict[str, str]:
@@ -119,11 +130,12 @@ def main() -> None:
     try:
         con.execute(f"SET memory_limit='{MEMORY_LIMIT}'")
 
-        for t in ("tx", "scores", "layer_links", "rings"):
+        for t in ("tx", "scores", "layer_links", "rings", "cells", "cell_members"):
             if not con.execute(
                     "SELECT count(*) FROM information_schema.tables "
                     "WHERE table_schema='main' AND table_name=?", [t]).fetchone()[0]:
-                raise SystemExit(f"table {t} is missing -- run the earlier pipeline steps first")
+                raise SystemExit(f"table {t} is missing -- run engine\\apply_schema.py "
+                                 "and the earlier pipeline steps first")
 
         profile_id, profile = active_profile(con)
         params = ring_params(profile_id, profile)
@@ -170,19 +182,27 @@ def main() -> None:
                 raise SystemExit("ring components did not converge")
 
         cycle_accts = accounts_on_cycles(con)
+        con.execute(sections["MEMBERS"])
         con.execute(Template(sections["RINGS"]).substitute(cycle_accts=cycle_accts))
+        con.execute(Template(sections["CELLS"]).substitute(cycle_accts=cycle_accts))
 
         # Refill this profile only; other profiles' rows are untouched (Section 9).
         con.execute("BEGIN")
         try:
             con.execute("DELETE FROM rings WHERE profile_id = ?", [profile_id])
             con.execute(
-                "INSERT INTO rings (profile_id, ring_id, size, l1_count, l2_count, l3_count, "
-                "unclassified_count, victim_count, total_in_paise, holding_paise, first_ts, "
-                "last_ts, patterns, fingerprint) "
-                "SELECT ?, ring_id, size, l1_count, l2_count, l3_count, unclassified_count, "
-                "victim_count, total_in_paise, holding_paise, first_ts, last_ts, patterns, "
-                "fingerprint FROM ring_build", [profile_id])
+                f"INSERT INTO rings (profile_id, ring_id, {RING_FIELDS}) "
+                f"SELECT ?, ring_id, {RING_FIELDS} FROM ring_build", [profile_id])
+            con.execute("DELETE FROM cells WHERE profile_id = ?", [profile_id])
+            con.execute("DELETE FROM cell_members WHERE profile_id = ?", [profile_id])
+            con.execute(
+                f"INSERT INTO cells (profile_id, cell_id, network_id, l1_acct, {RING_FIELDS}) "
+                f"SELECT ?, cell_id, network_id, l1_acct, {RING_FIELDS} FROM cell_build",
+                [profile_id])
+            con.execute(
+                "INSERT INTO cell_members (profile_id, cell_id, acct_id, role) "
+                "SELECT ?, b.cell_id, m.acct, m.role FROM cell_member m "
+                "JOIN cell_build b ON b.l1_acct = m.l1", [profile_id])
             # Stamp the ring on its links and on its member accounts.
             con.execute(
                 "UPDATE layer_links SET ring_id = m.ring_id "
@@ -253,6 +273,52 @@ def main() -> None:
                   f" uncl {r[5]:<2} victims {r[6]:<3} in Rs {r[7]:>12,.0f}"
                   f" held Rs {r[8]:>12,.0f}  {r[9]} -> {r[10]}  {r[11]}  sha {r[12]}")
 
+        # ------------------------------------------------------------ cells
+        n_cells, c_min, c_med, c_max, c_min_all, c_max_all = con.execute(
+            "SELECT count(*), min(size), median(size), max(size),"
+            "       min(size + victim_count), max(size + victim_count) "
+            "FROM cells WHERE profile_id = ?", [profile_id]).fetchone()
+        print(f"\ncells        : {n_cells:,} (one per confirmed L1)")
+        if n_cells:
+            print(f"cell size    : {c_min}-{c_max} mule accounts (median {c_med:g});"
+                  f" {c_min_all}-{c_max_all} including victims")
+            v_min, v_max, in_min, in_max, h_min, h_max = con.execute(
+                "SELECT min(victim_count), max(victim_count), min(total_in_paise) / 100.0,"
+                "       max(total_in_paise) / 100.0, min(holding_paise) / 100.0,"
+                "       max(holding_paise) / 100.0 FROM cells WHERE profile_id = ?",
+                [profile_id]).fetchone()
+            print(f"cell victims : {v_min}-{v_max};  in Rs {in_min:,.0f}-{in_max:,.0f};"
+                  f"  held Rs {h_min:,.0f}-{h_max:,.0f}")
+            shared, most = con.execute(
+                "SELECT count(*) FILTER (WHERE n > 1), max(n) FROM ("
+                "  SELECT count(*) AS n FROM cell_members WHERE profile_id = ? "
+                "  AND role IS DISTINCT FROM 'VICTIM' GROUP BY acct_id)",
+                [profile_id]).fetchone()
+            print(f"shared mules : {shared:,} accounts are in more than one cell (most: {most})")
+            print("cell patterns:", ", ".join(f"{p} {n:,}" for p, n in con.execute(
+                "SELECT p, count(*) FROM (SELECT unnest(patterns) AS p FROM cells "
+                "WHERE profile_id = ?) GROUP BY p ORDER BY p", [profile_id]).fetchall())
+                or "(none)")
+
+        l1_no_cell, mule_no_cell, cell_dup_fp, cell_bad, cell_no_net = con.execute(
+            "SELECT"
+            " (SELECT count(*) FROM scores s WHERE s.profile_id = $p AND s.role = 'L1'"
+            "    AND s.role_confirmed AND s.acct_id NOT IN"
+            "        (SELECT l1_acct FROM cells WHERE profile_id = $p)),"
+            " (SELECT count(*) FROM scores s WHERE s.profile_id = $p AND s.is_flagged"
+            "    AND s.ring_id IS NOT NULL AND s.acct_id NOT IN"
+            "        (SELECT acct_id FROM cell_members WHERE profile_id = $p)),"
+            " (SELECT count(*) - count(DISTINCT fingerprint) FROM cells WHERE profile_id = $p),"
+            " (SELECT count(*) FROM cells c WHERE c.profile_id = $p AND c.size + c.victim_count <>"
+            "    (SELECT count(*) FROM cell_members m WHERE m.profile_id = $p"
+            "       AND m.cell_id = c.cell_id)),"
+            " (SELECT count(*) FROM cells WHERE profile_id = $p AND network_id IS NULL)",
+            {"p": profile_id}).fetchone()
+        print(f"cell checks  : confirmed L1s without a cell={l1_no_cell},"
+              f" linked mules in no cell={mule_no_cell}, duplicate fingerprints={cell_dup_fp},"
+              f" cells whose size disagrees with cell_members={cell_bad},"
+              f" cells without a network={cell_no_net}")
+
         # ----------------------------------------------------------- checks
         unringed, split_links, dup_fp, bad_members, lost_links = con.execute(
             "SELECT"
@@ -272,13 +338,18 @@ def main() -> None:
               f" duplicate fingerprints={dup_fp}, rings whose size disagrees with scores={bad_members},"
               f" links not counted in a ring={lost_links}")
 
-        for t in ("ring_link", "ring_edge", "ring_comp", "ring_comp_next", "ring_build"):
+        for t in ("ring_link", "ring_edge", "ring_comp", "ring_comp_next", "ring_member",
+                  "ring_build", "cell_reach", "cell_link", "cell_member", "cell_build"):
             con.execute(f"DROP TABLE IF EXISTS {t}")
 
         print(f"\nsql seconds  : {sql_seconds:.2f}")
         print(f"total seconds: {time.perf_counter() - t0:.2f}")
 
-        if unringed or split_links or dup_fp or bad_members or lost_links:
+        # "linked mules in no cell" is reported, not failed: a flagged account
+        # joined to the network only above or beside every confirmed L1 has no
+        # cell, and that is a finding for the officer rather than a bug.
+        if (unringed or split_links or dup_fp or bad_members or lost_links
+                or l1_no_cell or cell_dup_fp or cell_bad or cell_no_net):
             raise SystemExit("rings FAILED a consistency check (see above)")
     finally:
         con.close()

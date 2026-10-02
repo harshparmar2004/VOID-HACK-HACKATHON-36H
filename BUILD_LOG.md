@@ -119,3 +119,123 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - The fallback path is only spot-tested (one normal account): no send-only account needs it.
 - Section 4.4 step 0 (L1 edge score) and the pattern "findings" are not built. Trace fingerprint uses `tx_key`s.
 - `engine\trace.py` shares its name with a standard-library module; it is imported only with `engine\` first on the path.
+
+## 2026-10-02 — Step 4 follow-ups: cells, freeze_recommended, T7, victim_trace rename
+
+**Files** — edited `engine\rings.py`, `engine\sql\rings.sql` (new `@@MEMBERS`, `@@CELLS`), `engine\scoring.py`, `engine\sql\pass2.sql`, `engine\sql\schema.sql`, `engine\config.yaml`, `audits\check_trace.py`; renamed `engine\trace.py` → `engine\victim_trace.py` (git mv).
+
+**Key names** — NEW tables `cells` (ring fields + `network_id`, `l1_acct`) and `cell_members` (`cell_id`, `acct_id`, `role`); NEW `scores.holding_paise`, `scores.freeze_recommended` (added by `ALTER TABLE … ADD COLUMN IF NOT EXISTS` in `schema.sql`). `rings.py`: `RING_FIELDS`, temp `ring_member`, `cell_reach` (recursive, link direction only), `cell_link`, `cell_member`, `cell_build`. `scoring.py`: `freeze_params`, freeze table in `report_roles`. Trace output: `network_id`, `cell_ids`, `freeze_recommended`, `account_holding`; summary `cell_ids` (the victim's), `freeze_recommended`, `freeze_holding_total`.
+
+**Profile keys added / changed** — T7 `rule.full_at: 1` (was null); NEW `final.freeze.{requires_flag, requires_role_confirmed, min_holding_paise_exclusive: 0}`; NEW `rings.cells.method: confirmed_l1_downstream`. Locked `v1-verified` re-seeded in place.
+
+**Results** — full rerun (apply_schema, seed_profile, pass 1, links, pass 2, rings): pass 2 0.78 s, rings 0.15 s.
+- Flags / roles / confirmations / bands: hash over all 24,873 accounts identical before and after; 1,073 flagged (L1 129, L2 559, L3 385); link set identical (2,954). T7 is now scored but > 0 on 0 accounts (no account has `device_consistency` 1 and enough transactions for trust).
+- Network: still 1 (ring_id 1 = network_id 1). **Cells: 129**, size **10–120** mule accounts (median 38), 11–128 with victims; 1–8 victims per cell; 768 mules are in more than one cell (most: 28). Patterns: SCATTER_GATHER 45, FUNNEL 4. All 5 cell checks 0.
+- freeze_recommended: L1 129 (Rs 1,695,336) · L2 559 (Rs 3,322,859) · L3 385 (Rs 79,748,610) · total 1,073, Rs 84,766,805.
+- `check_trace.py`: accounts 0, transfers 0 mismatches; PASSED; median 0.75 ms.
+
+**Deviations / open items**
+- **Cells over-reach**: membership is account-level, so a shared L2 pulls every L3 it ever paid into each of its cells. A cell holds Rs 1.5M–22.7M against Rs 58k–2.7M paid in; cell totals overlap and do not sum to the network. A per-victim trace (7–13 accounts) is the tight unit; a money-following cell would need the parent inflow recorded on each link.
+- `ring_id` columns were NOT renamed (fixed schema): `network_id` exists on `cells` and in trace output only.
+- Two tables beyond the 12 of Section 9; Section 9 and any `engine\trace.py` mention in PROJECT_CONTEXT.md are now out of date (not edited, by rule).
+- Cell / ring holding is linked money (in − out over links); `scores.holding_paise` is all received − all sent. They agree in total here (Rs 84,766,805).
+- Every flagged account is freeze-recommended on this file, so the rule does not yet discriminate. `rings.py` must still be rerun after every scoring run (trace now refuses to load without cells).
+
+## 2026-10-02 — Step 5b: trace findings, summary, freeze candidates
+
+**Files** — edited `engine\victim_trace.py`, `engine\config.yaml` (profile re-seeded; scores not rerun, nothing scoring reads changed).
+
+**Key names** — `_findings`, `_on_cycle`, `_minutes`; Context cut-offs `forward_share_min`, `split_min`, `scatter_min`, `funnel_min`, `rapid_window`, `max_evidence`. Output keys: `per_hop` (renamed from `hops`, adds `minutes_since_previous_hop`), `findings`, `freeze_candidates`, `summary.{reconciliation, who, how, why, when}`, `fingerprint`.
+
+**Rules** — patterns RAPID_PASS_THROUGH, SCATTER, FUNNEL, SCATTER_GATHER, CYCLE (only if the trace's transfers close a loop). One finding per pattern; one evidence sentence per account, built only from the trace's accounts and transfers. Confidence: `high` = every transfer of the pattern is a proven layer link, `medium` = any fallback transfer. Freeze candidates: `freeze_recommended` AND tainted holding > 0, largest first, with bank, `cell_id` (shared with the victim's L1) and receipts (tx_id, tx_key, ts, amount, tainted).
+
+**Profile keys used / added** — `final.override.conditions.forwarded_share_min` (0.90) and `split_count.min` (3), `windows.*`, `rings.patterns.*`; NEW `trace.max_evidence_sentences: 10`.
+
+**Results** (all 300 victims) — RAPID_PASS_THROUGH 300, SCATTER 300, SCATTER_GATHER 5, FUNNEL 0, CYCLE 0, all `high`. Freeze candidates 7–13 per victim. Fingerprint identical on 3 reruns (sample `b60009fc…`) and equal to a recomputed hash on 300 of 300.
+- Reconciliation, per victim: difference 0 paise on 300 of 300. Sample: Rs 90,733.95 = kept 5,371.45 + held at end 85,362.50 + untraced 0.00. All victims: Rs 84,766,804.55 = 5,017,576.09 + 79,749,228.46 + 0.00.
+- `check_trace.py`: 0 account / 0 transfer mismatches, PASSED; trace median 0.91 ms (was 0.75).
+
+**Deviations / open items**
+- Confidence is a label (high / medium), not a number; Section 4.4 does not define one.
+- "Rapid" = inside the longest pass-through window (60 min); there is no separate trace cut-off.
+- Section 4.4's per-account patterns READ from `features` (dormancy, structuring) and step 0 (L1 edge score) are not in the findings. Fingerprint uses `tx_key`s, not tx_ids.
+- `medium` confidence and FUNNEL / CYCLE findings are untested on real data: no victim trace on this file produces them.
+
+## 2026-10-02 — Step 5c: multi-victim trace, reverse trace, cell summary
+
+**Files** — edited `engine\victim_trace.py`, `audits\check_trace.py`. No profile, schema or scoring change.
+
+**Key names** — `trace_victims(acct_nos, db=None)`, `reverse_trace_cell(cell_id)`, `reverse_trace_network(network_id)`, `cell_summary(cell_id)`; helpers `_payments_into`, `_reverse`, `_cell`; Context `cell_info`, `cell_accts`. CLI: `--victim | --victims a,b | --cell N | --network N | --cell-summary N` (the last four print JSON).
+
+**Rules**
+- Merged trace: each victim is traced alone (the pro-rata pool already treats other victims' money as clean) and the traces are merged; a shared account or transfer appears once with its total and each victim's part under `by_victim` (`tainted_in`, `tainted_out`, `untraced_out`, `holding`, `share_of_tainted_in`). Per-victim totals in `victims`.
+- Reverse trace: from the cell's L1 (network: every L1 of its cells) back over the graph's incoming transfers that are proven Victim → L1 links; where an L1 has none, incoming transfers from accounts with role VICTIM. Returns victims, amounts, timestamps, tx_ids.
+- Cell summary: counts, holding, patterns, fingerprint READ from `cells`; victims walked back; freeze accounts from `scores`.
+- Unknown cell / network / victims → `{"found": false, …}`.
+
+**Results** — `check_trace.py` PASSED. Forward: 0 account / 0 transfer mismatches (300 victims, median 0.89 ms).
+- **Cells checked 129, reverse-vs-forward victim mismatches 0**; cells disagreeing with the `cells` table 0; merged traces not adding up 0; networks checked 1, mismatches 0.
+- Timings: reverse cell median 0.27 ms (max 0.64); cell summary 0.31 ms (max 0.75); merged trace of one cell's victims 2.2 ms (max 8.1); reverse network 3.1 ms; all 300 victims merged 292 ms (1,073 accounts, 817 shared, 2,954 transfers, Rs 84,766,804.55 in = held, 0 untraced).
+- Sample, cell 12 (L1 ICIC10000310, 3 victims, Rs 1,344,413.78): shares at the L1 35.61% / 33.05% / 31.34%; 25 accounts, 27 transfers.
+
+**Deviations / open items**
+- "Forward trace reaches the cell" is taken as: reaches the cell's L1. Reaching any cell member would pull in other L1s' victims through shared L2 / L3s (the cell over-reach noted in the Step 4 follow-ups).
+- Real mixing is rare here: only 2 transfers on the whole file carry two victims' money at once, so the pro-rata split inside one transfer is barely exercised.
+- The reverse-trace fallback (no Victim → L1 link) has not run on real data: every L1 has links.
+- `cell_summary.holding` is the cell's linked holding and overlaps other cells (cell 12: Rs 9.84M held vs Rs 1.34M paid in).
+
+## 2026-10-02 — Trace fallback test (no code change)
+
+**Step** — copy of `data\case.duckdb` in `%TEMP%\fallback_test`; deleted the 31 `layer_links` rows of three victims' chains (smallest, median, largest payment) on the copy; built graph arrays beside the copy; traced with `--db`; compared with the real database. Copy and its graph deleted. Live database not written.
+
+**Files** — none changed.
+
+**Results** — all three traces ran entirely on the fallback (`via: fallback`, findings drop to `medium`). No wrong account and no wrong amount on any account reached; nothing extra followed.
+- SBIN10000294 (Rs 499,823.99): identical — 11 accounts, 11 transfers, same amounts, same fingerprint.
+- ICIC10000184 (Rs 51,698.58): 9 of 11 accounts; Rs 644.43 (1.2%) reported as untraced at the L1; 1 L2 + 1 L3 missing.
+- BARB10000045 (Rs 285,262.68): 5 of 9 accounts; Rs 21,677.80 (7.6%) untraced at the L1; 2 L2 + 2 L3 missing; SCATTER finding lost (fewer than 3 receivers followed).
+
+**Deviations / open items**
+- Cause of the gap: `trace.coverage_target` 0.90 — the fallback follows receivers by `final_index` then amount until 90% of the tainted money is covered and leaves the smallest branches as `untraced_out`. This is the Section 4.4 rule working as written, not a defect; taint still reconciles (held + untraced = paid).
+- Decision needed: keep 0.90, or raise `trace.coverage_target` (1.0 reproduces the link trace here but follows every in-window outflow of a busy account).
+- Only the hop-1 L1 split was cut short; single-forward L2 hops were followed in full.
+
+## 2026-10-02 — Trace fallback rule: flagged receivers first
+
+**Step** — changed the fallback in `engine\victim_trace.py` (used only where an account has no layer link): (1) follow every in-window outflow to a flagged receiver; (2) then unflagged receivers by `final_index`, then amount, until `trace.coverage_target` of the remaining tainted money (tainted in minus what the flagged receivers took) is covered; (3) `trace.max_accounts` and `untraced_out` unchanged. Same rule for the victim's own payments (hop 1).
+
+**Files** — `engine\victim_trace.py`; `engine\config.yaml` (comment on `coverage_target` only, no value changed, no reseed needed).
+
+**Key names** — `_fallback_choice` (replaces `_rank_until_covered`); `Context.flagged` (read from `scores.is_flagged`; no score = not flagged).
+
+**Results** — fallback test on a `%TEMP%\fallback_test` copy, 31 `layer_links` rows deleted, graph built beside the copy, all transfers `via: fallback`:
+- SBIN10000294: 11/11 accounts, 11/11 transfers, 0 untraced, same fingerprint.
+- ICIC10000184: 11/11 accounts, 11/11 transfers, 0 untraced, same fingerprint.
+- BARB10000045: 9/9 accounts, 9/9 transfers, 0 untraced, same fingerprint; SCATTER finding back.
+- No extra account, no amount difference on any account. Copy deleted; live database not written.
+- `audits\check_trace.py` on the live database: PASSED — 300 victims, 0 account / 0 transfer mismatches, taint conserved, 0 traces needed the fallback; 129 cells, 0 reverse mismatches. Test 1.3 s, audit traces 0.27 s.
+
+**Deviations / open items**
+- PROJECT_CONTEXT.md Section 4.4 has no "Fallback rule (decided 2 Oct)" note (only the line "falls back to the general rules"); the rule was taken from the task text. The note still needs adding to Section 4.4 by hand.
+- Step (2) is not separately tested: the test compares the result with the link trace and does not record which step picked each receiver.
+
+## 2026-10-02 — Step 5c polish: trace summary wording
+
+**Step** — Step 5c was re-issued. `trace_victims`, `reverse_trace_cell`, `reverse_trace_network`, `cell_summary` and the per-cell check in `audits\check_trace.py` already existed (Step 5c entry above) and were left as they are; only the three polish items were missing and were added.
+
+**Files** — `engine\victim_trace.py`.
+
+**Key names** — `_score_shown`; `victim_score` added to `DETAIL_SQL`, the account dict and `_STATIC` (JSON keeps `final_index` too).
+
+**Changes**
+- (a) hop 1 prints "(victim payment)" instead of "(+None min)"; the JSON `minutes_since_previous_hop` stays null.
+- (b) an account with role VICTIM is shown with `victim_score` (victim line and account rows); every other account with `final_index`.
+- (c) `why`: commission kept by the forwarding accounts (roles read from `scores`, e.g. "L1/L2") vs the amount at the final accounts, and whether the whole held amount is in freeze-recommended accounts (otherwise the part that is); untraced money is mentioned only when above zero.
+
+**Results** — `check_trace.py` PASSED: 300 victims, 0 account / 0 transfer mismatches.
+- Cells checked 129, reverse-vs-forward victim mismatches 0; cells table disagreements 0; merged traces not adding up 0; 1 network, 0 mismatches.
+- Timings: context load 81 ms; trace median 0.88 ms (max 1.77); reverse cell 0.27 ms (max 0.44); cell summary 0.31 ms (max 0.50); merged trace of one cell 2.17 ms (max 8.03); reverse network 3.21 ms.
+- Cell 12 (L1 ICIC10000310, 3 victims, Rs 1,344,413.78, 25 accounts, 27 transfers): PUNB10000270 35.61%, SBIN10000165 33.05%, IPOS10000026 31.34% of the money at the L1.
+
+**Deviations / open items**
+- The open items of the Step 5c entry still stand (cell reach = the cell's L1; reverse fallback never run on real data).

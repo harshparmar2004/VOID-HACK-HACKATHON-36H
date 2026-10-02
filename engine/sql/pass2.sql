@@ -24,6 +24,9 @@
 --   $$victim_threshold  roles.victim_threshold
 --   $$requires_link     roles.requires_confirming_link (TRUE / FALSE)
 --   $$unclassified      roles.unclassified_role
+--   $$freeze_flag $$freeze_confirmed $$freeze_min_holding
+--                       final.freeze (requires_flag, requires_role_confirmed,
+--                       min_holding_paise_exclusive)
 -- The two bound parameters (?) in @@RELATIONS are both the profile_id.
 
 -- @@RELATIONS
@@ -77,6 +80,8 @@ lo AS (
 SELECT
     nr.acct AS acct_id,
     nr.neighbour_risk,
+    -- Holding = all money received - all money sent (integer paise).
+    CAST(coalesce(nr.in_total, 0) - coalesce(nr.out_total, 0) AS BIGINT) AS holding_paise,
     -- NULL = not applicable (Section 4.6): an account that never receives has
     -- no upstream at all. An account that receives but through no layer link
     -- has a measured 0.
@@ -117,6 +122,7 @@ SELECT f.* REPLACE (r.neighbour_risk    AS neighbour_risk,
                     r.upstream_l1_share AS upstream_l1_share,
                     r.upstream_l2_share AS upstream_l2_share),
        r.linked_sink_share,
+       r.holding_paise,
        r.upstream_role_share, r.downstream_role_share,
        coalesce(r.in_victim_l1, FALSE)  AS in_victim_l1,
        coalesce(r.in_l1_l2, FALSE)      AS in_l1_l2,
@@ -224,6 +230,11 @@ SELECT
     l1_score, l2_score, l3_score, victim_score,
     role, role_confirmed, candidate_roles,
     upstream_role_share, downstream_role_share,
+    holding_paise,
+    -- Freeze recommendation: flag AND confirmed role AND money still held.
+    -- The band is not read -- it is a confidence label only.
+    ($freeze_flag AND $freeze_confirmed
+     AND coalesce(holding_paise, 0) > $freeze_min_holding) AS freeze_recommended,
     param_points,
     list_concat(reasons, list_filter([
         CASE

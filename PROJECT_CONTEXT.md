@@ -291,6 +291,11 @@ Display example: `Final 84 (Mule 90, Trust 14) · Role L2 confirmed (L1 31, L2 8
 - Output per node: role, hop, tainted in/out, **holding amount** (freeze priority), bank, Transaction_IDs.
 - Trace window starts at 60 min (wider than the PS 3–15 min velocity rule); tune on real data.
 - The trace follows `layer_links` first, then falls back to the general rules. Hop limit configurable (default 4).
+- **Fallback rule (decided 2 Oct after the fallback test):** when links are missing, (1) follow EVERY in-window
+  outflow whose receiver is flagged; (2) then follow unflagged receivers ranked by final_index, then amount,
+  until `trace.coverage_target` (0.90) of the remaining tainted money is covered; (3) respect
+  `trace.max_accounts`. Rationale: a pure 90% cut dropped small flagged branches (BARB10000045 reached 5/9),
+  while 1.0 for everyone would follow every outflow of busy normal accounts. Untraced money is always reported.
 - **Per-hop summary:** accounts, transfers, amount moved, time since previous hop (e.g. "₹4.5L across 3 hops in 22 min").
 - **Findings:** each detected pattern as {pattern, confidence, evidence sentences, accounts, tx_ids, hop range}.
   Multi-account patterns: **Scatter-Gather** (split out, reconverge at the same account within a short window),

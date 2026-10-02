@@ -27,6 +27,9 @@ itself, so it can be rerun), then:
   * role, role_confirmed, candidate_roles, upstream/downstream_role_share
     (Section 4.3b: best role score at/above the threshold, clear of the tie
     margin, AND a proven layer link -- otherwise UNCLASSIFIED_MULE).
+  * holding_paise (all money received - all money sent) and
+    freeze_recommended (profile: final.freeze -- flagged AND role confirmed
+    AND holding > 0). The band is a confidence label and is not read.
 ring_id is left NULL: rings.py fills it, and must be rerun after this script.
 
 Rules this script obeys (PROJECT_CONTEXT.md Sections 4.6 and 8):
@@ -573,8 +576,24 @@ def build_roles_sql(profile: dict, b: Builder, plan: list[dict]) -> str:
         victim_threshold=num(roles["victim_threshold"], "roles.victim_threshold"),
         requires_link="TRUE" if roles["requires_confirming_link"] else "FALSE",
         unclassified=unclassified,
+        **freeze_params(profile),
     ))
     return sections["ROLES"]
+
+
+def freeze_params(profile: dict) -> dict[str, str]:
+    """The freeze rule (final.freeze) as SQL text for pass2.sql."""
+    try:
+        fz = profile["final"]["freeze"]
+    except KeyError:
+        raise SystemExit("profile has no final.freeze block -- reseed from engine\\config.yaml")
+    return {
+        "freeze_flag": "is_flagged" if fz["requires_flag"] else "TRUE",
+        "freeze_confirmed": ("coalesce(role_confirmed, FALSE)"
+                             if fz["requires_role_confirmed"] else "TRUE"),
+        "freeze_min_holding": num(fz["min_holding_paise_exclusive"],
+                                  "final.freeze.min_holding_paise_exclusive"),
+    }
 
 
 def split_sections(text: str) -> dict[str, str]:
@@ -607,7 +626,8 @@ def run_pass2(con: duckdb.DuckDBPyConnection, profile_id: str,
     # role expressions are filled in later, once the pass-2 Builder exists.
     blank = dict.fromkeys(
         ("l1_expr", "l2_expr", "l3_expr", "victim_expr", "role_threshold", "tie_margin",
-         "victim_threshold", "requires_link", "unclassified"), "NULL")
+         "victim_threshold", "requires_link", "unclassified",
+         "freeze_flag", "freeze_confirmed", "freeze_min_holding"), "NULL")
     sections = split_sections(Template(PASS2_SQL_PATH.read_text(encoding="utf-8")).substitute(
         sink_link_types=sink_link_types(profile), **blank))
     for name in ("RELATIONS", "SOURCE", "ROLES"):
@@ -643,6 +663,16 @@ def report_roles(con: duckdb.DuckDBPyConnection, profile_id: str) -> None:
     if n_role:
         print(f"    role_confirmed share among all roles (incl. VICTIM) : {n_role_conf:,} of"
               f" {n_role:,} ({n_role_conf / n_role:.1%})")
+
+    print("\nfreeze_recommended by role (holding = received - sent; bands are not read):")
+    for role, n, fz, held, fz_held in con.execute(
+            "SELECT role, count(*), count(*) FILTER (WHERE freeze_recommended),"
+            "       sum(holding_paise) / 100.0,"
+            "       coalesce(sum(holding_paise) FILTER (WHERE freeze_recommended), 0) / 100.0 "
+            "FROM scores WHERE profile_id = ? AND is_flagged GROUP BY ROLLUP (role) "
+            "ORDER BY role NULLS LAST", [profile_id]).fetchall():
+        print(f"    {role or 'TOTAL':<18} flagged {n:>6,}   freeze {fz:>6,}"
+              f"   holding Rs {held:>14,.0f}   freeze holding Rs {fz_held:>14,.0f}")
 
     print("\nrole scores of flagged accounts (min / median / max by assigned role):")
     for role, a, b_, c in con.execute(
@@ -768,7 +798,8 @@ def main() -> None:
             builder, plan = run_pass2(con, profile_id, profile)
             work = "score_roles"
             role_cols = (", l1_score, l2_score, l3_score, victim_score, role, role_confirmed, "
-                         "candidate_roles, upstream_role_share, downstream_role_share")
+                         "candidate_roles, upstream_role_share, downstream_role_share, "
+                         "holding_paise, freeze_recommended")
         for note in builder.notes:
             print(f"  NOTE       : {note}")
 
@@ -814,7 +845,9 @@ def main() -> None:
                 "                  OR l2_score IS NULL OR l3_score IS NULL))"
                 " OR (NOT is_flagged AND (coalesce(role, 'VICTIM') <> 'VICTIM'"
                 "                         OR victim_score IS NULL))"
-                " OR mp7 IS NULL OR t5 IS NULL)", [profile_id]).fetchone()[0]
+                " OR mp7 IS NULL OR t5 IS NULL"
+                " OR holding_paise IS NULL OR freeze_recommended IS NULL)",
+                [profile_id]).fetchone()[0]
             if bad_role:
                 raise SystemExit(f"{bad_role} scores rows break the role / pass-2 invariants")
         bad = con.execute(
