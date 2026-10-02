@@ -102,7 +102,7 @@ export async function executeEmergencyFreeze(accountIds) {
   const res = await fetch(`${API_BASE}/scanner/emergency-freeze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ account_ids: accountIds })
+    body: JSON.stringify({ account_ids: accountIds, target_accounts: accountIds })
   });
   if (!res.ok) throw new Error("Failed to execute emergency multi-bank freeze");
   return res.json();
@@ -117,6 +117,22 @@ export async function fetchHamiHopping(victimAccount, maxHops = 4, timeWindow = 
 export async function fetchHamiClusters(limit = 30) {
   const res = await fetch(`${API_BASE}/hami/clusters?limit=${limit}`);
   if (!res.ok) throw new Error("Failed to fetch HAMI hopping clusters");
+  return res.json();
+}
+
+export async function fetchFrozenAccounts() {
+  const res = await fetch(`${API_BASE}/scanner/frozen-accounts`);
+  if (!res.ok) throw new Error("Failed to fetch frozen accounts registry");
+  return res.json();
+}
+
+export async function unfreezeAccount(accountId) {
+  const res = await fetch(`${API_BASE}/scanner/unfreeze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_id: accountId })
+  });
+  if (!res.ok) throw new Error("Failed to unfreeze account");
   return res.json();
 }
 

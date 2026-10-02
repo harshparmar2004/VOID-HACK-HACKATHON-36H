@@ -554,13 +554,21 @@ def get_bank_notices(victim_account: str, fir_number: str = "FIR-0142/2026/CYBER
     if not trace.get("nodes"):
         raise HTTPException(status_code=404, detail="No trace trail found for this account.")
     notices = legal.generate_bank_freeze_notices(victim_account, fir_number, trace)
+    
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    frozen_list = scanner.get_frozen_accounts()
+    
     return {
         "victim_account": victim_account,
         "fir_number": fir_number,
         "total_notices": len(notices),
         "total_funds_siphoned": trace["total_siphoned_inr"],
         "total_funds_targeted": sum(n["total_freeze_amount"] for n in notices),
-        "notices": notices
+        "notices": notices,
+        "frozen_accounts": frozen_list,
+        "freeze_candidates": trace.get("freeze_candidates", [])
     }
 
 @app.get("/api/legal/case-diary/{victim_account}")
@@ -664,7 +672,8 @@ def run_jury_blind_evaluation():
 # ==============================================================================
 
 class EmergencyFreezePayload(BaseModel):
-    account_ids: List[str]
+    account_ids: Optional[List[str]] = None
+    target_accounts: Optional[List[str]] = None
 
 @app.get("/api/scanner/summary")
 def get_scanner_summary():
@@ -712,7 +721,29 @@ def execute_emergency_freeze(payload: EmergencyFreezePayload):
     global scanner
     if scanner is None:
         scanner = FraudScanner(engine.con)
-    return scanner.execute_emergency_freeze(payload.account_ids)
+    accounts = payload.account_ids or payload.target_accounts or []
+    return scanner.execute_emergency_freeze(accounts)
+
+class UnfreezePayload(BaseModel):
+    account_id: str
+
+@app.get("/api/scanner/frozen-accounts")
+def get_frozen_accounts_list():
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.get_frozen_accounts()
+
+@app.post("/api/scanner/unfreeze")
+def unfreeze_account_endpoint(payload: UnfreezePayload):
+    if not is_initialized:
+        initialize_core()
+    global scanner
+    if scanner is None:
+        scanner = FraudScanner(engine.con)
+    return scanner.unfreeze_account(payload.account_id)
 
 # ==============================================================================
 # SETTINGS & LLM/JEV API INTEGRATION ENDPOINTS
@@ -861,6 +892,11 @@ def simulate_parameters(payload: ParameterSimulatePayload):
     """
     agg_res = engine.con.execute(agg_sql, sql_params).fetchone()
     
+    total_matching = agg_res[0] if agg_res and agg_res[0] is not None else 0
+    total_volume = round(float(agg_res[1] or 0.0), 2) if agg_res and len(agg_res) > 1 and agg_res[1] is not None else 0.0
+    unique_senders = agg_res[2] if agg_res and len(agg_res) > 2 and agg_res[2] is not None else 0
+    unique_receivers = agg_res[3] if agg_res and len(agg_res) > 3 and agg_res[3] is not None else 0
+
     # Run sample transactions query
     sample_sql = f"""
         SELECT Transaction_ID, Sender_Account, Receiver_Account, Sender_IFSC, Receiver_IFSC,
@@ -870,7 +906,11 @@ def simulate_parameters(payload: ParameterSimulatePayload):
         ORDER BY Timestamp DESC
         LIMIT 15;
     """
-    sample_rows = engine.con.execute(sample_sql, sql_params).fetchall()
+    try:
+        sample_rows = engine.con.execute(sample_sql, sql_params).fetchall()
+    except Exception:
+        sample_rows = []
+        
     samples = []
     for r in sample_rows:
         samples.append({
@@ -879,7 +919,7 @@ def simulate_parameters(payload: ParameterSimulatePayload):
             "receiver": r[2],
             "sender_ifsc": r[3],
             "receiver_ifsc": r[4],
-            "amount": float(r[5]),
+            "amount": float(r[5] or 0.0),
             "timestamp": str(r[6]),
             "mode": r[7],
             "narration": r[8],
@@ -908,10 +948,10 @@ def simulate_parameters(payload: ParameterSimulatePayload):
 
     return {
         "status": "success",
-        "total_matching_txns": agg_res[0],
-        "total_matching_volume": round(float(agg_res[1]), 2),
-        "unique_senders": agg_res[2],
-        "unique_receivers": agg_res[3],
+        "total_matching_txns": total_matching,
+        "total_matching_volume": total_volume,
+        "unique_senders": unique_senders,
+        "unique_receivers": unique_receivers,
         "sample_txns": samples,
         "generated_where_clause": where_str,
         "active_case_impact": case_impact,

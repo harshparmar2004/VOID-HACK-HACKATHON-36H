@@ -52,7 +52,7 @@ export default function Sidebar({
       items: [
         { id: "notices", label: "Section 91 Notices", icon: FileCheck, badge: counts?.noticesCount || "Bank Lien" },
         { id: "brief", label: "Investigative Brief", icon: FileText, badge: "CrPC" },
-        { id: "jury", label: "Audit & Evaluation", icon: Award, badge: "Blind Test" }
+        { id: "jury", label: "Audit, Evaluation & Settings", icon: Award, badge: "AI & Bench" }
       ]
     }
   ];
@@ -103,22 +103,6 @@ export default function Sidebar({
             </nav>
           </div>
         ))}
-      </div>
-
-      {/* Settings Action Button */}
-      <div className="pt-2">
-        <button
-          onClick={onOpenSettings}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white hover:bg-[#F5EDE1] border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold transition-all shadow-2xs cursor-pointer group"
-        >
-          <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-[#D96B27] group-hover:rotate-45 transition-transform" />
-            <span>LLM & JEV Settings</span>
-          </div>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F3EDE2] text-[#746D65] border border-[#E8E2D5] font-mono">
-            API Keys
-          </span>
-        </button>
       </div>
 
       {/* Local System Info Footer */}

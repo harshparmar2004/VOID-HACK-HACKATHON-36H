@@ -323,7 +323,7 @@ export default function App() {
         totalSiphoned={traceData?.total_siphoned_inr}
         onExportPdf={() => handleTabChange("notices")}
         onOpenAssistant={() => setAssistantOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => handleTabChange("jury")}
         activeTab={activeTab}
         systemStatus={systemStatus}
         victimName={victimName}
@@ -337,7 +337,7 @@ export default function App() {
         <Sidebar
           activeTab={activeTab}
           onSelectTab={handleTabChange}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => handleTabChange("jury")}
           forensicParams={forensicParams}
           onSaveParams={handleSaveParams}
           counts={{
@@ -463,7 +463,10 @@ export default function App() {
             <ErrorBoundary name="Section 91 Notices">
               <Section91NoticesView
                 noticesData={noticesData}
+                traceData={traceData}
                 victimAccount={activeCase}
+                victimName={victimName}
+                firNumber={firNumber}
               />
             </ErrorBoundary>
           </div>

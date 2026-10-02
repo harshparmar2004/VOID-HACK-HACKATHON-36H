@@ -78,7 +78,7 @@ class MuleScorer:
         JOIN transactions t_out
           ON t_in.Receiver_Account = t_out.Sender_Account
          AND t_out.Timestamp >= t_in.Timestamp
-         AND t_out.Timestamp <= t_in.Timestamp + INTERVAL 60 MINUTE
+         AND t_out.Timestamp <= TRY_CAST(t_in.Timestamp AS TIMESTAMP) + INTERVAL 60 MINUTE
         GROUP BY t_in.Receiver_Account;
         """)
 
