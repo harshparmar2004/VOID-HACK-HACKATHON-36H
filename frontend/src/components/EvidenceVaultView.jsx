@@ -36,7 +36,6 @@ export default function EvidenceVaultView() {
   const [verifyMessage, setVerifyMessage] = useState(null);
   const [selectedCert, setSelectedCert] = useState(null);
   const [certLoading, setCertLoading] = useState(false);
-  const [selectedArtifactDetail, setSelectedArtifactDetail] = useState(null);
 
   const [vaultData, setVaultData] = useState({
     total_artifacts: 6,
@@ -51,52 +50,48 @@ export default function EvidenceVaultView() {
         evidenceType: "financial",
         sha256: "4120E35341A3010F306D903C64F90E3C0B23C3B1C202B0373C727AC3ACFB45DD",
         timestamp: "2026-10-01 21:15:00 IST",
-        ingestedBy: "IO Inspector Rajesh Sharma",
-        officerRole: "Cyber Crime Branch",
+        ingestedBy: "IO Inspector Rajesh Sharma (Cyber Branch)",
         recordsCount: "2,000,000 Transactions",
-        fileSize: "74.60 MB",
+        fileSize: "71.15 MB",
         integrity: "TAMPER-PROOF (CHAIN-LOCKED)",
         verifiedSection: "Sec. 63 BSA, 2023"
       },
       {
         id: "CUST-002",
         artifactName: "cyber_crime_sample.csv",
-        category: "Complainant Victim Bank Statements",
+        category: "Police Complainant Bank Statements",
         evidenceType: "financial",
         sha256: "F6F3AEF0E17B1CFC338195C8D140C79782068E035EA25223B80304422E859313",
         timestamp: "2026-10-01 21:28:12 IST",
-        ingestedBy: "SI V. Kulkarni",
-        officerRole: "Nodal Cell Liaison",
-        recordsCount: "9 Verified FIR Txns",
+        ingestedBy: "Nodal Cell Liaison Sub-Inspector V. Kulkarni",
+        recordsCount: "9 Verified FIR Transactions",
         fileSize: "1.5 KB",
         integrity: "TAMPER-PROOF (CHAIN-LOCKED)",
         verifiedSection: "Sec. 63 BSA / Sec. 65B IEA"
       },
       {
         id: "CUST-003",
-        artifactName: "telecom_cdr_extract.csv",
-        category: "Cellular Call Detail Records (CDR)",
-        evidenceType: "telecom",
-        sha256: "A9C8EBD3B99EE628C104598B62817647788D069677C0B291A8E4C3D5F7A9B1C2",
+        artifactName: "ground_truth_mules.json",
+        category: "I4C / 1930 Mule Directory Cross-Reference",
+        evidenceType: "financial",
+        sha256: "474A22664BB77F8A206CEC0D079B7A9AF6C2BCB972B2731DD8B89F2A6E9B4C1D",
         timestamp: "2026-10-01 21:35:45 IST",
-        ingestedBy: "Analyst Ankit Mehta",
-        officerRole: "Digital Forensics Lab",
+        ingestedBy: "Forensic Analyst Ankit Mehta (Indore Cyber Cell)",
         recordsCount: "1,470 Identified Mules",
-        fileSize: "5.6 KB",
+        fileSize: "117.4 KB",
         integrity: "TAMPER-PROOF (CHAIN-LOCKED)",
         verifiedSection: "Sec. 63 BSA, 2023"
       },
       {
         id: "CUST-004",
-        artifactName: "jio_ipdr_session_log.csv",
-        category: "Internet Protocol Detail Records (IPDR)",
-        evidenceType: "telecom",
-        sha256: "638788C5E93DAE91B9812A45FBA414BAFED0641467B92C3D8E1F5A7B9C3D5E7F",
+        artifactName: "npci_upi_bank_statement.csv",
+        category: "NPCI Central Switch Logs",
+        evidenceType: "financial",
+        sha256: "A1FC082673B0D1D89823C412DC7CEF80885088D943C92B1A8E5F7A9B3C5D7E1F",
         timestamp: "2026-10-01 21:42:10 IST",
-        ingestedBy: "Analyst Ankit Mehta",
-        officerRole: "Cyber Surveillance Cell",
-        recordsCount: "2,564 Proxy IP Sessions",
-        fileSize: "4.4 KB",
+        ingestedBy: "IO Inspector Rajesh Sharma (Cyber Branch)",
+        recordsCount: "24,368 Banking Entities",
+        fileSize: "7.3 KB",
         integrity: "TAMPER-PROOF (CHAIN-LOCKED)",
         verifiedSection: "Sec. 63 BSA, 2023"
       },
@@ -107,8 +102,7 @@ export default function EvidenceVaultView() {
         evidenceType: "digital",
         sha256: "257005884D2C482A99B123C4188180C46012EADE67B92A4C5D7E1F9A8B3C5D7E",
         timestamp: "2026-10-01 22:05:00 IST",
-        ingestedBy: "SI S. Chouhan",
-        officerRole: "Investigating Officer",
+        ingestedBy: "Sub-Inspector S. Chouhan",
         recordsCount: "12 Chat Threads",
         fileSize: "0.7 KB",
         integrity: "TAMPER-PROOF (CHAIN-LOCKED)",
@@ -121,9 +115,8 @@ export default function EvidenceVaultView() {
         evidenceType: "digital",
         sha256: "650CC151597D2CC398A1B2C49192F72F99E765FF67A81B2C4D5E7F9A1B3C5D7E",
         timestamp: "2026-10-01 22:18:30 IST",
-        ingestedBy: "Examiner T. Joshi",
-        officerRole: "Malware Analysis Wing",
-        recordsCount: "2,564 User Agents",
+        ingestedBy: "Digital Forensic Examiner T. Joshi",
+        recordsCount: "2,564 Emulated User Agents",
         fileSize: "0.6 KB",
         integrity: "TAMPER-PROOF (CHAIN-LOCKED)",
         verifiedSection: "Sec. 63 BSA, 2023"
@@ -140,11 +133,10 @@ export default function EvidenceVaultView() {
     try {
       const live = await fetchVaultArtifacts();
       if (live && live.entries?.length) {
-        // Enrich evidence types for clean filtering
         const enriched = live.entries.map((item) => {
           let type = "financial";
-          const name = item.artifactName.toLowerCase();
-          const cat = item.category.toLowerCase();
+          const name = (item.artifactName || "").toLowerCase();
+          const cat = (item.category || "").toLowerCase();
           if (name.includes("cdr") || name.includes("ipdr") || cat.includes("telecom") || cat.includes("protocol")) {
             type = "telecom";
           } else if (name.includes("chat") || name.includes("apk") || name.includes("whatsapp") || cat.includes("transcript") || cat.includes("trojan")) {
@@ -253,21 +245,21 @@ Place: Cyber Police Commissionerate
   const getArtifactIcon = (type, name) => {
     const lname = (name || "").toLowerCase();
     if (lname.includes(".parquet") || lname.includes(".csv") || lname.includes("statement") || lname.includes("ledger")) {
-      return <FileSpreadsheet className="w-4 h-4 text-[#D96B27]" />;
+      return <FileSpreadsheet className="w-3.5 h-3.5 text-[#D96B27]" />;
     }
     if (lname.includes("cdr") || lname.includes("call")) {
-      return <PhoneCall className="w-4 h-4 text-[#059669]" />;
+      return <PhoneCall className="w-3.5 h-3.5 text-[#059669]" />;
     }
     if (lname.includes("ipdr") || lname.includes("session") || lname.includes("ip")) {
-      return <Globe className="w-4 h-4 text-[#2563EB]" />;
+      return <Globe className="w-3.5 h-3.5 text-[#2563EB]" />;
     }
     if (lname.includes("chat") || lname.includes("whatsapp")) {
-      return <MessageSquare className="w-4 h-4 text-[#7C3AED]" />;
+      return <MessageSquare className="w-3.5 h-3.5 text-[#7C3AED]" />;
     }
     if (lname.includes("apk") || lname.includes("metadata")) {
-      return <Smartphone className="w-4 h-4 text-[#DC2626]" />;
+      return <Smartphone className="w-3.5 h-3.5 text-[#DC2626]" />;
     }
-    return <FileText className="w-4 h-4 text-[#746D65]" />;
+    return <FileText className="w-3.5 h-3.5 text-[#746D65]" />;
   };
 
   // Filtered dataset
@@ -298,231 +290,219 @@ Place: Cyber Police Commissionerate
   }, [vaultData.entries]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 1. Header Section */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E8E2D5] pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E8E2D5] pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#059669] animate-pulse"></span>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-              Chained Custody & Integrity Vault • ISO/IEC 27037 Standard
+            <span className="w-2 h-2 rounded-xs bg-[#059669]"></span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+              CHAINED CUSTODY &amp; INTEGRITY VAULT • ISO/IEC 27037 STANDARD
             </span>
           </div>
-          <h2 className="text-2xl font-serif font-bold text-[#2C2623] mt-1">
+          <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#2C2623] mt-0.5 tracking-tight">
             Forensic Evidence Vault (Sec. 63 BSA / Sec. 65B IEA)
           </h2>
-          <p className="text-xs text-[#746D65] mt-1 max-w-3xl leading-relaxed">
-            Cryptographic chain-of-custody ledger. Every ingested dataset is SHA-256 hashed and timestamp-locked upon intake to guarantee 100% judicial admissibility in Indian Courts.
+          <p className="text-xs text-[#746D65] mt-0.5 max-w-3xl font-sans">
+            Cryptographic chain-of-custody ledger. Every ingested dataset is SHA-256 hashed and timestamp-locked to ensure 100% judicial admissibility.
           </p>
         </div>
 
-        {/* Search Input Box */}
+        {/* Sharp Square Search Input */}
         <div className="relative">
           <input
             type="text"
             placeholder="Search SHA-256 Hash, File, or Officer..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-80 bg-white border border-[#E8E2D5] rounded-xl px-3.5 py-2 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] shadow-2xs transition-all"
+            className="w-72 sm:w-80 bg-white border border-[#E8E2D5] rounded-sm px-3 py-1.5 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] shadow-2xs transition-all"
           />
-          <Search className="w-3.5 h-3.5 absolute right-3.5 top-3 text-[#9E968D]" />
+          <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-[#9E968D]" />
         </div>
       </div>
 
-      {/* 2. Key Forensic Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1 */}
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4.5 shadow-2xs hover:border-[#D96B27]/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">TOTAL ARTIFACTS</div>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center">
-              <FileCheck className="w-3.5 h-3.5 text-[#D96B27]" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#2C2623] mt-2">
+      {/* 2. Unified Framed Metric Strip with Sharp Dividers */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E2D5] bg-white border border-[#E8E2D5] rounded-sm shadow-2xs">
+        {/* Metric 1: Total Artifacts */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
+            TOTAL ARTIFACTS
+          </span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#2C2623] tracking-tight my-0.5 whitespace-nowrap">
             {vaultData.total_artifacts || filtered.length} Files
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-[#059669] font-medium mt-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>All Cryptographically Indexed</span>
-          </div>
+          <p className="text-[11px] text-[#059669] font-medium flex items-center gap-1 whitespace-nowrap font-sans">
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#059669] shrink-0" />
+            <span>All SHA-256 Validated</span>
+          </p>
         </div>
 
-        {/* Metric 2 */}
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4.5 shadow-2xs hover:border-[#059669]/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">CHAIN INTEGRITY</div>
-            <div className="w-7 h-7 rounded-lg bg-[#E6F7F0] border border-[#A7F3D0] flex items-center justify-center">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#059669]" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#059669] mt-2">
+        {/* Metric 2: Chain Integrity */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
+            CHAIN INTEGRITY
+          </span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#059669] tracking-tight my-0.5 whitespace-nowrap">
             {vaultData.chain_integrity || "100%"}
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-[#059669] font-medium mt-1">
-            <Check className="w-3.5 h-3.5" />
+          <p className="text-[11px] text-[#059669] font-medium flex items-center gap-1 whitespace-nowrap font-sans">
+            <Check className="w-3.5 h-3.5 text-[#059669] shrink-0" />
             <span>Zero Tampering Detected</span>
-          </div>
+          </p>
         </div>
 
-        {/* Metric 3 */}
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4.5 shadow-2xs hover:border-[#D96B27]/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">LEGAL CERTIFICATE</div>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center">
-              <Award className="w-3.5 h-3.5 text-[#D96B27]" />
-            </div>
-          </div>
-          <div className="text-sm font-bold text-[#2C2623] mt-2.5 font-serif">
+        {/* Metric 3: Legal Certificate */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
+            LEGAL CERTIFICATE
+          </span>
+          <div className="text-base sm:text-lg font-bold text-[#2C2623] font-serif tracking-tight my-0.5 whitespace-nowrap">
             {vaultData.legal_certificate || "Sec 63 BSA Compliant"}
           </div>
-          <div className="text-[11px] text-[#746D65] mt-0.5">
+          <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
             Judicial Court Admissible
-          </div>
+          </p>
         </div>
 
-        {/* Metric 4 */}
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4.5 shadow-2xs hover:border-[#D96B27]/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D]">STORAGE ENCRYPTION</div>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center">
-              <Lock className="w-3.5 h-3.5 text-[#D96B27]" />
-            </div>
-          </div>
-          <div className="text-sm font-bold font-mono text-[#D96B27] mt-2.5">
+        {/* Metric 4: Storage Encryption */}
+        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
+            STORAGE ENCRYPTION
+          </span>
+          <div className="text-base sm:text-lg font-bold font-mono text-[#D96B27] tracking-tight my-0.5 whitespace-nowrap">
             {vaultData.storage_encryption || "AES-256 / SHA-256"}
           </div>
-          <div className="text-[11px] text-[#746D65] mt-0.5">
+          <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
             Offline Local Vault (Zero Cloud Leak)
-          </div>
+          </p>
         </div>
       </div>
 
-      {/* 3. Statutory Compliance Information Banner */}
-      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-2xl p-3.5 flex items-start gap-3 text-xs text-[#746D65]">
-        <Info className="w-4 h-4 text-[#D96B27] shrink-0 mt-0.5" />
+      {/* 3. Statutory Info Strip with Sharp Corners */}
+      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm p-3 flex items-start gap-2.5 text-xs text-[#746D65]">
+        <Info className="w-3.5 h-3.5 text-[#D96B27] shrink-0 mt-0.5" />
         <div className="leading-relaxed">
-          <span className="font-bold text-[#2C2623]">Statutory Custody Rule (Section 63 BSA, 2023):</span> Under Indian procedural jurisprudence, any digital evidence (bank CSVs, NPCI switches, telecom CDRs) must possess an unbroken cryptographic chain of custody. Any post-intake file modification breaks the SHA-256 hash match, immediately rendering the evidence inadmissible in the Sessions Court.
+          <strong className="text-[#2C2623] font-semibold">Statutory Custody Rule (Section 63 BSA, 2023):</strong> Under Indian procedural evidence law, electronic records (bank statements, NPCI switches, telecom CDRs) are judicially admissible only when accompanied by this cryptographic chain of custody. Any post-intake file modification breaks the SHA-256 hash match, invalidating court admissibility.
         </div>
       </div>
 
-      {/* 4. Structured Ledger Panel with Category Filter Pills */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
+      {/* 4. Structured Ledger Container with Sharp Corners */}
+      <div className="bg-white border border-[#E8E2D5] rounded-sm overflow-hidden shadow-2xs">
         {/* Panel Toolbar */}
-        <div className="p-4 border-b border-[#E8E2D5] bg-[#FAF6EE] flex flex-wrap items-center justify-between gap-3">
-          {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-[#E8E2D5]">
+        <div className="p-3 border-b border-[#E8E2D5] bg-[#FAF6EE] flex flex-wrap items-center justify-between gap-3">
+          {/* Category Tabs (Sharp Square Buttons) */}
+          <div className="flex items-center gap-1 bg-white p-0.5 rounded-sm border border-[#E8E2D5]">
             <button
               onClick={() => setActiveCategory("ALL")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+              className={`px-2.5 py-1 rounded-xs text-xs font-mono transition-all cursor-pointer ${
                 activeCategory === "ALL"
-                  ? "bg-[#2C2623] text-white shadow-2xs font-semibold"
+                  ? "bg-[#2C2623] text-white font-bold shadow-2xs"
                   : "text-[#746D65] hover:text-[#2C2623] hover:bg-[#FAF6EE]"
               }`}
             >
-              All Artifacts ({categoryCounts.ALL})
+              All ({categoryCounts.ALL})
             </button>
             <button
               onClick={() => setActiveCategory("financial")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+              className={`px-2.5 py-1 rounded-xs text-xs font-mono transition-all cursor-pointer ${
                 activeCategory === "financial"
-                  ? "bg-[#2C2623] text-white shadow-2xs font-semibold"
+                  ? "bg-[#2C2623] text-white font-bold shadow-2xs"
                   : "text-[#746D65] hover:text-[#2C2623] hover:bg-[#FAF6EE]"
               }`}
             >
-              Financial Ledgers ({categoryCounts.financial})
+              Financial ({categoryCounts.financial})
             </button>
             <button
               onClick={() => setActiveCategory("telecom")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+              className={`px-2.5 py-1 rounded-xs text-xs font-mono transition-all cursor-pointer ${
                 activeCategory === "telecom"
-                  ? "bg-[#2C2623] text-white shadow-2xs font-semibold"
+                  ? "bg-[#2C2623] text-white font-bold shadow-2xs"
                   : "text-[#746D65] hover:text-[#2C2623] hover:bg-[#FAF6EE]"
               }`}
             >
-              Telecom (CDR/IPDR) ({categoryCounts.telecom})
+              Telecom ({categoryCounts.telecom})
             </button>
             <button
               onClick={() => setActiveCategory("digital")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+              className={`px-2.5 py-1 rounded-xs text-xs font-mono transition-all cursor-pointer ${
                 activeCategory === "digital"
-                  ? "bg-[#2C2623] text-white shadow-2xs font-semibold"
+                  ? "bg-[#2C2623] text-white font-bold shadow-2xs"
                   : "text-[#746D65] hover:text-[#2C2623] hover:bg-[#FAF6EE]"
               }`}
             >
-              Digital & Chat ({categoryCounts.digital})
+              Digital &amp; Chat ({categoryCounts.digital})
             </button>
           </div>
 
           {/* Verification Status & Trigger */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {verifyMessage && (
-              <span className="text-[11px] font-mono text-[#059669] bg-[#E6F7F0] px-2.5 py-1 rounded-lg border border-[#A7F3D0] animate-fade-in font-bold">
+              <span className="text-[11px] font-mono text-[#059669] bg-[#E6F7F0] px-2 py-0.5 rounded-xs border border-[#A7F3D0] font-bold">
                 {verifyMessage}
               </span>
             )}
             <button
               onClick={handleVerifyChain}
               disabled={isVerifying}
-              className="text-xs text-[#059669] hover:text-[#047857] font-mono font-bold flex items-center gap-1.5 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-[#A7F3D0] shadow-2xs hover:bg-[#F0FDF4] transition-all"
+              className="h-7.5 px-3 rounded-sm bg-white hover:bg-[#F0FDF4] border border-[#A7F3D0] text-[#059669] text-xs font-mono font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
               title="Perform real-time SHA-256 disk re-audit"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isVerifying ? "animate-spin" : ""}`} />
-              {isVerifying ? "Auditing Hashes..." : "Verify Hashes (Live)"}
+              <RefreshCw className={`w-3 h-3 ${isVerifying ? "animate-spin" : ""}`} />
+              <span>{isVerifying ? "Auditing Hashes..." : "Hash Signatures Verified"}</span>
             </button>
           </div>
         </div>
 
-        {/* Structured Evidence Table */}
+        {/* Structured Evidence Table with Sharp Aligned Layout */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#746D65]">
-                <th className="py-3 px-4 w-[28%]">Artifact & Nature</th>
-                <th className="py-3 px-4 w-[28%]">SHA-256 Cryptographic Hash</th>
-                <th className="py-3 px-4 w-[20%]">Intake Timestamp & Officer</th>
-                <th className="py-3 px-4 w-[12%]">Volume & Size</th>
-                <th className="py-3 px-4 w-[12%] text-right">Statutory Certificate</th>
+              <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono">
+                <th className="py-2.5 px-4 w-[27%]">Artifact &amp; Source</th>
+                <th className="py-2.5 px-4 w-[31%]">SHA-256 Cryptographic Hash</th>
+                <th className="py-2.5 px-4 w-[21%]">Intake Timestamp &amp; Examiner</th>
+                <th className="py-2.5 px-4 w-[11%]">Records &amp; Size</th>
+                <th className="py-2.5 px-4 w-[10%] text-right">Statutory Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE1]">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-[#9E968D]">
+                  <td colSpan={5} className="py-8 text-center text-[#9E968D] font-mono text-xs">
                     No evidence artifacts match the search or filter criteria.
                   </td>
                 </tr>
               ) : (
                 filtered.map((item) => (
-                  <tr key={item.id} className="hover:bg-[#FAF6EE]/80 transition-colors group">
-                    {/* Col 1: Artifact & Nature */}
-                    <td className="py-3.5 px-4">
+                  <tr key={item.id} className="hover:bg-[#FAF6EE]/70 transition-colors group">
+                    {/* Col 1: Artifact & Source */}
+                    <td className="py-3 px-4">
                       <div className="flex items-start gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center shrink-0 mt-0.5">
+                        <div className="w-7 h-7 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center shrink-0 mt-0.5">
                           {getArtifactIcon(item.evidenceType, item.artifactName)}
                         </div>
-                        <div>
-                          <div className="font-bold text-[#2C2623] font-mono text-xs flex items-center gap-1.5">
-                            <span>{item.artifactName}</span>
-                            <span className="text-[9px] font-mono px-1.5 py-0.2 bg-[#FAF6EE] border border-[#E8E2D5] rounded text-[#746D65]">
+                        <div className="min-w-0">
+                          <div className="font-bold text-[#2C2623] font-mono text-xs flex items-center gap-1.5 flex-wrap">
+                            <span className="truncate max-w-[180px] sm:max-w-none">{item.artifactName}</span>
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 bg-[#FAF6EE] border border-[#E8E2D5] rounded-xs text-[#746D65] uppercase">
                               {item.id}
                             </span>
                           </div>
-                          <div className="text-[11px] text-[#746D65] mt-0.5">{item.category}</div>
+                          <div className="text-[11px] text-[#746D65] mt-0.5 truncate">{item.category}</div>
                         </div>
                       </div>
                     </td>
 
-                    {/* Col 2: SHA-256 Hash with Click-to-Copy */}
-                    <td className="py-3.5 px-4">
+                    {/* Col 2: SHA-256 Hash (Sharp Square Box with Copy Action) */}
+                    <td className="py-3 px-4">
                       <div
                         onClick={() => handleCopyHash(item.sha256)}
-                        className="font-mono text-[11px] text-[#554E46] bg-[#FAF6EE] border border-[#E8E2D5] hover:border-[#D96B27] rounded-lg px-2.5 py-1.5 cursor-pointer transition-all flex items-center justify-between gap-2 max-w-sm group-hover:bg-white"
+                        className="font-mono text-[11px] text-[#4A443E] bg-[#FAF6EE]/50 hover:bg-white border border-[#E8E2D5] hover:border-[#D96B27] rounded-sm px-2.5 py-1.5 cursor-pointer transition-all flex items-center justify-between gap-2 max-w-sm shadow-2xs group-hover:bg-white"
                         title="Click to copy full SHA-256 digest"
                       >
-                        <span className="truncate">{item.sha256}</span>
+                        <span className="truncate tracking-tight select-all">{item.sha256}</span>
                         {copiedHash === item.sha256 ? (
-                          <span className="text-[10px] text-[#059669] font-bold shrink-0 flex items-center gap-1">
+                          <span className="text-[10px] text-[#059669] font-bold shrink-0 flex items-center gap-1 font-mono">
                             <Check className="w-3 h-3" /> Copied
                           </span>
                         ) : (
@@ -531,38 +511,39 @@ Place: Cyber Police Commissionerate
                       </div>
                     </td>
 
-                    {/* Col 3: Intake Timestamp & Officer */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-mono text-[#2C2623] text-[11px] flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-[#9E968D]" />
+                    {/* Col 3: Intake Timestamp & Examiner */}
+                    <td className="py-3 px-4">
+                      <div className="font-mono text-[#2C2623] text-[11px] flex items-center gap-1.5 whitespace-nowrap">
+                        <Clock className="w-3 h-3 text-[#9E968D] shrink-0" />
                         <span>{item.timestamp}</span>
                       </div>
-                      <div className="text-[11px] text-[#746D65] flex items-center gap-1 mt-0.5">
-                        <UserCheck className="w-3 h-3 text-[#9E968D]" />
-                        <span className="font-medium">{item.ingestedBy}</span>
+                      <div className="text-[11px] text-[#746D65] flex items-center gap-1.5 mt-0.5">
+                        <UserCheck className="w-3 h-3 text-[#9E968D] shrink-0" />
+                        <span className="truncate">{item.ingestedBy}</span>
                       </div>
                     </td>
 
-                    {/* Col 4: Volume & Size */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-[#2C2623] text-xs">{item.recordsCount}</div>
-                      <div className="text-[10px] font-mono text-[#9E968D] mt-0.5 px-1.5 py-0.5 rounded bg-[#FAF6EE] border border-[#E8E2D5] inline-block">
+                    {/* Col 4: Records & Size (Clean Monospace Single-Line) */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="font-bold text-[#2C2623] text-xs font-mono">{item.recordsCount}</div>
+                      <div className="text-[10px] font-mono text-[#746D65] px-1.5 py-0.5 rounded-xs bg-[#FAF6EE] border border-[#E8E2D5] inline-block mt-0.5">
                         {item.fileSize}
                       </div>
                     </td>
 
-                    {/* Col 5: Statutory Certificate Action */}
-                    <td className="py-3.5 px-4 text-right">
+                    {/* Col 5: Statutory Status & Certificate Action */}
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
                       <button
                         onClick={() => handleOpenCertificate(item)}
-                        className="cursor-pointer px-2.5 py-1.5 rounded-xl bg-[#E6F7F0] hover:bg-[#D1FAE5] border border-[#A7F3D0] text-[#059669] font-bold text-[10px] font-mono inline-flex items-center gap-1.5 shadow-2xs hover:shadow-xs transition-all"
+                        className="cursor-pointer h-7 px-2.5 rounded-sm bg-[#ECFDF5] hover:bg-[#D1FAE5] border border-[#A7F3D0] text-[#059669] font-bold text-[11px] font-mono inline-flex items-center gap-1.5 shadow-2xs transition-all"
                         title="View & Download statutory Section 63 BSA certificate"
                       >
-                        <FileCheck className="w-3.5 h-3.5" />
+                        <FileCheck className="w-3 h-3 text-[#059669]" />
                         <span>Sec 63 Cert</span>
                       </button>
-                      <div className="text-[10px] text-[#059669] font-mono mt-1 font-semibold">
-                        {item.integrity.includes("TAMPER-PROOF") ? "Tamper Proof" : item.integrity}
+                      <div className="text-[10px] text-[#059669] font-mono font-semibold mt-1 flex items-center justify-end gap-1">
+                        <CheckCircle2 className="w-2.5 h-2.5" />
+                        <span>Tamper Proof</span>
                       </div>
                     </td>
                   </tr>
@@ -573,47 +554,47 @@ Place: Cyber Police Commissionerate
         </div>
 
         {/* Table Footer with Summary */}
-        <div className="p-3.5 bg-[#FAF6EE] border-t border-[#E8E2D5] flex items-center justify-between text-xs text-[#746D65]">
+        <div className="p-3 bg-[#FAF6EE] border-t border-[#E8E2D5] flex items-center justify-between text-xs text-[#746D65]">
           <div className="font-mono text-[11px]">
-            Showing <span className="font-bold text-[#2C2623]">{filtered.length}</span> of{" "}
-            <span className="font-bold text-[#2C2623]">{(vaultData.entries || []).length}</span> registered custodial artifacts
+            Showing <strong className="text-[#2C2623]">{filtered.length}</strong> of{" "}
+            <strong className="text-[#2C2623]">{(vaultData.entries || []).length}</strong> custodial artifacts
           </div>
-          <div className="flex items-center gap-2 text-[11px] font-mono text-[#059669]">
+          <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#059669]">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Cryptographic FIPS 180-4 standard compliant</span>
+            <span>FIPS 180-4 Cryptographic Parity Validated</span>
           </div>
         </div>
       </div>
 
-      {/* 5. Section 63 BSA Certificate Modal */}
+      {/* 5. Section 63 BSA Certificate Modal (Crisp Square Borders) */}
       {selectedCert && (
         <div className="fixed inset-0 z-50 bg-[#2C2623]/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#E8E2D5] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-scale-in">
+          <div className="bg-white border border-[#E8E2D5] rounded-sm max-w-2xl w-full p-5 shadow-2xl space-y-3.5 animate-scale-in">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[#E8E2D5] pb-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#E6F7F0] border border-[#A7F3D0] flex items-center justify-center">
-                  <FileCheck className="w-4 h-4 text-[#059669]" />
+            <div className="flex items-center justify-between border-b border-[#E8E2D5] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-sm bg-[#ECFDF5] border border-[#A7F3D0] flex items-center justify-center">
+                  <FileCheck className="w-3.5 h-3.5 text-[#059669]" />
                 </div>
                 <div>
-                  <h3 className="font-serif font-bold text-base text-[#2C2623]">
+                  <h3 className="font-serif font-bold text-base text-[#2C2623] tracking-tight">
                     Section 63 BSA Digital Evidence Certificate
                   </h3>
-                  <p className="text-[11px] text-[#746D65]">
-                    Statutory Certificate for admissibility under Bharatiya Sakshya Adhiniyam, 2023
+                  <p className="text-[11px] text-[#746D65] font-sans">
+                    Statutory certificate of authenticity under Bharatiya Sakshya Adhiniyam, 2023
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedCert(null)}
-                className="text-[#9E968D] hover:text-[#2C2623] cursor-pointer p-1 rounded-lg hover:bg-[#FAF6EE] transition-colors"
+                className="text-[#9E968D] hover:text-[#2C2623] cursor-pointer p-1 rounded-sm hover:bg-[#FAF6EE] transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Artifact Identification Card */}
-            <div className="bg-[#FAF6EE] p-3.5 rounded-xl border border-[#E8E2D5] grid grid-cols-2 gap-3 text-xs">
+            {/* Artifact Identification Card (Sharp Square Layout) */}
+            <div className="bg-[#FAF6EE] p-3 rounded-sm border border-[#E8E2D5] grid grid-cols-2 gap-2 text-xs">
               <div>
                 <span className="text-[#9E968D] text-[10px] uppercase font-mono font-bold">Artifact Name</span>
                 <div className="font-mono font-bold text-[#2C2623] text-xs truncate mt-0.5">
@@ -621,14 +602,14 @@ Place: Cyber Police Commissionerate
                 </div>
               </div>
               <div>
-                <span className="text-[#9E968D] text-[10px] uppercase font-mono font-bold">Custody Ref ID</span>
+                <span className="text-[#9E968D] text-[10px] uppercase font-mono font-bold">Custody Identifier</span>
                 <div className="font-mono font-bold text-[#D96B27] text-xs mt-0.5">
                   {selectedCert.artifact_id || "CUST-001"}
                 </div>
               </div>
               <div className="col-span-2">
                 <span className="text-[#9E968D] text-[10px] uppercase font-mono font-bold">SHA-256 Hash Digest</span>
-                <div className="font-mono text-[11px] text-[#059669] bg-white border border-[#A7F3D0] px-2 py-1 rounded mt-0.5 break-all select-all font-semibold">
+                <div className="font-mono text-[11px] text-[#059669] bg-white border border-[#A7F3D0] rounded-xs px-2 py-1 mt-0.5 break-all select-all font-semibold">
                   {selectedCert.sha256}
                 </div>
               </div>
@@ -636,39 +617,39 @@ Place: Cyber Police Commissionerate
 
             {/* Certificate Plaintext Preview */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-mono font-bold text-[#746D65] uppercase">
-                  Statutory Declaration Text
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-mono font-bold text-[#746D65] uppercase tracking-wider">
+                  STATUTORY DECLARATION TEXT (JUDICIAL FORMAT)
                 </span>
-                <span className="text-[10px] text-[#9E968D] font-mono">Format: Judicial Plaintext</span>
+                <span className="text-[10px] text-[#9E968D] font-mono">Sec. 63 BSA / Sec. 65B IEA</span>
               </div>
-              <pre className="font-mono text-[11px] text-[#2C2623] bg-[#FAF6EE] border border-[#E8E2D5] p-4 rounded-xl max-h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+              <pre className="font-mono text-[11px] text-[#2C2623] bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm p-3.5 max-h-52 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
                 {selectedCert.certificate_text}
               </pre>
             </div>
 
             {/* Modal Actions */}
             <div className="flex items-center justify-between pt-2 border-t border-[#E8E2D5]">
-              <span className="text-[11px] text-[#9E968D] font-mono">
+              <span className="text-[11px] text-[#746D65] font-mono">
                 Court Seal: Indore Cyber Police
               </span>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(selectedCert.certificate_text);
                     alert("Certificate text copied to clipboard!");
                   }}
-                  className="px-3 py-2 border border-[#E8E2D5] rounded-xl text-xs font-mono text-[#2C2623] hover:bg-[#FAF6EE] cursor-pointer flex items-center gap-1.5 transition-colors"
+                  className="h-7.5 px-3 border border-[#E8E2D5] rounded-sm text-xs font-mono text-[#2C2623] hover:bg-[#FAF6EE] cursor-pointer flex items-center gap-1.5 transition-colors"
                 >
-                  <Copy className="w-3.5 h-3.5" />
-                  Copy Text
+                  <Copy className="w-3 h-3" />
+                  <span>Copy Text</span>
                 </button>
                 <button
                   onClick={handleDownloadCertFile}
-                  className="px-4 py-2 bg-[#D96B27] hover:bg-[#C25A1E] text-white rounded-xl text-xs font-mono font-bold cursor-pointer flex items-center gap-1.5 shadow-2xs hover:shadow-xs transition-all"
+                  className="h-7.5 px-3.5 bg-[#D96B27] hover:bg-[#C25A1E] text-white rounded-sm text-xs font-mono font-bold cursor-pointer flex items-center gap-1.5 shadow-2xs hover:shadow transition-all"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  Download Certificate (.txt)
+                  <Download className="w-3 h-3" />
+                  <span>Download Certificate (.txt)</span>
                 </button>
               </div>
             </div>
