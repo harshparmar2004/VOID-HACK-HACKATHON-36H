@@ -99,32 +99,37 @@ async def upload_bank_statement(file: UploadFile = File(...)):
     Accepts CSV, Parquet, or Excel exports from any Indian Bank.
     Applies automatic column mapping, cleaning, and re-computes mule scores.
     """
-    upload_dir = os.path.join(DATA_DIR, "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        upload_dir = os.path.join(DATA_DIR, "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, file.filename)
         
-    global scorer, graph, scanner
-    res = engine.load_dataset(file_path)
-    scorer = MuleScorer(engine.con)
-    score_res = scorer.compute_all_scores()
-    graph = GraphEngine(engine.con)
-    scanner = FraudScanner(engine.con)
-    victims = engine.detect_victims(limit=5)
-    
-    return {
-        "status": "success",
-        "file_name": file.filename,
-        "records_loaded": res["total_records"],
-        "ingestion_seconds": res["load_duration_seconds"],
-        "detected_mappings": res["detected_mappings"],
-        "high_risk_mules": score_res["high_risk_mules"],
-        "victims": victims,
-        "detected_victim": victims[0]["account_id"] if victims else None,
-        "message": f"Successfully ingested {res['total_records']:,} transactions from {file.filename}!"
-    }
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        global scorer, graph, scanner
+        res = engine.load_dataset(file_path)
+        scorer = MuleScorer(engine.con)
+        score_res = scorer.compute_all_scores()
+        graph = GraphEngine(engine.con)
+        scanner = FraudScanner(engine.con)
+        victims = engine.detect_victims(limit=5)
+        
+        return {
+            "status": "success",
+            "file_name": file.filename,
+            "records_loaded": res.get("total_records", 0),
+            "ingestion_seconds": res.get("load_duration_seconds", 0.0),
+            "detected_mappings": res.get("detected_mappings", {}),
+            "high_risk_mules": score_res.get("high_risk_mules", 0),
+            "victims": victims,
+            "detected_victim": victims[0]["account_id"] if victims else None,
+            "message": f"Successfully ingested {res.get('total_records', 0):,} transactions from {file.filename}!"
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
 @app.post("/api/ingest-url")
 def ingest_from_url(payload: IngestUrlPayload):
@@ -156,26 +161,32 @@ def ingest_from_url(payload: IngestUrlPayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data from URL: {str(e)}")
         
-    global scorer, graph, scanner
-    res = engine.load_dataset(file_path)
-    scorer = MuleScorer(engine.con)
-    score_res = scorer.compute_all_scores()
-    graph = GraphEngine(engine.con)
-    scanner = FraudScanner(engine.con)
-    victims = engine.detect_victims(limit=5)
-    
-    return {
-        "status": "success",
-        "file_name": "Online Cyber Crime Dataset",
-        "source_url": payload.url,
-        "records_loaded": res["total_records"],
-        "ingestion_seconds": res["load_duration_seconds"],
-        "detected_mappings": res["detected_mappings"],
-        "high_risk_mules": score_res["high_risk_mules"],
-        "victims": victims,
-        "detected_victim": victims[0]["account_id"] if victims else None,
-        "message": f"Successfully ingested {res['total_records']:,} transactions from online dataset!"
-    }
+    try:
+        global scorer, graph, scanner
+        res = engine.load_dataset(file_path)
+        scorer = MuleScorer(engine.con)
+        score_res = scorer.compute_all_scores()
+        graph = GraphEngine(engine.con)
+        scanner = FraudScanner(engine.con)
+        victims = engine.detect_victims(limit=5)
+        
+        return {
+            "status": "success",
+            "file_name": "Online Cyber Crime Dataset",
+            "source_url": payload.url,
+            "records_loaded": res.get("total_records", 0),
+            "ingestion_seconds": res.get("load_duration_seconds", 0.0),
+            "detected_mappings": res.get("detected_mappings", {}),
+            "high_risk_mules": score_res.get("high_risk_mules", 0),
+            "victims": victims,
+            "detected_victim": victims[0]["account_id"] if victims else None,
+            "message": f"Successfully ingested {res.get('total_records', 0):,} transactions from online dataset!"
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
 
 @app.get("/api/detected-victims")
 def get_detected_victims():
@@ -291,7 +302,15 @@ def get_entity_directory(
     total_accs = len(rows)
     
     for r in rows:
-        acc_id, ifsc, tin, tout, bal, role, rband, rindex = r
+        acc_id = r[0] if len(r) > 0 else ""
+        ifsc = r[1] if len(r) > 1 else "BANK0000000"
+        tin = float(r[2]) if len(r) > 2 and r[2] is not None else 0.0
+        tout = float(r[3]) if len(r) > 3 and r[3] is not None else 0.0
+        bal = float(r[4]) if len(r) > 4 and r[4] is not None else 0.0
+        role = str(r[5]) if len(r) > 5 and r[5] is not None else "TRANSACTING"
+        rband = str(r[6]) if len(r) > 6 and r[6] is not None else "CLEAN"
+        rindex = float(r[7]) if len(r) > 7 and r[7] is not None else 0.0
+        
         ifsc_code = ifsc or "BANK0000000"
         prefix = ifsc_code[:4].upper()
         b_name = BANK_NAME_MAP.get(prefix, f"{prefix} Bank")

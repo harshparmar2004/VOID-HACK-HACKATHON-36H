@@ -78,7 +78,17 @@ class GraphEngine:
         queue = deque()
         
         for txn in victim_txns:
-            txn_id, sender, receiver, s_ifsc, r_ifsc, amt, ts, mode, narr, ip, dev = txn
+            txn_id = txn[0]
+            sender = txn[1]
+            receiver = txn[2]
+            s_ifsc = txn[3]
+            r_ifsc = txn[4]
+            amt = txn[5]
+            ts = txn[6]
+            mode = txn[7]
+            narr = txn[8]
+            ip = txn[9] if len(txn) > 9 else "103.118.12.1"
+            dev = txn[10] if len(txn) > 10 else "Android"
             links.append({
                 "txn_id": txn_id,
                 "source": sender,
@@ -238,7 +248,17 @@ class GraphEngine:
             
             forwarded_sum = 0.0
             for out_txn in outflows:
-                o_txnid, o_sender, o_receiver, o_sifsc, o_rifsc, o_amt, o_ts, o_mode, o_narr, o_ip, o_dev = out_txn
+                o_txnid = out_txn[0]
+                o_sender = out_txn[1]
+                o_receiver = out_txn[2]
+                o_sifsc = out_txn[3]
+                o_rifsc = out_txn[4]
+                o_amt = out_txn[5]
+                o_ts = out_txn[6]
+                o_mode = out_txn[7]
+                o_narr = out_txn[8]
+                o_ip = out_txn[9] if len(out_txn) > 9 else "103.118.12.1"
+                o_dev = out_txn[10] if len(out_txn) > 10 else "Android"
                 if o_txnid in visited_edges:
                     continue
                 visited_edges.add(o_txnid)

@@ -273,32 +273,50 @@ class IngestionEngine:
             return []
 
     def get_summary_stats(self):
-        stats = self.con.execute("""
-        SELECT
-            COUNT(*) as total_txns,
-            COUNT(DISTINCT Sender_Account) as unique_senders,
-            COUNT(DISTINCT Receiver_Account) as unique_receivers,
-            ROUND(SUM(Amount_INR), 2) as total_volume_inr,
-            MIN(Timestamp) as min_time,
-            MAX(Timestamp) as max_time,
-            SUM(is_foreign_ip) as foreign_ip_txns,
-            SUM(is_headless_device) as headless_device_txns,
-            SUM(is_scam_narration) as scam_narration_txns
-        FROM transactions;
-        """).fetchone()
+        try:
+            stats = self.con.execute("""
+            SELECT
+                COUNT(*) as total_txns,
+                COUNT(DISTINCT Sender_Account) as unique_senders,
+                COUNT(DISTINCT Receiver_Account) as unique_receivers,
+                ROUND(SUM(Amount_INR), 2) as total_volume_inr,
+                MIN(Timestamp) as min_time,
+                MAX(Timestamp) as max_time,
+                SUM(is_foreign_ip) as foreign_ip_txns,
+                SUM(is_headless_device) as headless_device_txns,
+                SUM(is_scam_narration) as scam_narration_txns
+            FROM transactions;
+            """).fetchone()
+        except Exception as e:
+            stats = None
         
+        if not stats or stats[0] is None or stats[0] == 0:
+            return {
+                "total_transactions": 0,
+                "unique_senders": 0,
+                "unique_receivers": 0,
+                "total_volume_inr": 0.0,
+                "timeline_start": "",
+                "timeline_end": "",
+                "foreign_ip_txns": 0,
+                "headless_device_txns": 0,
+                "scam_narration_txns": 0,
+                "engine": "DuckDB In-Memory Columnar + Arrow"
+            }
+            
         return {
-            "total_transactions": stats[0],
-            "unique_senders": stats[1],
-            "unique_receivers": stats[2],
-            "total_volume_inr": stats[3],
-            "timeline_start": str(stats[4]),
-            "timeline_end": str(stats[5]),
-            "foreign_ip_txns": stats[6],
-            "headless_device_txns": stats[7],
-            "scam_narration_txns": stats[8],
+            "total_transactions": int(stats[0] or 0),
+            "unique_senders": int(stats[1] or 0),
+            "unique_receivers": int(stats[2] or 0),
+            "total_volume_inr": float(stats[3] or 0.0),
+            "timeline_start": str(stats[4]) if stats[4] else "",
+            "timeline_end": str(stats[5]) if stats[5] else "",
+            "foreign_ip_txns": int(stats[6] or 0),
+            "headless_device_txns": int(stats[7] or 0),
+            "scam_narration_txns": int(stats[8] or 0),
             "engine": "DuckDB In-Memory Columnar + Arrow"
         }
+
 
 if __name__ == "__main__":
     engine = IngestionEngine()
