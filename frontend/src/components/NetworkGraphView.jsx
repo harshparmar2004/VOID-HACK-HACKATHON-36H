@@ -19,7 +19,8 @@ import {
   X,
   Zap,
   Sliders,
-  Share2
+  Share2,
+  Move
 } from "lucide-react";
 
 export default function NetworkGraphView({ traceData }) {
@@ -28,6 +29,8 @@ export default function NetworkGraphView({ traceData }) {
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 40, y: 30 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isWheeling, setIsWheeling] = useState(false);
+  const [wheelMode, setWheelMode] = useState("pan"); // "pan" (wheel scrolls canvas) or "zoom" (wheel zooms at cursor)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -36,6 +39,13 @@ export default function NetworkGraphView({ traceData }) {
   const [copiedId, setCopiedId] = useState(null);
 
   const viewportRef = useRef(null);
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const wheelModeRef = useRef(wheelMode);
+  wheelModeRef.current = wheelMode;
+  const wheelTimeoutRef = useRef(null);
 
   const nodes = traceData?.nodes || [];
   const rawLinks = traceData?.links || [];
@@ -372,9 +382,9 @@ export default function NetworkGraphView({ traceData }) {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  // Pan Interactions with strict physical button check (fixes mouse sticking bug)
+  // 1. Mouse Drag Interactions (Zero-lag direct tracking attached to window)
   const handleMouseDown = (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 && e.button !== 1) return; // Allow left click (0) and middle click (1)
     if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".tree-node-card")) {
       return;
     }
@@ -382,49 +392,126 @@ export default function NetworkGraphView({ traceData }) {
     setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
 
-  const handleMouseMove = (e) => {
-    // If left mouse button is NOT physically held down (e.buttons !== 1), release immediately!
-    if (e.buttons !== 1) {
-      if (isDragging) setIsDragging(false);
-      return;
-    }
-    if (!isDragging) return;
-    setPan({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
   useEffect(() => {
-    const handleGlobalMouseUp = () => setIsDragging(false);
-    window.addEventListener("mouseup", handleGlobalMouseUp);
-    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+    if (!isDragging) return;
+
+    const handleWindowMouseMove = (e) => {
+      // If mouse button is no longer held down, release immediately
+      if (e.buttons === 0) {
+        setIsDragging(false);
+        return;
+      }
+      setPan({
+        x: Math.round(e.clientX - dragStart.x),
+        y: Math.round(e.clientY - dragStart.y)
+      });
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener("mousemove", handleWindowMouseMove, { passive: true });
+    window.addEventListener("mouseup", handleWindowMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [isDragging, dragStart]);
+
+  // 2. High-Precision Native Wheel Listener (Non-Passive: prevents page jitter & handles cursor-centered zoom / smooth pan)
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    const onWheel = (e) => {
+      e.preventDefault();
+
+      setIsWheeling(true);
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+      wheelTimeoutRef.current = setTimeout(() => {
+        setIsWheeling(false);
+      }, 150);
+
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
+      const isZoomAction = e.ctrlKey || e.metaKey || wheelModeRef.current === "zoom";
+
+      if (isZoomAction) {
+        // CURSOR-CENTERED ZOOM: Point under mouse cursor remains locked in place
+        const rect = el.getBoundingClientRect();
+        const cursorX = e.clientX - rect.left;
+        const cursorY = e.clientY - rect.top;
+
+        // Damped exponential factor prevents jumpy scaling
+        const zoomDelta = e.ctrlKey ? -e.deltaY * 0.005 : -e.deltaY * 0.0016;
+        const factor = Math.exp(zoomDelta);
+        const newZoom = Math.min(2.5, Math.max(0.35, currentZoom * factor));
+
+        if (Math.abs(newZoom - currentZoom) > 0.001) {
+          const scaleRatio = newZoom / currentZoom;
+          const newPanX = cursorX - (cursorX - currentPan.x) * scaleRatio;
+          const newPanY = cursorY - (cursorY - currentPan.y) * scaleRatio;
+
+          setZoom(Number(newZoom.toFixed(3)));
+          setPan({ x: Math.round(newPanX), y: Math.round(newPanY) });
+        }
+      } else {
+        // SMOOTH DOCUMENT PAN: Natural directional scrolling
+        let deltaX = e.deltaX;
+        let deltaY = e.deltaY;
+
+        // Shift key converts vertical scroll to horizontal scroll
+        if (e.shiftKey && deltaX === 0) {
+          deltaX = deltaY;
+          deltaY = 0;
+        }
+
+        setPan({
+          x: Math.round(currentPan.x - deltaX),
+          y: Math.round(currentPan.y - deltaY)
+        });
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+    };
   }, []);
 
-  // Zoom Interactions
-  const handleZoomIn = () => setZoom((z) => Math.min(2.0, Number((z + 0.15).toFixed(2))));
-  const handleZoomOut = () => setZoom((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))));
+  // 3. Center-Anchored Zoom Controls (Expanding from screen center instead of top-left)
+  const zoomToTarget = (targetZoom) => {
+    if (!viewportRef.current) return;
+    const vWidth = viewportRef.current.clientWidth;
+    const vHeight = viewportRef.current.clientHeight;
+    const centerX = vWidth / 2;
+    const centerY = vHeight / 2;
+    const factor = targetZoom / zoom;
+    setPan({
+      x: Math.round(centerX - (centerX - pan.x) * factor),
+      y: Math.round(centerY - (centerY - pan.y) * factor)
+    });
+    setZoom(Number(targetZoom.toFixed(2)));
+  };
+
+  const handleZoomIn = () => zoomToTarget(Math.min(2.5, Number((zoom + 0.15).toFixed(2))));
+  const handleZoomOut = () => zoomToTarget(Math.max(0.35, Number((zoom - 0.15).toFixed(2))));
   const handleResetZoom = () => {
-    setZoom(0.85);
-    setPan({ x: 40, y: 30 });
+    zoomToTarget(0.85);
   };
 
   const handleFitView = () => {
     if (viewportRef.current) {
-      const vWidth = viewportRef.current.clientWidth - 40;
+      const vWidth = viewportRef.current.clientWidth - 80;
+      const vHeight = viewportRef.current.clientHeight - 80;
       const cWidth = treeLayout.canvasBounds.width;
-      const autoZoom = Math.min(1.0, Math.max(0.45, Number((vWidth / cWidth).toFixed(2))));
-      setZoom(autoZoom);
-      setPan({ x: 20, y: 20 });
+      const cHeight = treeLayout.canvasBounds.height;
+      const autoZoom = Math.min(1.0, Math.max(0.35, Math.min(vWidth / cWidth, vHeight / cHeight)));
+      setZoom(Number(autoZoom.toFixed(2)));
+      setPan({ x: 40, y: 30 });
     }
-  };
-
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.08 : -0.08;
-    setZoom((z) => Math.min(2.0, Math.max(0.4, Number((z + delta).toFixed(2)))));
   };
 
   const handleCopy = (text, e) => {
@@ -531,6 +618,35 @@ export default function NetworkGraphView({ traceData }) {
 
         {/* Zoom & Canvas Controls */}
         <div className="flex items-center gap-2">
+          {/* Mouse Wheel Mode Toggle: Pan vs Zoom */}
+          <div className="flex items-center bg-white border border-[#E8E2D5] rounded-lg p-0.5 shadow-2xs text-[11px]">
+            <span className="text-[10px] font-mono text-[#9E968D] px-1.5 font-bold uppercase">Wheel:</span>
+            <button
+              onClick={() => setWheelMode("pan")}
+              className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                wheelMode === "pan"
+                  ? "bg-[#D96B27] text-white shadow-2xs"
+                  : "text-[#746D65] hover:text-[#2C2623]"
+              }`}
+              title="Scroll wheel smoothly pans the canvas (Hold Ctrl/Pinch to zoom)"
+            >
+              <Move className="w-3 h-3" />
+              <span>Pan</span>
+            </button>
+            <button
+              onClick={() => setWheelMode("zoom")}
+              className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                wheelMode === "zoom"
+                  ? "bg-[#D96B27] text-white shadow-2xs"
+                  : "text-[#746D65] hover:text-[#2C2623]"
+              }`}
+              title="Scroll wheel zooms at cursor position with zero drift"
+            >
+              <ZoomIn className="w-3 h-3" />
+              <span>Zoom</span>
+            </button>
+          </div>
+
           <div className="px-2.5 py-1 rounded-lg bg-white border border-[#E8E2D5] font-mono text-[11px] font-bold text-[#2C2623] shadow-2xs">
             {Math.round(zoom * 100)}%
           </div>
@@ -572,11 +688,7 @@ export default function NetworkGraphView({ traceData }) {
       <div
         ref={viewportRef}
         onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => setIsDragging(false)}
         onDragStart={(e) => e.preventDefault()}
-        onWheel={handleWheel}
         className={`relative w-full h-[640px] bg-[#FAF7F0] rounded-2xl border-2 border-[#E8E2D5] overflow-hidden shadow-inner select-none ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
@@ -586,14 +698,16 @@ export default function NetworkGraphView({ traceData }) {
             linear-gradient(to right, rgba(232, 226, 213, 0.4) 1px, transparent 1px),
             linear-gradient(to bottom, rgba(232, 226, 213, 0.4) 1px, transparent 1px)
           `,
-          backgroundSize: "28px 28px, 140px 140px, 140px 140px"
+          backgroundPosition: `${pan.x}px ${pan.y}px, ${pan.x}px ${pan.y}px, ${pan.x}px ${pan.y}px`,
+          backgroundSize: `${Math.round(28 * zoom)}px ${Math.round(28 * zoom)}px, ${Math.round(140 * zoom)}px ${Math.round(140 * zoom)}px, ${Math.round(140 * zoom)}px ${Math.round(140 * zoom)}px`
         }}
       >
         {/* TRANSFORMED TREE CANVAS */}
         <div
-          className="absolute origin-top-left transition-transform duration-75 ease-out select-none"
+          className="absolute origin-top-left select-none will-change-transform"
           style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+            transition: isDragging || isWheeling ? "none" : "transform 200ms cubic-bezier(0.16, 1, 0.3, 1)",
             width: `${treeLayout.canvasBounds.width}px`,
             height: `${treeLayout.canvasBounds.height}px`
           }}
