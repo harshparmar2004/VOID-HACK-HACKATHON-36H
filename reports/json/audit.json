@@ -1,0 +1,3558 @@
+{
+  "run": {
+    "db": "case.duckdb",
+    "file_sha256": "2c9f81fd34f728c0b7c1e803cb49e1e231c1d9204a77badfcb737f50adf73101",
+    "rows": {
+      "tx": 2000000,
+      "accounts": 24873
+    },
+    "duckdb_version": "1.5.6",
+    "runtime_s": 3.049,
+    "n_findings": 68,
+    "n_failures": 0
+  },
+  "rules": {
+    "max_shapes": 20,
+    "max_categories": 50,
+    "max_pairs": 400,
+    "label_max_len": 40,
+    "rare_share_max": 0.01,
+    "near_unique_min_ratio": 0.99,
+    "independence_max_cramers_v": 0.05,
+    "uniform_max_chi2_per_dof": 3.0,
+    "benford_max_mad": 0.015,
+    "systemic_violation_min_share": 0.05,
+    "outlier_iqr_k": 1.5,
+    "outlier_min_group_size": 30,
+    "outlier_signal_min_lift": 3.0,
+    "outlier_signal_min_group_share": 0.25,
+    "ranges": {
+      "amount_paise": {
+        "min": 1,
+        "by": "mode",
+        "limits": {
+          "UPI": {
+            "max": 10000000
+          },
+          "IMPS": {
+            "max": 50000000
+          },
+          "RTGS": {
+            "min": 20000000
+          }
+        }
+      }
+    },
+    "_source": {
+      "file": "audit_rules.json",
+      "profile_id": "v1-verified",
+      "profile_overrides": []
+    }
+  },
+  "summary": {
+    "CLEAN": 21,
+    "TRAP": 7,
+    "SIGNAL": 18,
+    "NOISE": 14,
+    "INCONCLUSIVE": 8
+  },
+  "findings": [
+    {
+      "id": "profile_shapes:tx_id",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "tx_id"
+      },
+      "question": "Which formats does tx_id take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.tx_id AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.tx_id AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A9",
+            "rows": 2000000,
+            "share": 1.0,
+            "min_len": 12,
+            "max_len": 12
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "tx_id has one shape, A9, on every row."
+    },
+    {
+      "id": "profile_shapes:utr",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "utr"
+      },
+      "question": "Which formats does utr take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.utr AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.utr AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 2000000,
+        "n_shapes": 0,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": []
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "utr is empty (all 2,000,000 rows NULL)."
+    },
+    {
+      "id": "profile_shapes:mode",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "mode"
+      },
+      "question": "Which formats does mode take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.mode AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.mode AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A",
+            "rows": 2000000,
+            "share": 1.0,
+            "min_len": 3,
+            "max_len": 4
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "mode has one shape, A, on every row."
+    },
+    {
+      "id": "profile_shapes:narration",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "narration"
+      },
+      "question": "Which formats does narration take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.narration AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.narration AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_shapes": 6,
+        "n_rare_shapes": 3,
+        "rows_in_rare_shapes": 2954,
+        "shapes": [
+          {
+            "shape": "A/A/A#9",
+            "rows": 1569833,
+            "share": 0.784917,
+            "min_len": 21,
+            "max_len": 26
+          },
+          {
+            "shape": "A/A#9",
+            "rows": 285541,
+            "share": 0.14277,
+            "min_len": 22,
+            "max_len": 22
+          },
+          {
+            "shape": "A/A/A9",
+            "rows": 141672,
+            "share": 0.070836,
+            "min_len": 24,
+            "max_len": 24
+          },
+          {
+            "shape": "A/A9A/A_A_9",
+            "rows": 1327,
+            "share": 0.000664,
+            "min_len": 33,
+            "max_len": 33
+          },
+          {
+            "shape": "A/A_A/A9A_A_9",
+            "rows": 1327,
+            "share": 0.000664,
+            "min_len": 31,
+            "max_len": 31
+          },
+          {
+            "shape": "A/A/A_A_A_9",
+            "rows": 300,
+            "share": 0.00015,
+            "min_len": 33,
+            "max_len": 33
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "narration has 6 shapes; 3 are rare (2,954 rows, each under 1.00%)."
+    },
+    {
+      "id": "profile_shapes:narr_rail",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "narr_rail"
+      },
+      "question": "Which formats does narr_rail take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(split_part(t.narration, '/', 1) AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(split_part(t.narration, '/', 1) AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A",
+            "rows": 2000000,
+            "share": 1.0,
+            "min_len": 3,
+            "max_len": 4
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "narr_rail has one shape, A, on every row."
+    },
+    {
+      "id": "profile_shapes:ip",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "ip"
+      },
+      "question": "Which formats does ip take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.ip AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.ip AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "9.9.9.9",
+            "rows": 2000000,
+            "share": 1.0,
+            "min_len": 10,
+            "max_len": 15
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "ip has one shape, 9.9.9.9, on every row."
+    },
+    {
+      "id": "profile_shapes:device",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "device"
+      },
+      "question": "Which formats does device take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.device AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.device AS VARCHAR)) AS len\n    FROM tx t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_shapes": 2,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A",
+            "rows": 1331342,
+            "share": 0.665671,
+            "min_len": 3,
+            "max_len": 7
+          },
+          {
+            "shape": "A_A",
+            "rows": 668658,
+            "share": 0.334329,
+            "min_len": 12,
+            "max_len": 15
+          }
+        ]
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "device mixes 2 common shapes; none is rare."
+    },
+    {
+      "id": "profile_shapes:acct_no",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "acct_no"
+      },
+      "question": "Which formats does acct_no take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.acct_no AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.acct_no AS VARCHAR)) AS len\n    FROM accounts t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 24873,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A9",
+            "rows": 24873,
+            "share": 1.0,
+            "min_len": 12,
+            "max_len": 12
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "acct_no has one shape, A9, on every row."
+    },
+    {
+      "id": "profile_shapes:ifsc",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "ifsc"
+      },
+      "question": "Which formats does ifsc take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.ifsc AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.ifsc AS VARCHAR)) AS len\n    FROM accounts t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 24873,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A9",
+            "rows": 24873,
+            "share": 1.0,
+            "min_len": 11,
+            "max_len": 11
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "ifsc has one shape, A9, on every row."
+    },
+    {
+      "id": "profile_shapes:bank",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "bank"
+      },
+      "question": "Which formats does bank take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(t.bank AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(t.bank AS VARCHAR)) AS len\n    FROM accounts t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 24873,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A",
+            "rows": 24873,
+            "share": 1.0,
+            "min_len": 4,
+            "max_len": 4
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "bank has one shape, A, on every row."
+    },
+    {
+      "id": "profile_shapes:ifsc_bank",
+      "tool": "profile_shapes",
+      "args": {
+        "column": "ifsc_bank"
+      },
+      "question": "Which formats does ifsc_bank take, and are any of them rare?",
+      "sql": "WITH s AS (\n    SELECT regexp_replace(regexp_replace(regexp_replace(\n               CAST(substr(t.ifsc, 1, 4) AS VARCHAR),\n               '[A-Za-z]+', 'A', 'g'), '[0-9]+', '9', 'g'), '[^ -~]+', 'U', 'g') AS shape,\n           length(CAST(substr(t.ifsc, 1, 4) AS VARCHAR)) AS len\n    FROM accounts t\n)\nSELECT shape, count(*) AS n, min(len) AS min_len, max(len) AS max_len,\n       count(*) OVER () AS n_shapes, sum(count(*)) OVER () AS n_rows\nFROM s\nGROUP BY shape\nORDER BY n DESC, shape\nLIMIT 21",
+      "result": {
+        "n_rows": 24873,
+        "n_null": 0,
+        "n_shapes": 1,
+        "n_rare_shapes": 0,
+        "rows_in_rare_shapes": 0,
+        "shapes": [
+          {
+            "shape": "A",
+            "rows": 24873,
+            "share": 1.0,
+            "min_len": 4,
+            "max_len": 4
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "ifsc_bank has one shape, A, on every row."
+    },
+    {
+      "id": "check_uniqueness:tx_key",
+      "tool": "check_uniqueness",
+      "args": {
+        "column": "tx_key"
+      },
+      "question": "Is tx_key unique, and do repeated values label the same record?",
+      "sql": "WITH g AS (\n    SELECT t.tx_key AS v, count(*) AS n, count(DISTINCT hash(t.src, t.dst, t.amount_paise, t.ts, t.mode, t.narration, t.ip, t.device)) AS n_records\n    FROM tx t\n    GROUP BY 1\n)\nSELECT coalesce(sum(n), 0)                                        AS n_rows,\n       coalesce(sum(n) FILTER (v IS NULL), 0)                     AS n_null,\n       count(*) FILTER (v IS NOT NULL)                            AS n_distinct,\n       count(*) FILTER (v IS NOT NULL AND n > 1)                  AS n_dup_values,\n       coalesce(sum(n) FILTER (v IS NOT NULL AND n > 1), 0)       AS n_rows_in_dups,\n       coalesce(max(n) FILTER (v IS NOT NULL), 0)                 AS max_repeats,\n       count(*) FILTER (v IS NOT NULL AND n > 1 AND n_records > 1) AS n_colliding_values\nFROM g",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_distinct": 2000000,
+        "distinct_ratio": 1.0,
+        "n_dup_values": 0,
+        "n_rows_in_dups": 0,
+        "max_repeats": 1,
+        "n_colliding_values": 0,
+        "n_exact_copy_values": 0
+      },
+      "verdict": "CLEAN",
+      "explanation": "tx_key is unique: 2,000,000 values on 2,000,000 rows."
+    },
+    {
+      "id": "check_uniqueness:tx_id",
+      "tool": "check_uniqueness",
+      "args": {
+        "column": "tx_id"
+      },
+      "question": "Is tx_id unique, and do repeated values label the same record?",
+      "sql": "WITH g AS (\n    SELECT t.tx_id AS v, count(*) AS n, count(DISTINCT hash(t.src, t.dst, t.amount_paise, t.ts, t.mode, t.narration, t.ip, t.device)) AS n_records\n    FROM tx t\n    GROUP BY 1\n)\nSELECT coalesce(sum(n), 0)                                        AS n_rows,\n       coalesce(sum(n) FILTER (v IS NULL), 0)                     AS n_null,\n       count(*) FILTER (v IS NOT NULL)                            AS n_distinct,\n       count(*) FILTER (v IS NOT NULL AND n > 1)                  AS n_dup_values,\n       coalesce(sum(n) FILTER (v IS NOT NULL AND n > 1), 0)       AS n_rows_in_dups,\n       coalesce(max(n) FILTER (v IS NOT NULL), 0)                 AS max_repeats,\n       count(*) FILTER (v IS NOT NULL AND n > 1 AND n_records > 1) AS n_colliding_values\nFROM g",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 0,
+        "n_distinct": 1997748,
+        "distinct_ratio": 0.998874,
+        "n_dup_values": 2250,
+        "n_rows_in_dups": 4502,
+        "max_repeats": 3,
+        "n_colliding_values": 2250,
+        "n_exact_copy_values": 0
+      },
+      "verdict": "TRAP",
+      "explanation": "tx_id looks like an identifier but 2,250 values repeat across 4,502 rows; 2,250 of them label different records, so it cannot be used as a key."
+    },
+    {
+      "id": "check_uniqueness:utr",
+      "tool": "check_uniqueness",
+      "args": {
+        "column": "utr"
+      },
+      "question": "Is utr unique, and do repeated values label the same record?",
+      "sql": "WITH g AS (\n    SELECT t.utr AS v, count(*) AS n, count(DISTINCT hash(t.src, t.dst, t.amount_paise, t.ts, t.mode, t.narration, t.ip, t.device)) AS n_records\n    FROM tx t\n    GROUP BY 1\n)\nSELECT coalesce(sum(n), 0)                                        AS n_rows,\n       coalesce(sum(n) FILTER (v IS NULL), 0)                     AS n_null,\n       count(*) FILTER (v IS NOT NULL)                            AS n_distinct,\n       count(*) FILTER (v IS NOT NULL AND n > 1)                  AS n_dup_values,\n       coalesce(sum(n) FILTER (v IS NOT NULL AND n > 1), 0)       AS n_rows_in_dups,\n       coalesce(max(n) FILTER (v IS NOT NULL), 0)                 AS max_repeats,\n       count(*) FILTER (v IS NOT NULL AND n > 1 AND n_records > 1) AS n_colliding_values\nFROM g",
+      "result": {
+        "n_rows": 2000000,
+        "n_null": 2000000,
+        "n_distinct": 0,
+        "distinct_ratio": 0.0,
+        "n_dup_values": 0,
+        "n_rows_in_dups": 0,
+        "max_repeats": 0,
+        "n_colliding_values": 0,
+        "n_exact_copy_values": 0
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "utr is empty (all 2,000,000 rows NULL)."
+    },
+    {
+      "id": "check_uniqueness:acct_id",
+      "tool": "check_uniqueness",
+      "args": {
+        "column": "acct_id"
+      },
+      "question": "Is acct_id unique, and do repeated values label the same record?",
+      "sql": "WITH g AS (\n    SELECT t.acct_id AS v, count(*) AS n, count(DISTINCT hash(t.acct_no, t.ifsc, t.bank)) AS n_records\n    FROM accounts t\n    GROUP BY 1\n)\nSELECT coalesce(sum(n), 0)                                        AS n_rows,\n       coalesce(sum(n) FILTER (v IS NULL), 0)                     AS n_null,\n       count(*) FILTER (v IS NOT NULL)                            AS n_distinct,\n       count(*) FILTER (v IS NOT NULL AND n > 1)                  AS n_dup_values,\n       coalesce(sum(n) FILTER (v IS NOT NULL AND n > 1), 0)       AS n_rows_in_dups,\n       coalesce(max(n) FILTER (v IS NOT NULL), 0)                 AS max_repeats,\n       count(*) FILTER (v IS NOT NULL AND n > 1 AND n_records > 1) AS n_colliding_values\nFROM g",
+      "result": {
+        "n_rows": 24873,
+        "n_null": 0,
+        "n_distinct": 24873,
+        "distinct_ratio": 1.0,
+        "n_dup_values": 0,
+        "n_rows_in_dups": 0,
+        "max_repeats": 1,
+        "n_colliding_values": 0,
+        "n_exact_copy_values": 0
+      },
+      "verdict": "CLEAN",
+      "explanation": "acct_id is unique: 24,873 values on 24,873 rows."
+    },
+    {
+      "id": "check_uniqueness:acct_no",
+      "tool": "check_uniqueness",
+      "args": {
+        "column": "acct_no"
+      },
+      "question": "Is acct_no unique, and do repeated values label the same record?",
+      "sql": "WITH g AS (\n    SELECT t.acct_no AS v, count(*) AS n, count(DISTINCT hash(t.ifsc, t.bank)) AS n_records\n    FROM accounts t\n    GROUP BY 1\n)\nSELECT coalesce(sum(n), 0)                                        AS n_rows,\n       coalesce(sum(n) FILTER (v IS NULL), 0)                     AS n_null,\n       count(*) FILTER (v IS NOT NULL)                            AS n_distinct,\n       count(*) FILTER (v IS NOT NULL AND n > 1)                  AS n_dup_values,\n       coalesce(sum(n) FILTER (v IS NOT NULL AND n > 1), 0)       AS n_rows_in_dups,\n       coalesce(max(n) FILTER (v IS NOT NULL), 0)                 AS max_repeats,\n       count(*) FILTER (v IS NOT NULL AND n > 1 AND n_records > 1) AS n_colliding_values\nFROM g",
+      "result": {
+        "n_rows": 24873,
+        "n_null": 0,
+        "n_distinct": 24873,
+        "distinct_ratio": 1.0,
+        "n_dup_values": 0,
+        "n_rows_in_dups": 0,
+        "max_repeats": 1,
+        "n_colliding_values": 0,
+        "n_exact_copy_values": 0
+      },
+      "verdict": "CLEAN",
+      "explanation": "acct_no is unique: 24,873 values on 24,873 rows."
+    },
+    {
+      "id": "check_consistency:narr_rail,mode",
+      "tool": "check_consistency",
+      "args": {
+        "col_a": "narr_rail",
+        "col_b": "mode"
+      },
+      "question": "Do narr_rail and mode agree, or does one tell us nothing about the other?",
+      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(split_part(t.narration, '/', 1) AS VARCHAR) AS a, CAST(t.mode AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
+      "result": {
+        "n_rows": 2000000,
+        "n_values_a": 3,
+        "n_values_b": 4,
+        "n_pairs": 12,
+        "shared_values": [
+          "IMPS",
+          "NEFT",
+          "UPI"
+        ],
+        "n_mismatch": 978058,
+        "mismatch_share": 0.489029,
+        "cramers_v": 0.002176,
+        "a_determines_b": false,
+        "b_determines_a": false,
+        "pairs": [
+          {
+            "a": "UPI",
+            "b": "UPI",
+            "rows": 929560,
+            "share": 0.46478
+          },
+          {
+            "a": "UPI",
+            "b": "IMPS",
+            "rows": 314544,
+            "share": 0.157272
+          },
+          {
+            "a": "IMPS",
+            "b": "UPI",
+            "rows": 185523,
+            "share": 0.092761
+          },
+          {
+            "a": "NEFT",
+            "b": "UPI",
+            "rows": 184761,
+            "share": 0.092381
+          },
+          {
+            "a": "UPI",
+            "b": "NEFT",
+            "rows": 142094,
+            "share": 0.071047
+          },
+          {
+            "a": "IMPS",
+            "b": "IMPS",
+            "rows": 63872,
+            "share": 0.031936
+          },
+          {
+            "a": "NEFT",
+            "b": "IMPS",
+            "rows": 62783,
+            "share": 0.031392
+          },
+          {
+            "a": "UPI",
+            "b": "RTGS",
+            "rows": 43004,
+            "share": 0.021502
+          },
+          {
+            "a": "IMPS",
+            "b": "NEFT",
+            "rows": 28530,
+            "share": 0.014265
+          },
+          {
+            "a": "NEFT",
+            "b": "NEFT",
+            "rows": 28510,
+            "share": 0.014255
+          },
+          {
+            "a": "IMPS",
+            "b": "RTGS",
+            "rows": 8458,
+            "share": 0.004229
+          },
+          {
+            "a": "NEFT",
+            "b": "RTGS",
+            "rows": 8361,
+            "share": 0.004181
+          }
+        ]
+      },
+      "verdict": "TRAP",
+      "explanation": "narr_rail and mode disagree on 978,058 of 2,000,000 rows (48.90%) and are statistically independent (Cramer's V 0.002): neither can validate the other."
+    },
+    {
+      "id": "check_consistency:device,is_headless",
+      "tool": "check_consistency",
+      "args": {
+        "col_a": "device",
+        "col_b": "is_headless"
+      },
+      "question": "Do device and is_headless agree, or does one tell us nothing about the other?",
+      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.device AS VARCHAR) AS a, CAST(t.is_headless AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
+      "result": {
+        "n_rows": 2000000,
+        "n_values_a": 5,
+        "n_values_b": 2,
+        "n_pairs": 5,
+        "shared_values": [],
+        "n_mismatch": null,
+        "mismatch_share": null,
+        "cramers_v": 1.0,
+        "a_determines_b": true,
+        "b_determines_a": false,
+        "pairs": [
+          {
+            "a": "Windows_Browser",
+            "b": "false",
+            "rows": 666004,
+            "share": 0.333002
+          },
+          {
+            "a": "iOS",
+            "b": "false",
+            "rows": 665917,
+            "share": 0.332958
+          },
+          {
+            "a": "Android",
+            "b": "false",
+            "rows": 665425,
+            "share": 0.332713
+          },
+          {
+            "a": "Linux_Script",
+            "b": "true",
+            "rows": 1327,
+            "share": 0.000664
+          },
+          {
+            "a": "Web_Emulator",
+            "b": "true",
+            "rows": 1327,
+            "share": 0.000664
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "device fully determines is_headless: the two are consistent."
+    },
+    {
+      "id": "check_consistency:mode,device",
+      "tool": "check_consistency",
+      "args": {
+        "col_a": "mode",
+        "col_b": "device"
+      },
+      "question": "Do mode and device agree, or does one tell us nothing about the other?",
+      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.mode AS VARCHAR) AS a, CAST(t.device AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
+      "result": {
+        "n_rows": 2000000,
+        "n_values_a": 4,
+        "n_values_b": 5,
+        "n_pairs": 14,
+        "shared_values": [],
+        "n_mismatch": null,
+        "mismatch_share": null,
+        "cramers_v": 0.030032,
+        "a_determines_b": false,
+        "b_determines_a": false,
+        "pairs": [
+          {
+            "a": "UPI",
+            "b": "iOS",
+            "rows": 433305,
+            "share": 0.216652
+          },
+          {
+            "a": "UPI",
+            "b": "Windows_Browser",
+            "rows": 433234,
+            "share": 0.216617
+          },
+          {
+            "a": "UPI",
+            "b": "Android",
+            "rows": 431978,
+            "share": 0.215989
+          },
+          {
+            "a": "IMPS",
+            "b": "Android",
+            "rows": 146973,
+            "share": 0.073486
+          },
+          {
+            "a": "IMPS",
+            "b": "Windows_Browser",
+            "rows": 146477,
+            "share": 0.073238
+          },
+          {
+            "a": "IMPS",
+            "b": "iOS",
+            "rows": 146422,
+            "share": 0.073211
+          },
+          {
+            "a": "NEFT",
+            "b": "iOS",
+            "rows": 66431,
+            "share": 0.033216
+          },
+          {
+            "a": "NEFT",
+            "b": "Android",
+            "rows": 66407,
+            "share": 0.033203
+          },
+          {
+            "a": "NEFT",
+            "b": "Windows_Browser",
+            "rows": 66296,
+            "share": 0.033148
+          },
+          {
+            "a": "RTGS",
+            "b": "Android",
+            "rows": 20067,
+            "share": 0.010034
+          },
+          {
+            "a": "RTGS",
+            "b": "Windows_Browser",
+            "rows": 19997,
+            "share": 0.009999
+          },
+          {
+            "a": "RTGS",
+            "b": "iOS",
+            "rows": 19759,
+            "share": 0.009879
+          },
+          {
+            "a": "IMPS",
+            "b": "Web_Emulator",
+            "rows": 1327,
+            "share": 0.000664
+          },
+          {
+            "a": "UPI",
+            "b": "Linux_Script",
+            "rows": 1327,
+            "share": 0.000664
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "mode and device are statistically independent (Cramer's V 0.030)."
+    },
+    {
+      "id": "check_consistency:is_foreign_ip,is_headless",
+      "tool": "check_consistency",
+      "args": {
+        "col_a": "is_foreign_ip",
+        "col_b": "is_headless"
+      },
+      "question": "Do is_foreign_ip and is_headless agree, or does one tell us nothing about the other?",
+      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.is_foreign_ip AS VARCHAR) AS a, CAST(t.is_headless AS VARCHAR) AS b\n    FROM tx t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
+      "result": {
+        "n_rows": 2000000,
+        "n_values_a": 2,
+        "n_values_b": 2,
+        "n_pairs": 2,
+        "shared_values": [
+          "false",
+          "true"
+        ],
+        "n_mismatch": 0,
+        "mismatch_share": 0.0,
+        "cramers_v": 1.0,
+        "a_determines_b": true,
+        "b_determines_a": true,
+        "pairs": [
+          {
+            "a": "false",
+            "b": "false",
+            "rows": 1997346,
+            "share": 0.998673
+          },
+          {
+            "a": "true",
+            "b": "true",
+            "rows": 2654,
+            "share": 0.001327
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "is_foreign_ip and is_headless agree on all 2,000,000 rows."
+    },
+    {
+      "id": "check_consistency:bank,ifsc_bank",
+      "tool": "check_consistency",
+      "args": {
+        "col_a": "bank",
+        "col_b": "ifsc_bank"
+      },
+      "question": "Do bank and ifsc_bank agree, or does one tell us nothing about the other?",
+      "sql": "SELECT a, b, count(*) AS n\nFROM (\n    SELECT CAST(t.bank AS VARCHAR) AS a, CAST(substr(t.ifsc, 1, 4) AS VARCHAR) AS b\n    FROM accounts t\n)\nWHERE a IS NOT NULL AND b IS NOT NULL\nGROUP BY a, b\nORDER BY n DESC, a, b\nLIMIT 401",
+      "result": {
+        "n_rows": 24873,
+        "n_values_a": 10,
+        "n_values_b": 10,
+        "n_pairs": 10,
+        "shared_values": [
+          "AIRP",
+          "AXIS",
+          "BARB",
+          "HDFC",
+          "ICIC",
+          "IPOS",
+          "KKBK",
+          "PUNB",
+          "PYTM",
+          "SBIN"
+        ],
+        "n_mismatch": 0,
+        "mismatch_share": 0.0,
+        "cramers_v": 1.0,
+        "a_determines_b": true,
+        "b_determines_a": true,
+        "pairs": [
+          {
+            "a": "SBIN",
+            "b": "SBIN",
+            "rows": 2538,
+            "share": 0.102038
+          },
+          {
+            "a": "IPOS",
+            "b": "IPOS",
+            "rows": 2528,
+            "share": 0.101636
+          },
+          {
+            "a": "KKBK",
+            "b": "KKBK",
+            "rows": 2523,
+            "share": 0.101435
+          },
+          {
+            "a": "AXIS",
+            "b": "AXIS",
+            "rows": 2518,
+            "share": 0.101234
+          },
+          {
+            "a": "HDFC",
+            "b": "HDFC",
+            "rows": 2496,
+            "share": 0.10035
+          },
+          {
+            "a": "PUNB",
+            "b": "PUNB",
+            "rows": 2492,
+            "share": 0.100189
+          },
+          {
+            "a": "ICIC",
+            "b": "ICIC",
+            "rows": 2468,
+            "share": 0.099224
+          },
+          {
+            "a": "PYTM",
+            "b": "PYTM",
+            "rows": 2453,
+            "share": 0.098621
+          },
+          {
+            "a": "BARB",
+            "b": "BARB",
+            "rows": 2440,
+            "share": 0.098098
+          },
+          {
+            "a": "AIRP",
+            "b": "AIRP",
+            "rows": 2417,
+            "share": 0.097174
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "bank and ifsc_bank agree on all 24,873 rows."
+    },
+    {
+      "id": "check_ranges:amount_paise",
+      "tool": "check_ranges",
+      "args": {
+        "column": "amount_paise"
+      },
+      "question": "Is amount_paise inside its valid range and the limits that apply to it?",
+      "sql": "SELECT count(*) AS n_rows, count(x) AS n_valid, min(x) AS min_value, max(x) AS max_value,\n       count(*) FILTER (x = 0) AS n_zero, count(*) FILTER (x < 0) AS n_negative, quantile_cont(x, 0.01) AS p01, quantile_cont(x, 0.5) AS p50, quantile_cont(x, 0.99) AS p99\nFROM (SELECT t.amount_paise AS x FROM tx t);\n\nSELECT count(*) FILTER (x < CAST(1.0 AS DOUBLE)) AS n_below,\n       count(*) FILTER (x > CAST(NULL AS DOUBLE)) AS n_above\nFROM (SELECT t.amount_paise AS x FROM tx t);\n\nSELECT lim.grp, lim.lo, lim.hi, count(*) AS n_rows,\n       count(*) FILTER (d.x < lim.lo) AS n_below,\n       count(*) FILTER (d.x > lim.hi) AS n_above\nFROM (SELECT t.amount_paise AS x, CAST(t.mode AS VARCHAR) AS g FROM tx t) d\nJOIN (VALUES ('IMPS', CAST(NULL AS DOUBLE), CAST(50000000.0 AS DOUBLE)), ('RTGS', CAST(20000000.0 AS DOUBLE), CAST(NULL AS DOUBLE)), ('UPI', CAST(NULL AS DOUBLE), CAST(10000000.0 AS DOUBLE))) AS lim(grp, lo, hi) ON d.g = lim.grp\nWHERE d.x IS NOT NULL\nGROUP BY lim.grp, lim.lo, lim.hi\nORDER BY lim.grp",
+      "result": {
+        "n_rows": 2000000,
+        "n_valid": 2000000,
+        "min_value": 5000,
+        "max_value": 49982399,
+        "n_zero": 0,
+        "n_negative": 0,
+        "p01": 6951.0,
+        "p50": 89935.0,
+        "p99": 1215925.11,
+        "n_null": 0,
+        "rules_checked": 4,
+        "limits": [
+          {
+            "group": "(all)",
+            "min": 1,
+            "max": null,
+            "rows": 2000000,
+            "n_below": 0,
+            "n_above": 0,
+            "share": 0.0
+          },
+          {
+            "group": "mode=IMPS",
+            "min": null,
+            "max": 50000000.0,
+            "rows": 441199,
+            "n_below": 0,
+            "n_above": 0,
+            "share": 0.0
+          },
+          {
+            "group": "mode=RTGS",
+            "min": 20000000.0,
+            "max": null,
+            "rows": 59823,
+            "n_below": 59747,
+            "n_above": 0,
+            "share": 0.99873
+          },
+          {
+            "group": "mode=UPI",
+            "min": null,
+            "max": 10000000.0,
+            "rows": 1299844,
+            "n_below": 0,
+            "n_above": 355,
+            "share": 0.000273
+          }
+        ]
+      },
+      "verdict": "TRAP",
+      "explanation": "amount_paise: 59,747 of 59,823 rows in mode=RTGS are below the minimum (99.87%); the field ignores this real-world limit (2 limits broken in all)."
+    },
+    {
+      "id": "check_ranges:ts",
+      "tool": "check_ranges",
+      "args": {
+        "column": "ts"
+      },
+      "question": "Is ts inside its valid range and the limits that apply to it?",
+      "sql": "SELECT count(*) AS n_rows, count(x) AS n_valid, min(x) AS min_value, max(x) AS max_value,\n       date_diff('day', min(x), max(x)) AS span_days\nFROM (SELECT t.ts AS x FROM tx t)",
+      "result": {
+        "n_rows": 2000000,
+        "n_valid": 2000000,
+        "min_value": "2026-09-15 00:00:00",
+        "max_value": "2026-09-29 23:59:58",
+        "span_days": 14,
+        "n_null": 0,
+        "rules_checked": 0,
+        "limits": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "ts has no NULLs; no limit is configured for it."
+    },
+    {
+      "id": "check_ranges:first_seen",
+      "tool": "check_ranges",
+      "args": {
+        "column": "first_seen"
+      },
+      "question": "Is first_seen inside its valid range and the limits that apply to it?",
+      "sql": "SELECT count(*) AS n_rows, count(x) AS n_valid, min(x) AS min_value, max(x) AS max_value,\n       date_diff('day', min(x), max(x)) AS span_days\nFROM (SELECT t.first_seen AS x FROM accounts t)",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "min_value": "2026-09-15 00:00:00",
+        "max_value": "2026-09-29 21:47:20",
+        "span_days": 14,
+        "n_null": 0,
+        "rules_checked": 0,
+        "limits": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "first_seen has no NULLs; no limit is configured for it."
+    },
+    {
+      "id": "check_ranges:last_seen",
+      "tool": "check_ranges",
+      "args": {
+        "column": "last_seen"
+      },
+      "question": "Is last_seen inside its valid range and the limits that apply to it?",
+      "sql": "SELECT count(*) AS n_rows, count(x) AS n_valid, min(x) AS min_value, max(x) AS max_value,\n       date_diff('day', min(x), max(x)) AS span_days\nFROM (SELECT t.last_seen AS x FROM accounts t)",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "min_value": "2026-09-15 00:10:45",
+        "max_value": "2026-09-29 23:59:58",
+        "span_days": 14,
+        "n_null": 0,
+        "rules_checked": 0,
+        "limits": []
+      },
+      "verdict": "CLEAN",
+      "explanation": "last_seen has no NULLs; no limit is configured for it."
+    },
+    {
+      "id": "check_distribution:amount_paise",
+      "tool": "check_distribution",
+      "args": {
+        "column": "amount_paise"
+      },
+      "question": "Is the spread of amount_paise (first digit) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT left(CAST(abs(t.amount_paise) AS VARCHAR), 1) AS v FROM tx t WHERE t.amount_paise <> 0)\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 9,
+        "n_major_values": 9,
+        "n_rare_values": 0,
+        "rows_in_rare_values": 0,
+        "major_chi2_per_dof_vs_equal": 120917.253722,
+        "major_relative_spread": 2.302857,
+        "major_split_is_even": false,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "1",
+            "rows": 605663,
+            "share": 0.302831
+          },
+          {
+            "value": "2",
+            "rows": 343799,
+            "share": 0.1719
+          },
+          {
+            "value": "3",
+            "rows": 242573,
+            "share": 0.121287
+          },
+          {
+            "value": "4",
+            "rows": 187868,
+            "share": 0.093934
+          },
+          {
+            "value": "5",
+            "rows": 167772,
+            "share": 0.083886
+          },
+          {
+            "value": "6",
+            "rows": 135229,
+            "share": 0.067614
+          },
+          {
+            "value": "7",
+            "rows": 118216,
+            "share": 0.059108
+          },
+          {
+            "value": "8",
+            "rows": 104963,
+            "share": 0.052482
+          },
+          {
+            "value": "9",
+            "rows": 93917,
+            "share": 0.046959
+          }
+        ],
+        "benford_mad": 0.002404
+      },
+      "verdict": "CLEAN",
+      "explanation": "amount_paise first digits follow the natural (Benford) curve (MAD 0.0024)."
+    },
+    {
+      "id": "check_distribution:ts_hour",
+      "tool": "check_distribution",
+      "args": {
+        "column": "ts_hour"
+      },
+      "question": "Is the spread of ts_hour (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(hour(t.ts) AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 24,
+        "n_major_values": 24,
+        "n_rare_values": 0,
+        "rows_in_rare_values": 0,
+        "major_chi2_per_dof_vs_equal": 0.447221,
+        "major_relative_spread": 0.010572,
+        "major_split_is_even": true,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "22",
+            "rows": 83906,
+            "share": 0.041953
+          },
+          {
+            "value": "13",
+            "rows": 83654,
+            "share": 0.041827
+          },
+          {
+            "value": "1",
+            "rows": 83522,
+            "share": 0.041761
+          },
+          {
+            "value": "21",
+            "rows": 83502,
+            "share": 0.041751
+          },
+          {
+            "value": "0",
+            "rows": 83462,
+            "share": 0.041731
+          },
+          {
+            "value": "12",
+            "rows": 83430,
+            "share": 0.041715
+          },
+          {
+            "value": "7",
+            "rows": 83409,
+            "share": 0.041704
+          },
+          {
+            "value": "9",
+            "rows": 83396,
+            "share": 0.041698
+          },
+          {
+            "value": "6",
+            "rows": 83367,
+            "share": 0.041683
+          },
+          {
+            "value": "5",
+            "rows": 83365,
+            "share": 0.041682
+          },
+          {
+            "value": "20",
+            "rows": 83360,
+            "share": 0.04168
+          },
+          {
+            "value": "11",
+            "rows": 83331,
+            "share": 0.041666
+          },
+          {
+            "value": "23",
+            "rows": 83293,
+            "share": 0.041647
+          },
+          {
+            "value": "2",
+            "rows": 83286,
+            "share": 0.041643
+          },
+          {
+            "value": "15",
+            "rows": 83268,
+            "share": 0.041634
+          },
+          {
+            "value": "10",
+            "rows": 83255,
+            "share": 0.041627
+          },
+          {
+            "value": "8",
+            "rows": 83244,
+            "share": 0.041622
+          },
+          {
+            "value": "19",
+            "rows": 83242,
+            "share": 0.041621
+          },
+          {
+            "value": "14",
+            "rows": 83182,
+            "share": 0.041591
+          },
+          {
+            "value": "16",
+            "rows": 83164,
+            "share": 0.041582
+          },
+          {
+            "value": "17",
+            "rows": 83123,
+            "share": 0.041562
+          },
+          {
+            "value": "3",
+            "rows": 83110,
+            "share": 0.041555
+          },
+          {
+            "value": "18",
+            "rows": 83104,
+            "share": 0.041552
+          },
+          {
+            "value": "4",
+            "rows": 83025,
+            "share": 0.041513
+          }
+        ]
+      },
+      "verdict": "TRAP",
+      "explanation": "ts_hour: 24 values split evenly within random noise (4.17% each, spread 1.06%), as a random generator would; do not read meaning into it."
+    },
+    {
+      "id": "check_distribution:mode",
+      "tool": "check_distribution",
+      "args": {
+        "column": "mode"
+      },
+      "question": "Is the spread of mode (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.mode AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 4,
+        "n_major_values": 4,
+        "n_rare_values": 0,
+        "rows_in_rare_values": 0,
+        "major_chi2_per_dof_vs_equal": 618322.748815,
+        "major_relative_spread": 2.480042,
+        "major_split_is_even": false,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "UPI",
+            "rows": 1299844,
+            "share": 0.649922
+          },
+          {
+            "value": "IMPS",
+            "rows": 441199,
+            "share": 0.2206
+          },
+          {
+            "value": "NEFT",
+            "rows": 199134,
+            "share": 0.099567
+          },
+          {
+            "value": "RTGS",
+            "rows": 59823,
+            "share": 0.029912
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "mode is spread unevenly across 4 values with no rare one."
+    },
+    {
+      "id": "check_distribution:narr_rail",
+      "tool": "check_distribution",
+      "args": {
+        "column": "narr_rail"
+      },
+      "question": "Is the spread of narr_rail (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(split_part(t.narration, '/', 1) AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 3,
+        "n_major_values": 3,
+        "n_rare_values": 0,
+        "rows_in_rare_values": 0,
+        "major_chi2_per_dof_vs_equal": 654144.103789,
+        "major_relative_spread": 1.71718,
+        "major_split_is_even": false,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "UPI",
+            "rows": 1429202,
+            "share": 0.714601
+          },
+          {
+            "value": "IMPS",
+            "rows": 286383,
+            "share": 0.143191
+          },
+          {
+            "value": "NEFT",
+            "rows": 284415,
+            "share": 0.142207
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "narr_rail is spread unevenly across 3 values with no rare one."
+    },
+    {
+      "id": "check_distribution:device",
+      "tool": "check_distribution",
+      "args": {
+        "column": "device"
+      },
+      "question": "Is the spread of device (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.device AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 5,
+        "n_major_values": 3,
+        "n_rare_values": 2,
+        "rows_in_rare_values": 2654,
+        "major_chi2_per_dof_vs_equal": 0.146413,
+        "major_relative_spread": 0.00087,
+        "major_split_is_even": true,
+        "rare_split_is_even": true,
+        "values": [
+          {
+            "value": "Windows_Browser",
+            "rows": 666004,
+            "share": 0.333002
+          },
+          {
+            "value": "iOS",
+            "rows": 665917,
+            "share": 0.332958
+          },
+          {
+            "value": "Android",
+            "rows": 665425,
+            "share": 0.332713
+          },
+          {
+            "value": "Linux_Script",
+            "rows": 1327,
+            "share": 0.000664
+          },
+          {
+            "value": "Web_Emulator",
+            "rows": 1327,
+            "share": 0.000664
+          }
+        ]
+      },
+      "verdict": "TRAP",
+      "explanation": "device: 3 values split evenly within random noise (33.33% each, spread 0.09%), as a random generator would; do not read meaning into it. Rare: Linux_Script, Web_Emulator (2,654 rows, near-identical counts)."
+    },
+    {
+      "id": "check_distribution:is_foreign_ip",
+      "tool": "check_distribution",
+      "args": {
+        "column": "is_foreign_ip"
+      },
+      "question": "Is the spread of is_foreign_ip (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_foreign_ip AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 2,
+        "n_major_values": 1,
+        "n_rare_values": 1,
+        "rows_in_rare_values": 2654,
+        "major_chi2_per_dof_vs_equal": null,
+        "major_relative_spread": null,
+        "major_split_is_even": false,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "false",
+            "rows": 1997346,
+            "share": 0.998673
+          },
+          {
+            "value": "true",
+            "rows": 2654,
+            "share": 0.001327
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "is_foreign_ip is dominated by 1 main value(s). Rare: true (2,654 rows)."
+    },
+    {
+      "id": "check_distribution:is_reserved_ip",
+      "tool": "check_distribution",
+      "args": {
+        "column": "is_reserved_ip"
+      },
+      "question": "Is the spread of is_reserved_ip (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_reserved_ip AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 1,
+        "n_major_values": 1,
+        "n_rare_values": 0,
+        "rows_in_rare_values": 0,
+        "major_chi2_per_dof_vs_equal": null,
+        "major_relative_spread": null,
+        "major_split_is_even": false,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "false",
+            "rows": 2000000,
+            "share": 1.0
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "is_reserved_ip is constant: it carries no information."
+    },
+    {
+      "id": "check_distribution:is_headless",
+      "tool": "check_distribution",
+      "args": {
+        "column": "is_headless"
+      },
+      "question": "Is the spread of is_headless (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_headless AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 2,
+        "n_major_values": 1,
+        "n_rare_values": 1,
+        "rows_in_rare_values": 2654,
+        "major_chi2_per_dof_vs_equal": null,
+        "major_relative_spread": null,
+        "major_split_is_even": false,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "false",
+            "rows": 1997346,
+            "share": 0.998673
+          },
+          {
+            "value": "true",
+            "rows": 2654,
+            "share": 0.001327
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "is_headless is dominated by 1 main value(s). Rare: true (2,654 rows)."
+    },
+    {
+      "id": "check_distribution:is_dup_tx_id",
+      "tool": "check_distribution",
+      "args": {
+        "column": "is_dup_tx_id"
+      },
+      "question": "Is the spread of is_dup_tx_id (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.is_dup_tx_id AS VARCHAR) AS v FROM tx t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 2000000,
+        "n_values": 2,
+        "n_major_values": 1,
+        "n_rare_values": 1,
+        "rows_in_rare_values": 4502,
+        "major_chi2_per_dof_vs_equal": null,
+        "major_relative_spread": null,
+        "major_split_is_even": false,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "false",
+            "rows": 1995498,
+            "share": 0.997749
+          },
+          {
+            "value": "true",
+            "rows": 4502,
+            "share": 0.002251
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "is_dup_tx_id is dominated by 1 main value(s). Rare: true (4,502 rows)."
+    },
+    {
+      "id": "check_distribution:bank",
+      "tool": "check_distribution",
+      "args": {
+        "column": "bank"
+      },
+      "question": "Is the spread of bank (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(t.bank AS VARCHAR) AS v FROM accounts t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 24873,
+        "n_values": 10,
+        "n_major_values": 10,
+        "n_rare_values": 0,
+        "rows_in_rare_values": 0,
+        "major_chi2_per_dof_vs_equal": 0.682136,
+        "major_relative_spread": 0.048647,
+        "major_split_is_even": true,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "SBIN",
+            "rows": 2538,
+            "share": 0.102038
+          },
+          {
+            "value": "IPOS",
+            "rows": 2528,
+            "share": 0.101636
+          },
+          {
+            "value": "KKBK",
+            "rows": 2523,
+            "share": 0.101435
+          },
+          {
+            "value": "AXIS",
+            "rows": 2518,
+            "share": 0.101234
+          },
+          {
+            "value": "HDFC",
+            "rows": 2496,
+            "share": 0.10035
+          },
+          {
+            "value": "PUNB",
+            "rows": 2492,
+            "share": 0.100189
+          },
+          {
+            "value": "ICIC",
+            "rows": 2468,
+            "share": 0.099224
+          },
+          {
+            "value": "PYTM",
+            "rows": 2453,
+            "share": 0.098621
+          },
+          {
+            "value": "BARB",
+            "rows": 2440,
+            "share": 0.098098
+          },
+          {
+            "value": "AIRP",
+            "rows": 2417,
+            "share": 0.097174
+          }
+        ]
+      },
+      "verdict": "TRAP",
+      "explanation": "bank: 10 values split evenly within random noise (10.00% each, spread 4.86%), as a random generator would; do not read meaning into it."
+    },
+    {
+      "id": "check_distribution:ifsc_bank",
+      "tool": "check_distribution",
+      "args": {
+        "column": "ifsc_bank"
+      },
+      "question": "Is the spread of ifsc_bank (value) natural, artificially even, or hiding rare values?",
+      "sql": "SELECT v, count(*) AS n, count(*) OVER () AS n_values, sum(count(*)) OVER () AS n_rows\nFROM (SELECT CAST(substr(t.ifsc, 1, 4) AS VARCHAR) AS v FROM accounts t )\nWHERE v IS NOT NULL\nGROUP BY v\nORDER BY n DESC, v\nLIMIT 51",
+      "result": {
+        "n_rows": 24873,
+        "n_values": 10,
+        "n_major_values": 10,
+        "n_rare_values": 0,
+        "rows_in_rare_values": 0,
+        "major_chi2_per_dof_vs_equal": 0.682136,
+        "major_relative_spread": 0.048647,
+        "major_split_is_even": true,
+        "rare_split_is_even": false,
+        "values": [
+          {
+            "value": "SBIN",
+            "rows": 2538,
+            "share": 0.102038
+          },
+          {
+            "value": "IPOS",
+            "rows": 2528,
+            "share": 0.101636
+          },
+          {
+            "value": "KKBK",
+            "rows": 2523,
+            "share": 0.101435
+          },
+          {
+            "value": "AXIS",
+            "rows": 2518,
+            "share": 0.101234
+          },
+          {
+            "value": "HDFC",
+            "rows": 2496,
+            "share": 0.10035
+          },
+          {
+            "value": "PUNB",
+            "rows": 2492,
+            "share": 0.100189
+          },
+          {
+            "value": "ICIC",
+            "rows": 2468,
+            "share": 0.099224
+          },
+          {
+            "value": "PYTM",
+            "rows": 2453,
+            "share": 0.098621
+          },
+          {
+            "value": "BARB",
+            "rows": 2440,
+            "share": 0.098098
+          },
+          {
+            "value": "AIRP",
+            "rows": 2417,
+            "share": 0.097174
+          }
+        ]
+      },
+      "verdict": "TRAP",
+      "explanation": "ifsc_bank: 10 values split evenly within random noise (10.00% each, spread 4.86%), as a random generator would; do not read meaning into it."
+    },
+    {
+      "id": "find_outliers:amount_paise,mode",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "amount_paise",
+        "group": "mode"
+      },
+      "question": "Are extreme values of amount_paise spread evenly, or do they sit in one mode group?",
+      "sql": "WITH d AS (\n    SELECT CAST(t.amount_paise AS DOUBLE) AS x, CAST(t.mode AS VARCHAR) AS g\n    FROM tx t\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 2000000,
+        "n_valid": 2000000,
+        "n_null": 0,
+        "q1": 42790.0,
+        "median": 89935.0,
+        "q3": 188952.0,
+        "fence_low": -176453.0,
+        "fence_high": 408195.0,
+        "n_outliers": 170236,
+        "outlier_share": 0.085118,
+        "groups": [
+          {
+            "group": "IMPS",
+            "n": 441199,
+            "n_valid": 441199,
+            "n_null": 0,
+            "median": 90242.0,
+            "n_low": 0,
+            "n_high": 38018,
+            "outlier_share": 0.08617,
+            "lift": 1.012356
+          },
+          {
+            "group": "NEFT",
+            "n": 199134,
+            "n_valid": 199134,
+            "n_null": 0,
+            "median": 89691.0,
+            "n_low": 0,
+            "n_high": 16725,
+            "outlier_share": 0.083989,
+            "lift": 0.986732
+          },
+          {
+            "group": "RTGS",
+            "n": 59823,
+            "n_valid": 59823,
+            "n_null": 0,
+            "median": 90000.0,
+            "n_low": 0,
+            "n_high": 5150,
+            "outlier_share": 0.086087,
+            "lift": 1.011388
+          },
+          {
+            "group": "UPI",
+            "n": 1299844,
+            "n_valid": 1299844,
+            "n_null": 0,
+            "median": 89865.0,
+            "n_low": 0,
+            "n_high": 110343,
+            "outlier_share": 0.084889,
+            "lift": 0.997315
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "amount_paise has 170,236 outliers (8.51%) spread across mode groups (highest lift 1.0x, mode=IMPS): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:amount_paise,device",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "amount_paise",
+        "group": "device"
+      },
+      "question": "Are extreme values of amount_paise spread evenly, or do they sit in one device group?",
+      "sql": "WITH d AS (\n    SELECT CAST(t.amount_paise AS DOUBLE) AS x, CAST(t.device AS VARCHAR) AS g\n    FROM tx t\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 2000000,
+        "n_valid": 2000000,
+        "n_null": 0,
+        "q1": 42790.0,
+        "median": 89935.0,
+        "q3": 188952.0,
+        "fence_low": -176453.0,
+        "fence_high": 408195.0,
+        "n_outliers": 170236,
+        "outlier_share": 0.085118,
+        "groups": [
+          {
+            "group": "Android",
+            "n": 665425,
+            "n_valid": 665425,
+            "n_null": 0,
+            "median": 89669.0,
+            "n_low": 0,
+            "n_high": 56160,
+            "outlier_share": 0.084397,
+            "lift": 0.991532
+          },
+          {
+            "group": "Linux_Script",
+            "n": 1327,
+            "n_valid": 1327,
+            "n_null": 0,
+            "median": 4023947.0,
+            "n_low": 0,
+            "n_high": 1238,
+            "outlier_share": 0.932931,
+            "lift": 10.960448
+          },
+          {
+            "group": "Web_Emulator",
+            "n": 1327,
+            "n_valid": 1327,
+            "n_null": 0,
+            "median": 4191612.0,
+            "n_low": 0,
+            "n_high": 1243,
+            "outlier_share": 0.936699,
+            "lift": 11.004715
+          },
+          {
+            "group": "Windows_Browser",
+            "n": 666004,
+            "n_valid": 666004,
+            "n_null": 0,
+            "median": 89884.0,
+            "n_low": 0,
+            "n_high": 55987,
+            "outlier_share": 0.084064,
+            "lift": 0.987618
+          },
+          {
+            "group": "iOS",
+            "n": 665917,
+            "n_valid": 665917,
+            "n_null": 0,
+            "median": 89781.0,
+            "n_low": 0,
+            "n_high": 55608,
+            "outlier_share": 0.083506,
+            "lift": 0.98106
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "amount_paise outliers concentrate in device=Web_Emulator: 93.67% of that group against 8.51% overall (11.0x)."
+    },
+    {
+      "id": "find_outliers:amount_paise,is_headless",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "amount_paise",
+        "group": "is_headless"
+      },
+      "question": "Are extreme values of amount_paise spread evenly, or do they sit in one is_headless group?",
+      "sql": "WITH d AS (\n    SELECT CAST(t.amount_paise AS DOUBLE) AS x, CAST(t.is_headless AS VARCHAR) AS g\n    FROM tx t\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 2000000,
+        "n_valid": 2000000,
+        "n_null": 0,
+        "q1": 42790.0,
+        "median": 89935.0,
+        "q3": 188952.0,
+        "fence_low": -176453.0,
+        "fence_high": 408195.0,
+        "n_outliers": 170236,
+        "outlier_share": 0.085118,
+        "groups": [
+          {
+            "group": "false",
+            "n": 1997346,
+            "n_valid": 1997346,
+            "n_null": 0,
+            "median": 89777.0,
+            "n_low": 0,
+            "n_high": 167755,
+            "outlier_share": 0.083989,
+            "lift": 0.986736
+          },
+          {
+            "group": "true",
+            "n": 2654,
+            "n_valid": 2654,
+            "n_null": 0,
+            "median": 4114894.0,
+            "n_low": 0,
+            "n_high": 2481,
+            "outlier_share": 0.934815,
+            "lift": 10.982582
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "amount_paise outliers concentrate in is_headless=true: 93.48% of that group against 8.51% overall (11.0x)."
+    },
+    {
+      "id": "find_outliers:amount_paise,is_foreign_ip",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "amount_paise",
+        "group": "is_foreign_ip"
+      },
+      "question": "Are extreme values of amount_paise spread evenly, or do they sit in one is_foreign_ip group?",
+      "sql": "WITH d AS (\n    SELECT CAST(t.amount_paise AS DOUBLE) AS x, CAST(t.is_foreign_ip AS VARCHAR) AS g\n    FROM tx t\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 2000000,
+        "n_valid": 2000000,
+        "n_null": 0,
+        "q1": 42790.0,
+        "median": 89935.0,
+        "q3": 188952.0,
+        "fence_low": -176453.0,
+        "fence_high": 408195.0,
+        "n_outliers": 170236,
+        "outlier_share": 0.085118,
+        "groups": [
+          {
+            "group": "false",
+            "n": 1997346,
+            "n_valid": 1997346,
+            "n_null": 0,
+            "median": 89777.0,
+            "n_low": 0,
+            "n_high": 167755,
+            "outlier_share": 0.083989,
+            "lift": 0.986736
+          },
+          {
+            "group": "true",
+            "n": 2654,
+            "n_valid": 2654,
+            "n_null": 0,
+            "median": 4114894.0,
+            "n_low": 0,
+            "n_high": 2481,
+            "outlier_share": 0.934815,
+            "lift": 10.982582
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "amount_paise outliers concentrate in is_foreign_ip=true: 93.48% of that group against 8.51% overall (11.0x)."
+    },
+    {
+      "id": "find_outliers:tx_count,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "tx_count",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of tx_count spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.tx_count AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 159.0,
+        "median": 169.0,
+        "q3": 178.0,
+        "fence_low": 130.5,
+        "fence_high": 206.5,
+        "n_outliers": 1472,
+        "outlier_share": 0.059181,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 3.0,
+            "n_low": 385,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 16.897418
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 300,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 16.897418
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 169.0,
+            "n_low": 705,
+            "n_high": 82,
+            "outlier_share": 0.032537,
+            "lift": 0.549788
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "tx_count outliers concentrate in flow_class=send_only: 100.00% of that group against 5.92% overall (16.9x)."
+    },
+    {
+      "id": "find_outliers:n_in,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "n_in",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of n_in spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.n_in AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 77.0,
+        "median": 84.0,
+        "q3": 91.0,
+        "fence_low": 56.0,
+        "fence_high": 112.0,
+        "n_outliers": 1424,
+        "outlier_share": 0.057251,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 3.0,
+            "n_low": 385,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 17.466994
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 300,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 17.466994
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 84.0,
+            "n_low": 695,
+            "n_high": 44,
+            "outlier_share": 0.030552,
+            "lift": 0.533658
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "n_in outliers concentrate in flow_class=send_only: 100.00% of that group against 5.73% overall (17.5x)."
+    },
+    {
+      "id": "find_outliers:n_out,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "n_out",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of n_out spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.n_out AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 77.0,
+        "median": 84.0,
+        "q3": 91.0,
+        "fence_low": 56.0,
+        "fence_high": 112.0,
+        "n_outliers": 1430,
+        "outlier_share": 0.057492,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 385,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 17.393706
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 300,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 17.393706
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 84.0,
+            "n_low": 696,
+            "n_high": 49,
+            "outlier_share": 0.0308,
+            "lift": 0.535733
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "n_out outliers concentrate in flow_class=send_only: 100.00% of that group against 5.75% overall (17.4x)."
+    },
+    {
+      "id": "find_outliers:days_active,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "days_active",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of days_active spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.days_active AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 15.0,
+        "median": 15.0,
+        "q3": 15.0,
+        "fence_low": 15.0,
+        "fence_high": 15.0,
+        "n_outliers": 1376,
+        "outlier_share": 0.055321,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 3.0,
+            "n_low": 385,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 18.076308
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 300,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 18.076308
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 15.0,
+            "n_low": 691,
+            "n_high": 0,
+            "outlier_share": 0.028568,
+            "lift": 0.516402
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "days_active outliers concentrate in flow_class=send_only: 100.00% of that group against 5.53% overall (18.1x)."
+    },
+    {
+      "id": "find_outliers:pass_through_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "pass_through_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of pass_through_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.pass_through_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 0.076081,
+        "median": 0.100043,
+        "q3": 0.128907,
+        "fence_low": -0.003158,
+        "fence_high": 0.208147,
+        "n_outliers": 965,
+        "outlier_share": 0.039271,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.100844,
+            "n_low": 0,
+            "n_high": 965,
+            "outlier_share": 0.039896,
+            "lift": 1.015917
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "pass_through_share has 965 outliers (3.93%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:forward_lag_median_s,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "forward_lag_median_s",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of forward_lag_median_s spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.forward_lag_median_s AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24188,
+        "n_null": 685,
+        "q1": 1405.0,
+        "median": 1684.0,
+        "q3": 1959.0,
+        "fence_low": 574.0,
+        "fence_high": 2790.0,
+        "n_outliers": 258,
+        "outlier_share": 0.010666,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 1684.0,
+            "n_low": 161,
+            "n_high": 97,
+            "outlier_share": 0.010666,
+            "lift": 1.0
+          }
+        ]
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "forward_lag_median_s has 258 outliers but fewer than two flow_class groups of at least 30 to compare."
+    },
+    {
+      "id": "find_outliers:split_count_median,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "split_count_median",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of split_count_median spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.split_count_median AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24188,
+        "n_null": 685,
+        "q1": 1.0,
+        "median": 1.0,
+        "q3": 1.0,
+        "fence_low": 1.0,
+        "fence_high": 1.0,
+        "n_outliers": 135,
+        "outlier_share": 0.005581,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 135,
+            "outlier_share": 0.005581,
+            "lift": 1.0
+          }
+        ]
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "split_count_median has 135 outliers but fewer than two flow_class groups of at least 30 to compare."
+    },
+    {
+      "id": "find_outliers:commission_ratio_median,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "commission_ratio_median",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of commission_ratio_median spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.commission_ratio_median AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24188,
+        "n_null": 685,
+        "q1": 0.607088,
+        "median": 0.837259,
+        "q3": 1.0,
+        "fence_low": 0.017719,
+        "fence_high": 1.589369,
+        "n_outliers": 0,
+        "outlier_share": 0.0,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.837259,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": null
+          }
+        ]
+      },
+      "verdict": "CLEAN",
+      "explanation": "commission_ratio_median has no value outside the 1.5x IQR fences."
+    },
+    {
+      "id": "find_outliers:commission_ratio_iqr,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "commission_ratio_iqr",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of commission_ratio_iqr spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.commission_ratio_iqr AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 23981,
+        "n_null": 892,
+        "q1": 0.515341,
+        "median": 0.655853,
+        "q3": 0.755652,
+        "fence_low": 0.154875,
+        "fence_high": 1.116118,
+        "n_outliers": 1193,
+        "outlier_share": 0.049748,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 23981,
+            "n_null": 207,
+            "median": 0.655853,
+            "n_low": 1193,
+            "n_high": 0,
+            "outlier_share": 0.049748,
+            "lift": 1.0
+          }
+        ]
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "commission_ratio_iqr has 1,193 outliers but fewer than two flow_class groups of at least 30 to compare."
+    },
+    {
+      "id": "find_outliers:forwarding_episodes,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "forwarding_episodes",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of forwarding_episodes spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.forwarding_episodes AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 13.0,
+        "median": 15.0,
+        "q3": 18.0,
+        "fence_low": 5.5,
+        "fence_high": 25.5,
+        "n_outliers": 1250,
+        "outlier_share": 0.050869,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 385,
+            "n_high": 0,
+            "outlier_share": 1.0,
+            "lift": 19.6584
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 15.0,
+            "n_low": 702,
+            "n_high": 163,
+            "outlier_share": 0.035762,
+            "lift": 0.703015
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "forwarding_episodes outliers concentrate in flow_class=receive_only: 100.00% of that group against 5.09% overall (19.7x)."
+    },
+    {
+      "id": "find_outliers:flagged_out_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "flagged_out_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of flagged_out_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.flagged_out_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24488,
+        "n_null": 385,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 688,
+        "outlier_share": 0.028095,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 688,
+            "outlier_share": 0.028444,
+            "lift": 1.012403
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "flagged_out_share has 688 outliers (2.81%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:flagged_in_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "flagged_in_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of flagged_in_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.flagged_in_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 944,
+        "outlier_share": 0.038416,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 385,
+            "outlier_share": 1.0,
+            "lift": 26.03072
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 559,
+            "outlier_share": 0.023111,
+            "lift": 0.601586
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "flagged_in_share outliers concentrate in flow_class=receive_only: 100.00% of that group against 3.84% overall (26.0x)."
+    },
+    {
+      "id": "find_outliers:amount_vs_population,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "amount_vs_population",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of amount_vs_population spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.amount_vs_population AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 0.934675,
+        "median": 1.004854,
+        "q3": 1.087641,
+        "fence_low": 0.705226,
+        "fence_high": 1.31709,
+        "n_outliers": 1478,
+        "outlier_share": 0.059422,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 50.572035,
+            "n_low": 1,
+            "n_high": 382,
+            "outlier_share": 0.994805,
+            "lift": 16.7414
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 316.905927,
+            "n_low": 0,
+            "n_high": 300,
+            "outlier_share": 1.0,
+            "lift": 16.828823
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 1.001323,
+            "n_low": 12,
+            "n_high": 783,
+            "outlier_share": 0.032868,
+            "lift": 0.553122
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "amount_vs_population outliers concentrate in flow_class=send_only: 100.00% of that group against 5.94% overall (16.8x)."
+    },
+    {
+      "id": "find_outliers:amount_diversity,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "amount_diversity",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of amount_diversity spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.amount_diversity AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 1.0,
+        "median": 1.0,
+        "q3": 1.0,
+        "fence_low": 1.0,
+        "fence_high": 1.0,
+        "n_outliers": 5158,
+        "outlier_share": 0.207373,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 5158,
+            "n_high": 0,
+            "outlier_share": 0.213246,
+            "lift": 1.02832
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "amount_diversity has 5,158 outliers (20.74%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:reciprocity,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "reciprocity",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of reciprocity spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.reciprocity AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.004975,
+        "fence_low": -0.007463,
+        "fence_high": 0.012438,
+        "n_outliers": 271,
+        "outlier_share": 0.010895,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 271,
+            "outlier_share": 0.011204,
+            "lift": 1.02832
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "reciprocity has 271 outliers (1.09%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:median_hold_hours,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "median_hold_hours",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of median_hold_hours spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.median_hold_hours AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24188,
+        "n_null": 685,
+        "q1": 0.423889,
+        "median": 0.513333,
+        "q3": 0.601111,
+        "fence_low": 0.158056,
+        "fence_high": 0.866944,
+        "n_outliers": 271,
+        "outlier_share": 0.011204,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.513333,
+            "n_low": 203,
+            "n_high": 68,
+            "outlier_share": 0.011204,
+            "lift": 1.0
+          }
+        ]
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "median_hold_hours has 271 outliers but fewer than two flow_class groups of at least 30 to compare."
+    },
+    {
+      "id": "find_outliers:recurring_sender_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "recurring_sender_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of recurring_sender_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.recurring_sender_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 3,
+        "outlier_share": 0.000122,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 3,
+            "outlier_share": 0.000124,
+            "lift": 1.015917
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "recurring_sender_share has 3 outliers (0.01%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:device_consistency,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "device_consistency",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of device_consistency spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.device_consistency AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24488,
+        "n_null": 385,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 300,
+        "outlier_share": 0.012251,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 300,
+            "outlier_share": 1.0,
+            "lift": 81.626667
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "device_consistency outliers concentrate in flow_class=send_only: 100.00% of that group against 1.23% overall (81.6x)."
+    },
+    {
+      "id": "find_outliers:victim_inflow_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "victim_inflow_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of victim_inflow_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.victim_inflow_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 129,
+        "outlier_share": 0.00525,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 129,
+            "outlier_share": 0.005333,
+            "lift": 1.015917
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "victim_inflow_share has 129 outliers (0.52%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:burst_fan_in,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "burst_fan_in",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of burst_fan_in spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.burst_fan_in AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 2.0,
+        "median": 2.0,
+        "q3": 3.0,
+        "fence_low": 0.5,
+        "fence_high": 4.5,
+        "n_outliers": 37,
+        "outlier_share": 0.001506,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 2.0,
+            "n_low": 0,
+            "n_high": 37,
+            "outlier_share": 0.00153,
+            "lift": 1.015917
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "burst_fan_in has 37 outliers (0.15%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:shared_ip_cluster_size,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "shared_ip_cluster_size",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of shared_ip_cluster_size spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.shared_ip_cluster_size AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24488,
+        "n_null": 385,
+        "q1": 2.0,
+        "median": 2.0,
+        "q3": 3.0,
+        "fence_low": 0.5,
+        "fence_high": 4.5,
+        "n_outliers": 20,
+        "outlier_share": 0.000817,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 2.0,
+            "n_low": 0,
+            "n_high": 20,
+            "outlier_share": 0.000827,
+            "lift": 1.012403
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "shared_ip_cluster_size has 20 outliers (0.08%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:ip_churn,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "ip_churn",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of ip_churn spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.ip_churn AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24488,
+        "n_null": 385,
+        "q1": 1.0,
+        "median": 1.0,
+        "q3": 1.0,
+        "fence_low": 1.0,
+        "fence_high": 1.0,
+        "n_outliers": 6,
+        "outlier_share": 0.000245,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 6,
+            "n_high": 0,
+            "outlier_share": 0.000248,
+            "lift": 1.012403
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "ip_churn has 6 outliers (0.02%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:structuring_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "structuring_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of structuring_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.structuring_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24488,
+        "n_null": 385,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 16,
+        "outlier_share": 0.000653,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 16,
+            "outlier_share": 0.000661,
+            "lift": 1.012403
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "structuring_share has 16 outliers (0.07%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:timing_regularity,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "timing_regularity",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of timing_regularity spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.timing_regularity AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 23851,
+        "n_null": 1022,
+        "q1": 0.0,
+        "median": 0.019003,
+        "q3": 0.084992,
+        "fence_low": -0.127488,
+        "fence_high": 0.212481,
+        "n_outliers": 399,
+        "outlier_share": 0.016729,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 0,
+            "n_null": 385,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 23851,
+            "n_null": 337,
+            "median": 0.019003,
+            "n_low": 0,
+            "n_high": 399,
+            "outlier_share": 0.016729,
+            "lift": 1.0
+          }
+        ]
+      },
+      "verdict": "INCONCLUSIVE",
+      "explanation": "timing_regularity has 399 outliers but fewer than two flow_class groups of at least 30 to compare."
+    },
+    {
+      "id": "find_outliers:odd_hour_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "odd_hour_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of odd_hour_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.odd_hour_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 0.144231,
+        "median": 0.165468,
+        "q3": 0.185714,
+        "fence_low": 0.082005,
+        "fence_high": 0.24794,
+        "n_outliers": 1410,
+        "outlier_share": 0.056688,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 231,
+            "n_high": 110,
+            "outlier_share": 0.885714,
+            "lift": 15.624377
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 256,
+            "n_high": 44,
+            "outlier_share": 1.0,
+            "lift": 17.640426
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.16568,
+            "n_low": 494,
+            "n_high": 275,
+            "outlier_share": 0.031793,
+            "lift": 0.560835
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "odd_hour_share outliers concentrate in flow_class=send_only: 100.00% of that group against 5.67% overall (17.6x)."
+    },
+    {
+      "id": "find_outliers:upstream_l1_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "upstream_l1_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of upstream_l1_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.upstream_l1_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 559,
+        "outlier_share": 0.022749,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 559,
+            "outlier_share": 0.023111,
+            "lift": 1.015917
+          }
+        ]
+      },
+      "verdict": "NOISE",
+      "explanation": "upstream_l1_share has 559 outliers (2.27%) spread across flow_class groups (highest lift 1.0x, flow_class=two_way): they do not separate a group."
+    },
+    {
+      "id": "find_outliers:upstream_l2_share,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "upstream_l2_share",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of upstream_l2_share spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.upstream_l2_share AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24573,
+        "n_null": 300,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 385,
+        "outlier_share": 0.015668,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 1.0,
+            "n_low": 0,
+            "n_high": 385,
+            "outlier_share": 1.0,
+            "lift": 63.825974
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 0,
+            "n_null": 300,
+            "median": null,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": null,
+            "lift": null
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 0,
+            "outlier_share": 0.0,
+            "lift": 0.0
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "upstream_l2_share outliers concentrate in flow_class=receive_only: 100.00% of that group against 1.57% overall (63.8x)."
+    },
+    {
+      "id": "find_outliers:neighbour_risk,flow_class",
+      "tool": "find_outliers",
+      "args": {
+        "feature": "neighbour_risk",
+        "group": "flow_class"
+      },
+      "question": "Are extreme values of neighbour_risk spread evenly, or do they sit in one flow_class group?",
+      "sql": "WITH d AS (\n    SELECT CAST(f.neighbour_risk AS DOUBLE) AS x, CAST(CASE WHEN f.is_send_only THEN 'send_only' WHEN f.is_receive_only THEN 'receive_only' ELSE 'two_way' END AS VARCHAR) AS g\n    FROM features f\n),\nq AS (\n    SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.5) AS med, quantile_cont(x, 0.75) AS q3\n    FROM d\n),\nfence AS (\n    SELECT q1, med, q3, q1 - 1.5 * (q3 - q1) AS lo, q3 + 1.5 * (q3 - q1) AS hi FROM q\n)\nSELECT d.g, count(*) AS n, count(d.x) AS n_valid, median(d.x) AS group_median,\n       count(*) FILTER (d.x < fence.lo) AS n_low, count(*) FILTER (d.x > fence.hi) AS n_high,\n       fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nFROM d CROSS JOIN fence\nGROUP BY d.g, fence.q1, fence.med, fence.q3, fence.lo, fence.hi\nORDER BY d.g NULLS LAST",
+      "result": {
+        "n_rows": 24873,
+        "n_valid": 24873,
+        "n_null": 0,
+        "q1": 0.0,
+        "median": 0.0,
+        "q3": 0.0,
+        "fence_low": 0.0,
+        "fence_high": 0.0,
+        "n_outliers": 1373,
+        "outlier_share": 0.0552,
+        "groups": [
+          {
+            "group": "receive_only",
+            "n": 385,
+            "n_valid": 385,
+            "n_null": 0,
+            "median": 70.0,
+            "n_low": 0,
+            "n_high": 385,
+            "outlier_share": 1.0,
+            "lift": 18.115805
+          },
+          {
+            "group": "send_only",
+            "n": 300,
+            "n_valid": 300,
+            "n_null": 0,
+            "median": 80.0,
+            "n_low": 0,
+            "n_high": 300,
+            "outlier_share": 1.0,
+            "lift": 18.115805
+          },
+          {
+            "group": "two_way",
+            "n": 24188,
+            "n_valid": 24188,
+            "n_null": 0,
+            "median": 0.0,
+            "n_low": 0,
+            "n_high": 688,
+            "outlier_share": 0.028444,
+            "lift": 0.515283
+          }
+        ]
+      },
+      "verdict": "SIGNAL",
+      "explanation": "neighbour_risk outliers concentrate in flow_class=send_only: 100.00% of that group against 5.52% overall (18.1x)."
+    }
+  ],
+  "failures": []
+}

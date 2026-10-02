@@ -1,0 +1,28 @@
+{
+  "_doc": "Auditor tolerances. The active scoring profile overrides any key here through its optional 'audit_rules' block. Amount limits are in paise (TRAP_CHECKLIST E8).",
+  "max_shapes": 20,
+  "max_categories": 50,
+  "max_pairs": 400,
+  "label_max_len": 40,
+  "rare_share_max": 0.01,
+  "near_unique_min_ratio": 0.99,
+  "independence_max_cramers_v": 0.05,
+  "uniform_max_chi2_per_dof": 3.0,
+  "benford_max_mad": 0.015,
+  "systemic_violation_min_share": 0.05,
+  "outlier_iqr_k": 1.5,
+  "outlier_min_group_size": 30,
+  "outlier_signal_min_lift": 3.0,
+  "outlier_signal_min_group_share": 0.25,
+  "ranges": {
+    "amount_paise": {
+      "min": 1,
+      "by": "mode",
+      "limits": {
+        "UPI": {"max": 10000000},
+        "IMPS": {"max": 50000000},
+        "RTGS": {"min": 20000000}
+      }
+    }
+  }
+}
