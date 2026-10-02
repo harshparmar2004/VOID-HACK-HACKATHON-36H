@@ -226,6 +226,30 @@ Display example: `Final 84 (Mule 90, Trust 14) · Role L2 confirmed (L1 31, L2 8
 - VICTIM (unflagged accounts only; a role, not a mule): send-only 35 · single/few outflows ≥ 5× population median 30 ·
   payee has high L1 score 25 · low activity 10. Victim score ≥ 60 → role VICTIM.
 
+### 4.6 Feature rules decided after the features review (2 Oct)
+
+- **NULL = not applicable**, never 0: send-only accounts have no inflow features, receive-only accounts
+  have no outflow features, flow features are NULL when no inflow was ever forwarded. Scoring: a NULL
+  feature gives 0 points and never counts toward the two-signal rule.
+- **Allocation:** each outflow goes to the earliest inflow that still has remaining amount (re-offer to the
+  next inflow if the earliest is full); never drop it just because the earliest inflow is full.
+- **median_hold_hours:** NULL when the account never forwards (no imputed end-of-data timestamp), so sinks
+  can never earn balance-retention trust.
+- **device_consistency:** spec boolean — 1 only if one device family AND only domestic IPs, else 0
+  (no modal-share ratios; per-account device ratios reflect the generator's device thirds = fingerprint).
+- **recurring_sender_share:** senders seen on ≥ 3 different DAYS (not ≥ 3 transactions).
+- **split_count_median:** distinct receivers per inflow.
+- **All cut-offs in the profile** (victim-like max outflows, recurring days, odd-hour range, round unit) —
+  none hard-coded.
+- **measure_before_burst:** trust features use the pre-burst period where a burst exists; if not yet
+  implemented, document as a limitation (low impact here: mules have no pre-burst history).
+- **Reciprocity gate (closed on this dataset):** normal accounts' median reciprocity is 0 (random
+  counterparties). Gate rule: reciprocity is informative only if the normal-population median > 0.05.
+  When closed: **T2 weight 0, its 20 points move to T1 (+10, total 35) and T5 (+10, total 25)**;
+  **MP6 = full points if send-only or receive-only, else 0** (no reciprocity component).
+- `features.py` takes an optional `--db` path (default data\case.duckdb) so reviewers can run it on a copy.
+- Zero-weight extras still to add: `burst_fan_in`, `ip_churn`; `in_cycle` stays NULL until the graph step.
+
 ### 4.4 Victim trace
 
 - Step 0: score each victim outgoing transfer (L1 edge score: onward forwarding 40%, burst fan-in 20%,
@@ -393,7 +417,7 @@ Two creation styles:
 |---|---|---|---|
 | 1 | `ingest_meta` | one per load | load_id, file_name, file_sha256, rows_total, rows_loaded, rows_rejected, load_seconds, loaded_at |
 | 2 | `rejects` | one per bad input row | row_number, raw values (text), reason |
-| 3 | `accounts` | one per account (~25K) | acct_id INT, acct_no VARCHAR (12 digits), ifsc, bank (IFSC first 4), first_seen, last_seen |
+| 3 | `accounts` | one per account (~25K) | acct_id INT, acct_no VARCHAR (4-letter bank code + 8 digits), ifsc, bank (IFSC first 4), first_seen, last_seen |
 | 4 | `tx` | one per transaction (2M) | tx_key BIGINT (unique internal key = source CSV row number, stable across reloads), tx_id (ORIGINAL Transaction_ID — NOT unique, see note), is_dup_tx_id BOOLEAN, src, dst (acct_id), amount_paise BIGINT, ts TIMESTAMP, ts_sec INT, mode, narration, ip, device, is_foreign_ip, is_reserved_ip, is_headless, narr_flags (bitmask), utr |
 | 5 | `features` | one per account | one column per raw measurement (pass_through_share, median_hold_min, burst_fan_in, victimlike_sender_share, split_count, commission_share, foreign_ip_share, headless_share, cashout_narr_share, shared_ip_cluster_size, in_cycle, structuring_share, timing_regularity, ip_churn, odd_hour_share, days_active, burst_compression, reciprocity, amount_diversity, recurring_inflows, device_consistency, is_merchant, tx_count, …) |
 | 6 | `scoring_profiles` | one per profile version | profile_id PK, created_at, is_active, is_locked, definition JSON |
@@ -475,5 +499,6 @@ Record each result and the threshold chosen in a notebook Markdown cell. Dev-onl
   (profile_id, tx_key), scores aligned to the final spec (mp1..mp8, victim_score, override_applied,
   param_points), exploration tables dropped, v1-verified profile seeded. Project is a git repo
   (.gitignore excludes data\, .venv\, wheels\, abhedya\, data files).
-- NEXT: Step 3 — build the `features` table (Final Parameters Spec, "Features table").
+- Step 3 features: BUILT (2.5 s), structure verified (groups separate cleanly). Fixes pending — see 4.6.
+- NEXT: apply the 4.6 feature fixes, re-verify, commit; then Step 4 scoring.
 
