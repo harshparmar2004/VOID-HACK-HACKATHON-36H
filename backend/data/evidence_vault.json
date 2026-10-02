@@ -1,5 +1,18 @@
 [
   {
+    "id": "CUST-009",
+    "artifactName": "Online Cyber Crime Dataset",
+    "category": "Google Sheets / Cloud Web Ledger",
+    "sha256": "F6F3AEF0E17B1CFC338195C8D140C79782068E035EA25223B80304422E859313",
+    "filePath": "C:\\Users\\harsh parmar\\Desktop\\abhedya-chakra\\backend\\data\\uploads\\online_cyber_dataset_1790955648.csv",
+    "timestamp": "2026-10-02 21:10:50 IST",
+    "ingestedBy": "IO Inspector Rajesh Sharma (Cyber Branch)",
+    "recordsCount": "9 Transactions",
+    "fileSize": "1.5 KB",
+    "integrity": "TAMPER-PROOF (CHAIN-LOCKED)",
+    "verifiedSection": "Sec. 63 Bharatiya Sakshya Adhiniyam (BSA), 2023"
+  },
+  {
     "id": "CUST-008",
     "artifactName": "Sample_Victim_4Hop_CyberCrime_Statement.pdf",
     "category": "Bank Statement / Ledger Transaction Export",
