@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   UserX,
   Search,
@@ -19,7 +19,9 @@ import {
   Activity,
   Layers,
   Building,
-  RefreshCw
+  RefreshCw,
+  X,
+  Shield
 } from "lucide-react";
 import { DEFAULT_MULES } from "../mockData";
 
@@ -39,6 +41,19 @@ export default function MuleDossierView({
   const [expandedAccount, setExpandedAccount] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+
+  const drawerMuleRef = useRef(null);
+
+  // Close drawer on ESC key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setExpandedAccount(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (forensicParams?.bankFilter) setSelectedBank(forensicParams.bankFilter);
@@ -115,6 +130,21 @@ export default function MuleDossierView({
         };
       });
   }, [rawList]);
+
+  // Selected mule resolution for Right-Side Glassmorphic Drawer
+  const selectedMule = useMemo(() => {
+    if (!expandedAccount) return null;
+    return normalizedMules.find((m) => m.account_id === expandedAccount) || null;
+  }, [normalizedMules, expandedAccount]);
+
+  useEffect(() => {
+    if (selectedMule) {
+      drawerMuleRef.current = selectedMule;
+    }
+  }, [selectedMule]);
+
+  const displayedMule = selectedMule || drawerMuleRef.current;
+  const isDrawerOpen = Boolean(selectedMule);
 
   // Overall Statistics calculated from normalized dataset
   const stats = useMemo(() => {
@@ -495,248 +525,159 @@ export default function MuleDossierView({
                   </td>
                 </tr>
               ) : (
-                paginatedMules.map((m, idx) => {
+                paginatedMules.map((m) => {
                   const isExpanded = expandedAccount === m.account_id;
                   const isCopied = copiedAccount === m.account_id;
 
                   return (
-                    <React.Fragment key={`${m.account_id}-${idx}`}>
-                      <tr className="hover:bg-[#FAF6EE]/80 transition-colors group">
-                        {/* Account ID & Bank IFSC */}
-                        <td className="py-2.5 px-4">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-[#2C2623] font-mono">{m.account_id}</span>
-                            <button
-                              onClick={() => handleCopy(m.account_id)}
-                              title="Copy Account ID"
-                              className="text-[#9E968D] hover:text-[#D96B27] transition-colors p-1 rounded-xs hover:bg-[#FAF6EE] border border-transparent hover:border-[#E8E2D5] cursor-pointer"
-                            >
-                              {isCopied ? <Check className="w-3 h-3 text-[#059669]" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                          </div>
-                          <div className="text-[11px] text-[#746D65] font-sans flex items-center gap-1 mt-0.5">
-                            <span className="font-mono text-[#D96B27] font-semibold">{m.ifsc}</span>
-                            <span className="text-[#B5ACA0]">•</span>
-                            <span className="truncate max-w-[130px]">{m.bankName}</span>
-                          </div>
-                        </td>
-
-                        {/* Role Classification */}
-                        <td className="py-2.5 px-3">
-                          <span
-                            className={`px-2 py-0.5 rounded-xs font-mono font-bold text-[10px] tracking-wider inline-flex items-center gap-1.5 uppercase ${
-                              m.role === "L1_COLLECTOR"
-                                ? "bg-[#FFEDD5] text-[#EA580C] border border-[#FDBA74]"
-                                : m.role === "L2_DISTRIBUTOR"
-                                ? "bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A]"
-                                : "bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]"
-                            }`}
+                    <tr
+                      key={m.account_id}
+                      className={`transition-all duration-150 group ${
+                        isExpanded
+                          ? "bg-[#FFF6ED] ring-1 ring-inset ring-[#D96B27]/40 shadow-2xs"
+                          : "hover:bg-[#FAF6EE]/80"
+                      }`}
+                    >
+                      {/* Account ID & Bank IFSC */}
+                      <td className="py-2.5 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-[#2C2623] font-mono">{m.account_id}</span>
+                          <button
+                            onClick={() => handleCopy(m.account_id)}
+                            title="Copy Account ID"
+                            className="text-[#9E968D] hover:text-[#D96B27] transition-colors p-1 rounded-xs hover:bg-[#FAF6EE] border border-transparent hover:border-[#E8E2D5] cursor-pointer"
                           >
-                            <span className="w-1.5 h-1.5 rounded-xs bg-current"></span>
-                            {m.role.replace("_", " ")}
-                          </span>
-                        </td>
+                            {isCopied ? <Check className="w-3 h-3 text-[#059669]" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-[#746D65] font-sans flex items-center gap-1 mt-0.5">
+                          <span className="font-mono text-[#D96B27] font-semibold">{m.ifsc}</span>
+                          <span className="text-[#B5ACA0]">•</span>
+                          <span className="truncate max-w-[130px]">{m.bankName}</span>
+                        </div>
+                      </td>
 
-                        {/* Risk Index */}
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-baseline gap-1">
-                            <span
-                              className={`font-bold text-xs font-mono ${
-                                m.risk_index >= 90
-                                  ? "text-[#DC2626]"
-                                  : m.risk_index >= 80
-                                  ? "text-[#D97706]"
-                                  : "text-[#CA8A04]"
-                              }`}
-                            >
-                              {m.risk_index}
-                            </span>
-                            <span className="text-[10px] text-[#9E968D]">/ 100</span>
-                          </div>
-                          <div className="w-16 bg-[#E8E2D5] h-1.5 rounded-xs overflow-hidden mt-1">
-                            <div
-                              className={`h-full rounded-xs ${
-                                m.risk_index >= 90
-                                  ? "bg-[#DC2626]"
-                                  : m.risk_index >= 80
-                                  ? "bg-[#D97706]"
-                                  : "bg-[#CA8A04]"
-                              }`}
-                              style={{ width: `${Math.min(100, m.risk_index)}%` }}
-                            ></div>
-                          </div>
-                        </td>
-
-                        {/* Inflow & Outflow */}
-                        <td className="py-2.5 px-4 font-mono text-[11px] whitespace-nowrap">
-                          <div className="text-[#059669] font-medium flex items-center gap-1">
-                            <ArrowDownLeft className="w-3 h-3 text-[#059669] shrink-0" />
-                            <span>₹{m.total_incoming_amt?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
-                          </div>
-                          <div className="text-[#746D65] flex items-center gap-1 mt-0.5">
-                            <ArrowUpRight className="w-3 h-3 text-[#9E968D] shrink-0" />
-                            <span>₹{m.total_outgoing_amt?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
-                          </div>
-                        </td>
-
-                        {/* Actionable Holding Balance */}
-                        <td className="py-2.5 px-4 whitespace-nowrap">
-                          <div
-                            className={`font-bold text-xs font-mono ${
-                              m.current_holding_balance > 0 ? "text-[#059669]" : "text-[#9E968D]"
-                            }`}
-                          >
-                            ₹{m.current_holding_balance?.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                          </div>
-                          {m.current_holding_balance > 50000 && (
-                            <span className="inline-block mt-0.5 text-[9px] font-mono font-bold text-[#059669] bg-[#D1FAE5] px-1.5 py-0.5 rounded-xs border border-[#A7F3D0]">
-                              Target for Lien
-                            </span>
-                          )}
-                        </td>
-
-                        {/* P1-P6 Breakdown */}
-                        <td className="py-2.5 px-4 text-[10px] font-mono text-[#746D65]">
-                          <div className="flex flex-wrap gap-1">
-                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P1 Pass-Through Velocity (wt 30)">
-                              P1:<strong className="text-[#2C2623]">{m.p1_score}</strong>
-                            </span>
-                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P2 Fan-In Centrality (wt 15)">
-                              P2:<strong className="text-[#2C2623]">{m.p2_score}</strong>
-                            </span>
-                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P3 Fan-Out Split (wt 15)">
-                              P3:<strong className="text-[#2C2623]">{m.p3_score}</strong>
-                            </span>
-                            <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P4 Cash-Out / Proxy (wt 25)">
-                              P4:<strong className="text-[#2C2623]">{m.p4_score}</strong>
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Forensic Reason */}
-                        <td
-                          className="py-2.5 px-4 font-sans text-[11px] text-[#746D65] max-w-xs truncate"
-                          title={m.forensic_reason}
+                      {/* Role Classification */}
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-xs font-mono font-bold text-[10px] tracking-wider inline-flex items-center gap-1.5 uppercase ${
+                            m.role === "L1_COLLECTOR"
+                              ? "bg-[#FFEDD5] text-[#EA580C] border border-[#FDBA74]"
+                              : m.role === "L2_DISTRIBUTOR"
+                              ? "bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A]"
+                              : "bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]"
+                          }`}
                         >
-                          {m.forensic_reason}
-                        </td>
+                          <span className="w-1.5 h-1.5 rounded-xs bg-current"></span>
+                          {m.role.replace("_", " ")}
+                        </span>
+                      </td>
 
-                        {/* Action Buttons */}
-                        <td className="py-2.5 px-3 text-right font-sans">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setExpandedAccount(isExpanded ? null : m.account_id)}
-                              className="p-1 rounded-sm border border-[#E8E2D5] bg-white hover:border-[#D96B27] text-[#746D65] hover:text-[#2C2623] transition-all cursor-pointer shadow-2xs"
-                              title="Toggle Dossier Details"
-                            >
-                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      {/* Risk Index */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-baseline gap-1">
+                          <span
+                            className={`font-bold text-xs font-mono ${
+                              m.risk_index >= 90
+                                ? "text-[#DC2626]"
+                                : m.risk_index >= 80
+                                ? "text-[#D97706]"
+                                : "text-[#CA8A04]"
+                            }`}
+                          >
+                            {m.risk_index}
+                          </span>
+                          <span className="text-[10px] text-[#9E968D]">/ 100</span>
+                        </div>
+                        <div className="w-16 bg-[#E8E2D5] h-1.5 rounded-xs overflow-hidden mt-1">
+                          <div
+                            className={`h-full rounded-xs ${
+                              m.risk_index >= 90
+                                ? "bg-[#DC2626]"
+                                : m.risk_index >= 80
+                                ? "bg-[#D97706]"
+                                : "bg-[#CA8A04]"
+                            }`}
+                            style={{ width: `${Math.min(100, m.risk_index)}%` }}
+                          ></div>
+                        </div>
+                      </td>
 
-                      {/* Expandable Dossier Card */}
-                      {isExpanded && (
-                        <tr className="bg-[#FAF6EE]">
-                          <td colSpan={8} className="p-4 border-b border-[#E8E2D5]">
-                            <div className="bg-white border border-[#E8E2D5] rounded-sm p-4 shadow-2xs font-sans space-y-4">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8E2D5] pb-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-sm bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center font-bold text-[#D96B27] font-mono text-xs shadow-2xs">
-                                    {m.bankCode}
-                                  </div>
-                                  <div>
-                                    <h4 className="font-bold text-sm text-[#2C2623] font-serif">
-                                      Comprehensive Dossier: Account #{m.account_id}
-                                    </h4>
-                                    <p className="text-xs text-[#746D65]">
-                                      {m.bankName} • Branch IFSC: <span className="font-mono text-[#D96B27] font-semibold">{m.ifsc}</span>
-                                    </p>
-                                  </div>
-                                </div>
+                      {/* Inflow & Outflow */}
+                      <td className="py-2.5 px-4 font-mono text-[11px] whitespace-nowrap">
+                        <div className="text-[#059669] font-medium flex items-center gap-1">
+                          <ArrowDownLeft className="w-3 h-3 text-[#059669] shrink-0" />
+                          <span>₹{m.total_incoming_amt?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                        <div className="text-[#746D65] flex items-center gap-1 mt-0.5">
+                          <ArrowUpRight className="w-3 h-3 text-[#9E968D] shrink-0" />
+                          <span>₹{m.total_outgoing_amt?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                      </td>
 
-                                <div className="flex items-center gap-2">
-                                  {onSelectCase && (
-                                    <button
-                                      onClick={() => {
-                                        onSelectCase(m.account_id);
-                                        if (onNavigateTab) onNavigateTab("trail");
-                                      }}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-[#E8E2D5] bg-white hover:border-[#D96B27] text-xs font-mono font-bold text-[#2C2623] shadow-2xs transition-all cursor-pointer"
-                                    >
-                                      <Activity className="w-3.5 h-3.5 text-[#D96B27]" />
-                                      <span>Trace Hop Flow</span>
-                                    </button>
-                                  )}
-                                  {onNavigateTab && (
-                                    <button
-                                      onClick={() => onNavigateTab("notices")}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#D96B27] text-white hover:bg-[#C25B1D] text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer"
-                                    >
-                                      <Lock className="w-3.5 h-3.5" />
-                                      <span>Section 91 Freeze Order</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
+                      {/* Actionable Holding Balance */}
+                      <td className="py-2.5 px-4 whitespace-nowrap">
+                        <div
+                          className={`font-bold text-xs font-mono ${
+                            m.current_holding_balance > 0 ? "text-[#059669]" : "text-[#9E968D]"
+                          }`}
+                        >
+                          ₹{m.current_holding_balance?.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                        </div>
+                        {m.current_holding_balance > 50000 && (
+                          <span className="inline-block mt-0.5 text-[9px] font-mono font-bold text-[#059669] bg-[#D1FAE5] px-1.5 py-0.5 rounded-xs border border-[#A7F3D0]">
+                            Target for Lien
+                          </span>
+                        )}
+                      </td>
 
-                              {/* Detailed Parameter Grid */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                                <div className="bg-[#FAF6EE] p-3 rounded-sm border border-[#E8E2D5] space-y-2">
-                                  <div className="font-bold text-[#2C2623] flex items-center justify-between font-mono text-xs">
-                                    <span>P1 Velocity (3–15m Drain)</span>
-                                    <span className="text-[#D96B27]">{m.p1_score} / 30</span>
-                                  </div>
-                                  <p className="text-[11px] text-[#746D65] font-sans">
-                                    90%+ of tainted inflow drained to downstream layers in under 15 minutes.
-                                  </p>
-                                  <div className="pt-1 text-[11px] font-mono text-[#2C2623]">
-                                    Forwarded: ₹{m.total_outgoing_amt?.toLocaleString("en-IN")}
-                                  </div>
-                                </div>
+                      {/* P1-P6 Breakdown */}
+                      <td className="py-2.5 px-4 text-[10px] font-mono text-[#746D65]">
+                        <div className="flex flex-wrap gap-1">
+                          <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P1 Pass-Through Velocity (wt 30)">
+                            P1:<strong className="text-[#2C2623]">{m.p1_score}</strong>
+                          </span>
+                          <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P2 Fan-In Centrality (wt 15)">
+                            P2:<strong className="text-[#2C2623]">{m.p2_score}</strong>
+                          </span>
+                          <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P3 Fan-Out Split (wt 15)">
+                            P3:<strong className="text-[#2C2623]">{m.p3_score}</strong>
+                          </span>
+                          <span className="bg-[#FAF6EE] px-1.5 py-0.5 rounded-xs border border-[#E8E2D5]" title="P4 Cash-Out / Proxy (wt 25)">
+                            P4:<strong className="text-[#2C2623]">{m.p4_score}</strong>
+                          </span>
+                        </div>
+                      </td>
 
-                                <div className="bg-[#FAF6EE] p-3 rounded-sm border border-[#E8E2D5] space-y-2">
-                                  <div className="font-bold text-[#2C2623] flex items-center justify-between font-mono text-xs">
-                                    <span>P2/P3 Topology Split</span>
-                                    <span className="text-[#D96B27]">P2:{m.p2_score} | P3:{m.p3_score}</span>
-                                  </div>
-                                  <p className="text-[11px] text-[#746D65] font-sans">
-                                    Inflow fan-in: {m.distinct_senders} senders • Outflow fan-out: {m.distinct_receivers} receivers.
-                                  </p>
-                                  <div className="pt-1 text-[11px] font-mono text-[#2C2623]">
-                                    Active Lien Balance: ₹{m.current_holding_balance?.toLocaleString("en-IN")}
-                                  </div>
-                                </div>
+                      {/* Forensic Reason */}
+                      <td
+                        className="py-2.5 px-4 font-sans text-[11px] text-[#746D65] max-w-xs truncate"
+                        title={m.forensic_reason}
+                      >
+                        {m.forensic_reason}
+                      </td>
 
-                                <div className="bg-[#FAF6EE] p-3 rounded-sm border border-[#E8E2D5] space-y-2">
-                                  <div className="font-bold text-[#2C2623] flex items-center justify-between font-mono text-xs">
-                                    <span>P4 Digital Footprint</span>
-                                    <span className="text-[#D96B27]">{m.p4_score} / 25</span>
-                                  </div>
-                                  <p className="text-[11px] text-[#746D65] font-sans">
-                                    Foreign IP address (185/194 CIDR block) and headless automated script signatures.
-                                  </p>
-                                  <div className="pt-1 text-[11px] font-mono text-[#DC2626]">
-                                    Risk Band: {m.risk_band || "HIGH_CONFIDENCE_MULE"}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="bg-[#FBF7EE] p-3 rounded-sm border border-[#E8E2D5] text-xs">
-                                <div className="font-bold text-[#2C2623] mb-1 font-mono text-[10px] uppercase tracking-wider">
-                                  Forensic Analysis Summary for Police Case Diary:
-                                </div>
-                                <p className="text-[#746D65] italic leading-relaxed font-sans">
-                                  "{m.forensic_reason}. The account demonstrates zero commercial rationale and satisfies
-                                  all 6 forensic parameters for synthetic mule classification. Statutory notice under Section
-                                  91 Cr.P.C. / Section 94 BNSS is recommended for immediate debit freeze."
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
+                      {/* Action Button: Opens Right-Side Dossier Drawer */}
+                      <td className="py-2.5 px-3 text-right font-sans">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setExpandedAccount(isExpanded ? null : m.account_id)}
+                            className={`p-1.5 rounded-sm border transition-all cursor-pointer shadow-2xs flex items-center gap-1 ${
+                              isExpanded
+                                ? "border-[#D96B27] bg-[#D96B27] text-white"
+                                : "border-[#E8E2D5] bg-white hover:border-[#D96B27] text-[#746D65] hover:text-[#2C2623]"
+                            }`}
+                            title={isExpanded ? "Close Dossier (ESC)" : "Inspect Forensic Dossier"}
+                          >
+                            <ChevronRight
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                isExpanded ? "rotate-90 sm:rotate-0 sm:translate-x-0.5" : ""
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })
               )}
@@ -798,6 +739,300 @@ export default function MuleDossierView({
           </div>
         )}
       </div>
+
+      {/* 5. Subtle Translucent Backdrop (10-20% dark tint with subtle blur) */}
+      <div
+        className={`fixed inset-0 z-40 bg-[#2C2623]/20 backdrop-blur-[2px] transition-opacity duration-300 ${
+          isDrawerOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setExpandedAccount(null)}
+        aria-hidden="true"
+      />
+
+      {/* 6. Sideways Glassmorphic Detail Drawer (Slides from Right) */}
+      <aside
+        className={`fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[480px] md:w-[520px] lg:w-[560px] xl:w-[600px] max-w-full sm:max-w-[85vw] h-screen bg-[#FAF7F0]/92 backdrop-blur-[24px] border-l border-[#E8E2D5]/90 shadow-2xl shadow-stone-900/20 rounded-l-2xl sm:rounded-l-[20px] flex flex-col transition-transform duration-300 ease-out ${
+          isDrawerOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        }`}
+        aria-label="Account Forensic Dossier"
+      >
+        {displayedMule && (
+          <>
+            {/* Sticky Compact Header */}
+            <div className="sticky top-0 z-20 px-5 py-4 border-b border-[#E8E2D5]/80 bg-[#FAF7F0]/95 backdrop-blur-md shadow-2xs shrink-0 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-white/90 border border-[#E8E2D5] flex items-center justify-center font-bold text-[#D96B27] font-mono text-sm shadow-2xs shrink-0">
+                    {displayedMule.bankCode}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-base font-mono text-[#2C2623] tracking-tight truncate">
+                        {displayedMule.account_id}
+                      </span>
+                      <button
+                        onClick={() => handleCopy(displayedMule.account_id)}
+                        title="Copy Account ID"
+                        className="text-[#9E968D] hover:text-[#D96B27] p-1 rounded-xs hover:bg-[#EAE4D8]/60 transition-colors cursor-pointer shrink-0"
+                      >
+                        {copiedAccount === displayedMule.account_id ? (
+                          <Check className="w-3.5 h-3.5 text-[#059669]" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-[#746D65] font-sans flex items-center gap-1.5 mt-0.5 truncate">
+                      <span className="truncate">{displayedMule.bankName}</span>
+                      <span className="text-[#B5ACA0]">•</span>
+                      <span className="font-mono text-[#D96B27] font-semibold shrink-0">{displayedMule.ifsc}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setExpandedAccount(null)}
+                  className="p-1.5 rounded-lg border border-[#E8E2D5] bg-white/80 hover:bg-white text-[#746D65] hover:text-[#2C2623] transition-all cursor-pointer shadow-2xs shrink-0"
+                  title="Close Dossier (ESC)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Badges & Action Buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#E8E2D5]/70">
+                <div className="flex items-center gap-1.5">
+                  {/* Role badge */}
+                  <span
+                    className={`px-2 py-0.5 rounded-xs font-mono font-bold text-[10px] tracking-wider inline-flex items-center gap-1.5 uppercase ${
+                      displayedMule.role === "L1_COLLECTOR"
+                        ? "bg-[#FFEDD5] text-[#EA580C] border border-[#FDBA74]"
+                        : displayedMule.role === "L2_DISTRIBUTOR"
+                        ? "bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A]"
+                        : "bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]"
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-xs bg-current"></span>
+                    {displayedMule.role.replace("_", " ")}
+                  </span>
+
+                  {/* Risk Score */}
+                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-xs border border-[#E8E2D5] bg-white/80 text-[#2C2623]">
+                    Risk:{" "}
+                    <span
+                      className={
+                        displayedMule.risk_index >= 90
+                          ? "text-[#DC2626]"
+                          : displayedMule.risk_index >= 80
+                          ? "text-[#D97706]"
+                          : "text-[#CA8A04]"
+                      }
+                    >
+                      {displayedMule.risk_index}
+                    </span>
+                    /100
+                  </span>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  {onSelectCase && (
+                    <button
+                      onClick={() => {
+                        onSelectCase(displayedMule.account_id);
+                        if (onNavigateTab) onNavigateTab("trail");
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border border-[#E8E2D5] bg-white hover:border-[#D96B27] text-xs font-mono font-bold text-[#2C2623] shadow-2xs transition-all cursor-pointer"
+                    >
+                      <Activity className="w-3.5 h-3.5 text-[#D96B27]" />
+                      <span>Trace Hop Flow</span>
+                    </button>
+                  )}
+                  {onNavigateTab && (
+                    <button
+                      onClick={() => onNavigateTab("notices")}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#D96B27] text-white hover:bg-[#C25B1D] text-xs font-mono font-bold shadow-2xs transition-all cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Section 91 Freeze</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable Forensic Dossier Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 font-sans text-xs">
+              {/* Financial Flow Section */}
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono flex items-center justify-between">
+                  <span>Financial Flow &amp; Liquidity</span>
+                  <span className="text-[9px] text-[#746D65] font-normal">INR Central Ledger</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Incoming */}
+                  <div className="bg-white/75 backdrop-blur-sm border border-[#E8E2D5]/80 rounded-sm p-2.5 shadow-2xs flex flex-col justify-between">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-[#746D65] block">
+                      Total Incoming
+                    </span>
+                    <div className="text-sm font-bold font-mono text-[#059669] my-1 flex items-center gap-0.5">
+                      <ArrowDownLeft className="w-3.5 h-3.5 text-[#059669] shrink-0" />
+                      <span className="truncate">₹{displayedMule.total_incoming_amt?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
+                    </div>
+                    <span className="text-[9px] text-[#746D65] block">Tainted Inflow</span>
+                  </div>
+
+                  {/* Outgoing */}
+                  <div className="bg-white/75 backdrop-blur-sm border border-[#E8E2D5]/80 rounded-sm p-2.5 shadow-2xs flex flex-col justify-between">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-[#746D65] block">
+                      Total Outgoing
+                    </span>
+                    <div className="text-sm font-bold font-mono text-[#746D65] my-1 flex items-center gap-0.5">
+                      <ArrowUpRight className="w-3.5 h-3.5 text-[#9E968D] shrink-0" />
+                      <span className="truncate">₹{displayedMule.total_outgoing_amt?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
+                    </div>
+                    <span className="text-[9px] text-[#746D65] block">Rapid Dissipation</span>
+                  </div>
+
+                  {/* Actionable Holding */}
+                  <div className="bg-white/75 backdrop-blur-sm border border-[#E8E2D5]/80 rounded-sm p-2.5 shadow-2xs flex flex-col justify-between">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-[#059669] block">
+                      Actionable Holding
+                    </span>
+                    <div className="text-sm font-bold font-mono text-[#059669] my-1 truncate">
+                      ₹{displayedMule.current_holding_balance?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    </div>
+                    {displayedMule.current_holding_balance > 50000 ? (
+                      <span className="inline-block text-[8px] font-mono font-bold text-[#059669] bg-[#D1FAE5] px-1 py-0.2 rounded-xs border border-[#A7F3D0] truncate">
+                        Target for Lien
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-[#746D65] block">Sec 91 Lien Base</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Forensic Parameters Breakdown (P1–P6) */}
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono flex items-center justify-between">
+                  <span>Forensic Parameters Breakdown (P1–P6)</span>
+                  <span className="text-[9px] text-[#D96B27] font-mono font-bold">Heuristic Engine</span>
+                </div>
+
+                <div className="space-y-2">
+                  {/* P1 Card */}
+                  <div className="bg-white/75 backdrop-blur-sm border border-[#E8E2D5]/80 rounded-sm p-3 shadow-2xs space-y-1.5">
+                    <div className="flex items-center justify-between font-mono text-xs">
+                      <span className="font-bold text-[#2C2623] flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-xs bg-[#D96B27]"></span>
+                        P1 Pass-Through Velocity (3–15m Drain)
+                      </span>
+                      <span className="font-bold text-[#D96B27] bg-[#FFEDD5]/70 px-1.5 py-0.5 rounded-xs border border-[#FDBA74]">
+                        {displayedMule.p1_score} / 30
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#746D65] font-sans leading-relaxed">
+                      90%+ of tainted inflow drained to downstream layers in under 15 minutes of intake.
+                    </p>
+                    <div className="pt-1 text-[11px] font-mono text-[#2C2623] flex items-center justify-between border-t border-[#E8E2D5]/40">
+                      <span className="text-[#746D65]">Total Forwarded:</span>
+                      <span className="font-bold">₹{displayedMule.total_outgoing_amt?.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+
+                  {/* P2/P3 Card */}
+                  <div className="bg-white/75 backdrop-blur-sm border border-[#E8E2D5]/80 rounded-sm p-3 shadow-2xs space-y-1.5">
+                    <div className="flex items-center justify-between font-mono text-xs">
+                      <span className="font-bold text-[#2C2623] flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-xs bg-[#D97706]"></span>
+                        P2 / P3 Topology Split (Smurfing Fan-Out)
+                      </span>
+                      <span className="font-bold text-[#D97706] bg-[#FEF3C7]/70 px-1.5 py-0.5 rounded-xs border border-[#FDE68A]">
+                        P2:{displayedMule.p2_score} | P3:{displayedMule.p3_score}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#746D65] font-sans leading-relaxed">
+                      Inflow fan-in: <strong className="text-[#2C2623]">{displayedMule.distinct_senders} senders</strong> • Outflow fan-out: <strong className="text-[#2C2623]">{displayedMule.distinct_receivers} receivers</strong>.
+                    </p>
+                    <div className="pt-1 text-[11px] font-mono text-[#2C2623] flex items-center justify-between border-t border-[#E8E2D5]/40">
+                      <span className="text-[#746D65]">Active Lien Balance:</span>
+                      <span className="font-bold text-[#059669]">₹{displayedMule.current_holding_balance?.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+
+                  {/* P4 Card */}
+                  <div className="bg-white/75 backdrop-blur-sm border border-[#E8E2D5]/80 rounded-sm p-3 shadow-2xs space-y-1.5">
+                    <div className="flex items-center justify-between font-mono text-xs">
+                      <span className="font-bold text-[#2C2623] flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-xs bg-[#DC2626]"></span>
+                        P4 Digital Footprint &amp; Proxy Anomalies
+                      </span>
+                      <span className="font-bold text-[#DC2626] bg-[#FEE2E2]/70 px-1.5 py-0.5 rounded-xs border border-[#FCA5A5]">
+                        {displayedMule.p4_score} / 25
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#746D65] font-sans leading-relaxed">
+                      Foreign IP address (185/194 CIDR block) and headless automated script signatures detected.
+                    </p>
+                    <div className="pt-1 text-[11px] font-mono text-[#DC2626] flex items-center justify-between border-t border-[#E8E2D5]/40">
+                      <span className="text-[#746D65]">Syndicate Risk Band:</span>
+                      <span className="font-bold">{displayedMule.risk_band || "HIGH_CONFIDENCE_MULE"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Forensic Detection Signals */}
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
+                  Active Forensic Detection Signals
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="px-2 py-1 rounded-xs bg-white/80 border border-[#E8E2D5] font-mono text-[10px] text-[#2C2623] font-medium shadow-2xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-xs bg-[#DC2626]"></span>
+                    High-velocity pass-through (&lt;15m)
+                  </span>
+                  <span className="px-2 py-1 rounded-xs bg-white/80 border border-[#E8E2D5] font-mono text-[10px] text-[#2C2623] font-medium shadow-2xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-xs bg-[#DC2626]"></span>
+                    Foreign IP (185/194 CIDR block)
+                  </span>
+                  <span className="px-2 py-1 rounded-xs bg-white/80 border border-[#E8E2D5] font-mono text-[10px] text-[#2C2623] font-medium shadow-2xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-xs bg-[#D97706]"></span>
+                    Automated script signature
+                  </span>
+                  <span className="px-2 py-1 rounded-xs bg-white/80 border border-[#E8E2D5] font-mono text-[10px] text-[#2C2623] font-medium shadow-2xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-xs bg-[#D97706]"></span>
+                    Fan-in / Fan-out smurfing anomaly
+                  </span>
+                  <span className="px-2 py-1 rounded-xs bg-white/80 border border-[#E8E2D5] font-mono text-[10px] text-[#2C2623] font-medium shadow-2xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-xs bg-[#746D65]"></span>
+                    Zero commercial trade rationale
+                  </span>
+                </div>
+              </div>
+
+              {/* Police Case Diary & Statutory Notice Card */}
+              <div className="bg-white/75 backdrop-blur-sm border border-[#E8E2D5]/80 rounded-sm p-3.5 space-y-1.5 shadow-2xs">
+                <div className="font-bold text-[#2C2623] font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-[#D96B27]" />
+                  <span>Forensic Summary for Police Case Diary</span>
+                </div>
+                <p className="text-[#746D65] italic leading-relaxed text-[11px] font-sans">
+                  "{displayedMule.forensic_reason}. The account demonstrates zero commercial rationale and satisfies
+                  all 6 forensic parameters for synthetic mule classification. Statutory notice under Section
+                  91 Cr.P.C. / Section 94 BNSS is recommended for immediate debit freeze."
+                </p>
+                <div className="pt-2 text-[10px] font-mono text-[#9E968D] flex items-center justify-between border-t border-[#E8E2D5]/50">
+                  <span>CHAIN-OF-CUSTODY: LOCKED</span>
+                  <span className="text-[#059669] font-bold">SEC. 63 BSA COMPLIANT</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
     </div>
   );
 }
