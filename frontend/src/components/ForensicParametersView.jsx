@@ -410,7 +410,7 @@ export default function ForensicParametersView({
               : "text-[#78716C] hover:text-[#1C1917]"
           }`}
         >
-          <Sliders className="w-3.5 h-3.5 text-[#D96B27]" />
+          <SlidersHorizontal className="w-3.5 h-3.5 text-[#D96B27]" />
           <span>[2] Custom Parameter Rules</span>
           <span className="text-[10px] bg-[#D96B27] text-white px-1.5 py-0.2 rounded font-mono">
             {formState.customRules?.length || 0}
