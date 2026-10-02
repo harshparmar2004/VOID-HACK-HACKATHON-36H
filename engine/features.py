@@ -52,6 +52,8 @@ NULLABLE = {
     "forward_lag_median_s": "no episode forwarded anything: not applicable",
     "split_count_median": "no episode forwarded anything: not applicable",
     "commission_ratio_median": "no episode forwarded anything: not applicable",
+    "commission_ratio_iqr": "fewer than 2 forwarding episodes: no spread to measure",
+    "forwarding_episodes": "no inflow at all (send-only): not applicable",
     "median_hold_hours": "account never forwards an inflow: not applicable (4.6, no imputed end-of-data ts)",
     # inflow-side features: account never receives
     "flagged_in_share": "account never receives: not applicable",

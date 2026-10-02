@@ -100,20 +100,36 @@ mule_index:
     - id: MP2
       name: Split and commission
       index: mule
-      features: [split_count_median, commission_ratio_median]
+      features: [split_count_median, commission_ratio_median, commission_ratio_iqr, forward_lag_median_s]
       rule:
-        type: compound
-        full:
+        type: commission_pattern
+        ratio_feature: commission_ratio_median
+        iqr_feature: commission_ratio_iqr
+        split_feature: split_count_median
+        lag_feature: forward_lag_median_s
+        # The "real pattern" condition, required for BOTH full and half. Lag
+        # windows are named, not repeated: they resolve to the `windows` block.
+        pattern:
           any_of:
-            - {feature: split_count_median, min: 3, max: 6}
-            - {single_forward: true}
-          and: {feature: commission_ratio_median, min: 0.94, max: 0.99}
-        half:
-          {feature: commission_ratio_median, min: 0.90, max: 0.99}
-      rule_text: "full: split 3-6 or single forward AND ratio 0.94-0.99; half: ratio 0.90-0.99"
+            - {name: split, receivers: {min: 3, max: 6}, lag_window: split_forward_minutes}
+            - {name: single, receivers: {min: 1, max: 1}, lag_window: single_forward_max_minutes}
+        full: {ratio: {min: 0.94, max: 0.99}, iqr_max: 0.02}
+        half: {ratio: {min: 0.90, max: 0.99}, iqr_max: 0.05}
+        # An account with fewer than 2 forwarding episodes has no IQR: it is
+        # judged on the ratio band and the pattern condition only.
+        null_iqr_passes: true
+      rule_text: >-
+        full: ratio 0.94-0.99 AND IQR <= 0.02 AND (3-6 receivers with lag 3-15 min
+        OR 1 receiver with lag <= 60 min); half: ratio 0.90-0.99 AND IQR <= 0.05
+        AND the same pattern
       weight: 15
       enabled: true
-      notes: "Injected L1 splits are 3-6 ways; file-wide 2-way splits are background."
+      notes: >
+        Section 4.6 (decided 2 Oct): the ratio alone is not a signal -- 2,252 of
+        23,500 normal accounts sit in 0.90-0.99 by chance. Mules take a FIXED
+        cut (L1 0.98, L2 0.96), so the spread across forwarding episodes is ~0.
+        Episode ratios are capped at 1.0 and a capped episode is never in band.
+        Injected L1 splits are 3-6 ways; file-wide 2-way splits are background.
 
     - id: MP3
       name: Layering-edge flags
@@ -419,6 +435,22 @@ final:
         - {single_forward: true, commission_ratio: {min: 0.94, max: 0.99}}
     sets_column: override_applied
 
+  # Pass 2 only. A receive-only sink can never earn MP1 / MP2 / MP5 (it never
+  # forwards), so its Mule Index tops out at 55 and the threshold of 65 is out
+  # of reach on points alone. This floor is the sink's counterpart of the
+  # pass-through override: it needs PROVEN layer links, never a hop number or a
+  # default score (guardrail 11), and the two-signal rule still applies.
+  # Set enabled: false to score sinks on points only (they then stay unflagged).
+  sink_override:
+    enabled: true
+    floor: 70
+    link_types: [L2_L3]
+    min_linked_inflow_share: 0.90
+    rule_text: >
+      receive-only account with >= 90% of its incoming money arriving through
+      proven L2 -> L3 layer links from flagged accounts -> final_index >= 70
+    sets_column: override_applied
+
   flag:
     threshold: 65
     two_signal_rule:
@@ -506,6 +538,36 @@ roles:
         is only considered for accounts that were NOT flagged. Reported
         separately so either reading of the organisers' "1,500 mules" count
         works.
+
+# ---------------------------------------------------------------------------
+# Victim trace (Section 4.4). engine/trace.py hard-codes none of these.
+# ---------------------------------------------------------------------------
+trace:
+  max_hops: 4
+  # Where an account has NO layer link, follow its outflows that leave within
+  # this window after tainted money arrived (a key of the `windows` block;
+  # Section 4.4: "trace window starts at 60 min").
+  fallback_window: single_forward_max_minutes
+  # Fallback only: follow receivers ranked by final_index until this share of
+  # the tainted amount is covered.
+  coverage_target: 0.90
+  # Safety cap for a very connected account: stop expanding, mark truncated.
+  max_accounts: 500
+
+# ---------------------------------------------------------------------------
+# Rings (Section 4.4b): connected components of layer_links. Pattern cut-offs
+# live here so engine/rings.py hard-codes none.
+# ---------------------------------------------------------------------------
+rings:
+  method: connected_components
+  patterns:
+    # SCATTER_GATHER: one account's forwards reconverge on the same account
+    # through at least this many DIFFERENT intermediaries.
+    scatter_gather_min_branches: 2
+    # FUNNEL: an account fed through layer links by at least this many
+    # different MULE senders (victim payments are L1 fan-in, not a funnel).
+    funnel_min_mule_senders: 3
+    # CYCLE needs no cut-off: any directed cycle among the ring's links.
 
 # ---------------------------------------------------------------------------
 # Reliability gates (Section 10). A gated parameter is scored ONLY if the

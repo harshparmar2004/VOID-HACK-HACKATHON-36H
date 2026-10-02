@@ -151,7 +151,7 @@ Each scores 0 → weight (full at "full", half at "half", linear between, 0 belo
 | ID | Parameter | Feature(s) | Full | Half | Weight |
 |---|---|---|---|---|---|
 | MP1 | Pass-through velocity | `pass_through_share` (3–15 min for split forwards, ≤ 60 min for single forwards; one-to-one allocation) | ≥ 0.90 | ≥ 0.60 | 20 |
-| MP2 | Split + commission | `split_count_median`, `commission_ratio_median` | split 3–6 or single forward AND ratio 0.94–0.99 | ratio 0.90–0.99 | 15 |
+| MP2 | Split + commission (structural) | `split_count_median`, `commission_ratio_median`, `commission_ratio_iqr`, `forward_lag_median_s` | ratio 0.94–0.99 AND consistent cut (IQR ≤ 0.02 across forwarding episodes) AND a real pattern: 3–6 distinct receivers with lag 3–15 min, or 1 receiver with lag ≤ 60 min | ratio 0.90–0.99 AND IQR ≤ 0.05 AND the same pattern condition | 15 |
 | MP3 | Layering-edge flags (ONE signal) | `flagged_out_share` (receive-only accounts: `flagged_in_share`) | ≥ 0.50 | ≥ 0.20 | 15 |
 | MP4 | Low lifetime activity | `tx_count` vs population median | ≤ 0.30× | ≤ 0.50× | 15 |
 | MP5 | Victim-sourced inflow | `victim_inflow_share` | ≥ 0.80 | ≥ 0.40 | 10 |
@@ -254,6 +254,14 @@ Display example: `Final 84 (Mule 90, Trust 14) · Role L2 confirmed (L1 31, L2 8
   **MP6 = full points if send-only or receive-only, else 0** (no reciprocity component).
 - `features.py` takes an optional `--db` path (default data\case.duckdb) so reviewers can run it on a copy.
 - Zero-weight extras still to add: `burst_fan_in`, `ip_churn`; `in_cycle` stays NULL until the graph step.
+- **MP2 needs structure, not the ratio alone (decided 2 Oct):** after the episode rule, normal accounts'
+  median commission is 0.82 and 2,252 of 23,500 sit in the 0.90–0.99 band by chance (dense random activity).
+  New feature `commission_ratio_iqr` = spread (IQR) of out/in across the account's forwarding episodes
+  (episodes with ≥ 1 outflow in the window), NULL if fewer than 2 such episodes (single-episode accounts use
+  the pattern condition only). Mules take a FIXED cut (L1 0.98, L2 0.96 every time) → IQR ≈ 0; normal accounts
+  vary widely. MP2 scores only with the ratio band + consistency + pattern condition in Section 4.1.
+  Also store `forwarding_episodes` (count) for explanations. Episode ratios are capped at 1.0 (binding for
+  7,317 accounts); capped episodes (ratio exactly 1.0) never fall in the MP2 band.
 - **More closed gates on this dataset:** normal accounts' median `recurring_sender_share` = 0 and median
   `median_hold_hours` = 0.5 h, so **T6 (recurring inflows) and T3 (balance retention) carry no signal here**.
   Gate rule: T3 informative only if the normal-population median hold ≥ 6 h; T6 only if the normal median

@@ -122,6 +122,15 @@ flow AS (
         sum(ep_fwd_amt)        AS fwd_amt_total,
         median(ep_split_count) AS split_count_median,
         median(ep_ratio)       AS commission_ratio_median,
+        -- Spread of out/in across the account's forwarding episodes (4.6): a
+        -- mule takes a FIXED cut, so its IQR is ~0; a normal account that lands
+        -- in the commission band by chance varies widely. NULL below 2
+        -- forwarding episodes -- one episode has no spread to measure.
+        CASE WHEN count(*) >= 2
+             THEN quantile_cont(ep_ratio, 0.75) - quantile_cont(ep_ratio, 0.25)
+        END                    AS commission_ratio_iqr,
+        -- Episodes with >= 1 outflow in the window (ep_flow is an inner join).
+        count(*)               AS forwarding_episodes,
         median(lag_med_s)      AS forward_lag_median_s
     FROM ep_flow
     GROUP BY acct
@@ -293,6 +302,12 @@ SELECT
     f.forward_lag_median_s,
     f.split_count_median,
     f.commission_ratio_median,
+    f.commission_ratio_iqr,
+    -- A count, so 0 (not NULL) when inflows exist but none was forwarded; NULL
+    -- only when there is no inflow at all, like pass_through_share above.
+    CASE WHEN coalesce(b.in_amt_total, 0) = 0 THEN NULL
+         ELSE coalesce(f.forwarding_episodes, 0)
+    END                                            AS forwarding_episodes,
 
     -- (c) flags and amounts ------------------------------------------------
     CASE WHEN b.n_out > 0
