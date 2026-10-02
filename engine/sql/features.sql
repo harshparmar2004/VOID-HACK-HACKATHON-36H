@@ -2,8 +2,9 @@
 -- Per-account raw measurements (PROJECT_CONTEXT.md Section 9 table 5,
 -- definitions fixed per Section 4.6).
 --
--- One row per acct_id, built from tx, accounts and the temp table alloc_pair
--- that engine/sql/features_alloc.sql fills. No ground-truth file, no
+-- One row per acct_id, built from tx, accounts and the episode temp tables
+-- (ep_inflow, ep_window, ep_out) that engine/sql/features_episode.sql fills.
+-- No ground-truth file, no
 -- account-number ranges, no device-count fingerprints (Section 3b LEAKAGE).
 -- Joins use tx_key, never tx_id (guardrail 10).
 --
@@ -78,64 +79,72 @@ base AS (
 ),
 
 -- ------------------------------------------------------------------ (b) flow
--- alloc_pair is the allocation from features_alloc.sql: at most one inflow per
--- outflow, and per inflow the allocated outflows never exceed the inflow.
+-- Built from the EPISODE tables that engine/sql/features_episode.sql fills
+-- (Section 4.6). An outflow belongs to an episode AS A WHOLE, never to one
+-- inflow, so nothing has to be paired and nothing is dropped when a mule
+-- forwards its inflows out of order.
 --
--- The window rule is applied AFTER allocation, because whether a forward is a
--- split or a single forward is only known once an inflow's outflows are
--- grouped. Classification counts allocated OUTFLOWS (a split is one inflow
--- fanned into several transfers); split_count_median then reports DISTINCT
--- RECEIVERS per Section 4.6.
-alloc_grp AS (
-    SELECT in_key, count(*) AS n_alloc FROM alloc_pair GROUP BY in_key
+-- There is deliberately NO window filter here. Every lag in ep_out is already
+-- inside the forwarding window by construction (see features_episode.sql), and
+-- the filter this replaces -- "a multi-outflow inflow only counts if its lag is
+-- inside the 3-15 min SPLIT window" -- is exactly what used to drop the
+-- out-of-order forwards that 4.6 was written to keep. Whether an episode reads
+-- as a split or a single forward is a SCORING question: scoring.py applies the
+-- profile's split/single windows to split_count_median and
+-- forward_lag_median_s. The features table only measures.
+ep_fwd AS (
+    SELECT acct, ep,
+           sum(out_amt)            AS out_total,
+           count(DISTINCT to_acct) AS n_receivers,
+           median(lag_s)           AS lag_med_s
+    FROM ep_out
+    GROUP BY acct, ep
 ),
-valid AS (
-    SELECT a.*
-    FROM alloc_pair a
-    JOIN alloc_grp g ON g.in_key = a.in_key
-    WHERE (g.n_alloc >= 2 AND a.lag_s BETWEEN $split_min_s AND $split_max_s)
-       OR (g.n_alloc  = 1 AND a.lag_s BETWEEN 0 AND $single_max_s)
-),
-inflow_valid AS (
+ep_flow AS (
     SELECT
-        acct,
-        in_key,
-        any_value(in_amt)         AS in_amt,
-        count(DISTINCT to_acct)   AS split_count,   -- distinct receivers (4.6)
-        sum(out_amt)              AS fwd_amt,
-        median(lag_s)             AS lag_med_s
-    FROM valid
-    GROUP BY acct, in_key
+        w.acct,
+        -- out / in per EPISODE, never above 1.0 (Section 4.6, guardrail 16).
+        -- An episode may legitimately send out more than arrived in it (prior
+        -- balance); the cap is what keeps a commission ratio interpretable.
+        least(1.0, f.out_total::DOUBLE / nullif(w.in_total, 0)) AS ep_ratio,
+        least(w.in_total, f.out_total)                          AS ep_fwd_amt,
+        -- Distinct receivers per episode / inflows in it, rounded (4.6). With
+        -- one inflow in the episode this is just that inflow's receiver count,
+        -- which is the "or per inflow" case in the rule.
+        round(f.n_receivers::DOUBLE / w.n_inflows)              AS ep_split_count,
+        f.lag_med_s
+    FROM ep_window w
+    JOIN ep_fwd f ON f.acct = w.acct AND f.ep = w.ep
 ),
 flow AS (
     SELECT
         acct,
-        sum(fwd_amt)                       AS fwd_amt_total,
-        median(split_count)                AS split_count_median,
-        median(fwd_amt::DOUBLE / in_amt)   AS commission_ratio_median,
-        median(lag_med_s)                  AS forward_lag_median_s
-    FROM inflow_valid
+        sum(ep_fwd_amt)        AS fwd_amt_total,
+        median(ep_split_count) AS split_count_median,
+        median(ep_ratio)       AS commission_ratio_median,
+        median(lag_med_s)      AS forward_lag_median_s
+    FROM ep_flow
     GROUP BY acct
 ),
 
 -- ------------------------------------------------------ (c) flags & amounts
--- Hold time uses alloc_pair (money that actually left), not `valid`: an inflow
--- forwarded outside the pass-through window was still not retained. An inflow
--- that was never forwarded contributes NOTHING -- no end-of-data timestamp is
--- imputed (Section 4.6), so an account that never forwards gets NULL and a
--- receive-only sink can never earn balance-retention trust.
-forwarded_inflow AS (
-    SELECT in_key,
-           any_value(acct)  AS acct,
-           any_value(in_ts) AS in_ts,
-           min(out_ts)      AS first_out_ts
-    FROM alloc_pair
-    GROUP BY in_key
+-- Hold time: per INFLOW (the money that arrived), the wait until the first
+-- outflow at or after it INSIDE ITS EPISODE. Taken from the episode rather than
+-- from a pairing, so an out-of-order forward still stops the clock. An inflow
+-- with no outflow after it in its episode contributes NOTHING -- no end-of-data
+-- timestamp is imputed (Section 4.6) -- so an account that never forwards gets
+-- NULL and a receive-only sink can never earn balance-retention trust.
+inflow_hold AS (
+    SELECT i.acct, i.in_key,
+           (min(o.out_ts) - i.in_ts) / 3600.0 AS hold_hours
+    FROM ep_inflow i
+    JOIN ep_out o
+      ON o.acct = i.acct AND o.ep = i.ep AND o.out_ts >= i.in_ts
+    GROUP BY i.acct, i.in_key, i.in_ts
 ),
 hold AS (
-    SELECT acct,
-           median((first_out_ts - in_ts) / 3600.0) AS median_hold_hours
-    FROM forwarded_inflow
+    SELECT acct, median(hold_hours) AS median_hold_hours
+    FROM inflow_hold
     GROUP BY acct
 ),
 -- Reciprocity: share of counterparties that both sent to and received from

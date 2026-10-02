@@ -68,9 +68,11 @@ feature_rules:
   odd_hour_to: 5
   # structuring_share: "round amount" unit, 1,000 rupees expressed in paise.
   round_unit_paise: 100000
-  # Allocation safety valve: maximum re-offer rounds before the build fails
-  # rather than silently leaving outflows unallocated (see features.py).
-  max_alloc_rounds: 25
+  # NOTE: the EPISODE window is windows.single_forward_max_minutes -- inflows
+  # whose forwarding windows overlap form one episode (Section 4.6), so the
+  # episode rule needs no cut-off of its own. The old `max_alloc_rounds` key
+  # was removed with the one-to-one allocation it guarded: that rule had
+  # re-offer rounds, the episode rule has none.
 
 # ---------------------------------------------------------------------------
 # Mule Index -- MP1..MP8 (Section 4.1). Weights sum to 100.
@@ -88,9 +90,12 @@ mule_index:
       enabled: true
       windows: {split_forward_minutes: {min: 3, max: 15}, single_forward_max_minutes: 60}
       notes: >
-        One-to-one allocation of each inflow to the outflows that follow it;
-        overlapping outflows must not be double-counted and the share stays
-        within 0-100% (guardrail 16).
+        Measured by the EPISODE rule (Section 4.6), not by pairing: inflows
+        whose forwarding windows overlap form one episode, and every outflow in
+        the episode window counts against the episode's inflow TOTAL. Mules
+        forward out of order, so any one-to-one pairing drops real forwards.
+        Episodes are disjoint, so no outflow is counted twice, and the ratio is
+        capped per episode, so the share stays within 0-100% (guardrail 16).
 
     - id: MP2
       name: Split and commission
@@ -293,11 +298,15 @@ trust_index:
       features: [days_active]
       rule: {type: threshold_asc, feature: days_active, full_at: 12, half_at: null}
       rule_text: "days_active >= 12 -> full"
-      weight: 35
+      weight: 44
       enabled: true
       notes: >
-        Section 4.6: +10 from T2, whose 20 points were redistributed when the
-        reciprocity gate closed (T1 25 -> 35, T5 15 -> 25).
+        Section 4.6, two redistributions. T2's reciprocity gate closed first
+        (T1 25 -> 35, T5 15 -> 25). Then the T3 and T6 gates closed and their
+        20 points moved to T1 / T4 / T5 in PROPORTION to the weights those
+        three already held (35 : 15 : 25 of 75) = +9.33 / +4.00 / +6.67,
+        rounded by largest remainder to +9 / +4 / +7. So T1 35 -> 44,
+        T4 15 -> 19, T5 25 -> 32, and T1+T4+T5+T7 = 95 + 5 = 100.
 
     - id: T2
       name: Two-way relationships
@@ -320,8 +329,17 @@ trust_index:
       features: [median_hold_hours]
       rule: {type: threshold_asc, feature: median_hold_hours, full_at: 24, half_at: null}
       rule_text: "median_hold_hours >= 24 -> full"
-      weight: 15
-      enabled: true
+      weight: 0
+      enabled: false
+      gate: gate_balance_retention
+      disabled_reason: >
+        Gate gate_balance_retention is closed: the normal-population median
+        median_hold_hours is 0.52 h (p90 0.68 h, max 1.05 h) because the
+        generator gives every account a steady drip of inflows and outflows.
+        No account on this file reaches 24 h, so T3 can never fire, and a
+        lower threshold would reward the QUIETEST account rather than the most
+        organic one. Its 15 points move to T1 / T4 / T5 in proportion
+        (Section 4.6).
 
     - id: T4
       name: Organic amounts
@@ -335,8 +353,10 @@ trust_index:
             - {feature: amount_vs_population, max: 2}
         half: null
       rule_text: "amount_diversity >= 0.90 AND amount_vs_population <= 2x -> full"
-      weight: 15
+      weight: 19
       enabled: true
+      notes: "Section 4.6: +4, its proportional share of the closed T3 and T6 weight."
+
 
     - id: T5
       name: Clean neighbourhood
@@ -344,9 +364,11 @@ trust_index:
       features: [neighbour_risk]
       rule: {type: threshold_asc, feature: neighbour_risk, transform: "100 - neighbour_risk", full_at: 80, half_at: null}
       rule_text: "100 - neighbour_risk >= 80 -> full"
-      weight: 25
+      weight: 32
       enabled: true
-      notes: "Section 4.6: +10 from T2 when the reciprocity gate closed."
+      notes: >
+        Section 4.6: +10 from T2 when the reciprocity gate closed, then +7 as
+        its proportional share of the closed T3 and T6 weight.
 
     - id: T6
       name: Recurring inflows
@@ -354,8 +376,15 @@ trust_index:
       features: [recurring_sender_share]
       rule: {type: threshold_asc, feature: recurring_sender_share, full_at: 0.30, half_at: null}
       rule_text: "recurring_sender_share >= 0.30 -> full"
-      weight: 5
-      enabled: true
+      weight: 0
+      enabled: false
+      gate: gate_recurring_inflows
+      disabled_reason: >
+        Gate gate_recurring_inflows is closed: the normal-population median
+        recurring_sender_share is 0.0 (max 0.0411) because counterparties are
+        drawn at random and a sender almost never returns on 3 different days.
+        No account reaches 0.30, so T6 can never fire. Its 5 points move to
+        T1 / T4 / T5 in proportion (Section 4.6).
 
     - id: T7
       name: Device / network consistency
@@ -483,7 +512,7 @@ roles:
 # loaded dataset shows the field is informative. Gate thresholds live here;
 # measured values are recomputed per dataset by the Data Audit module into
 # table audit_results. The measurements below were taken on the dataset named
-# in verified_on_dataset_sha256 -- all four gates are CLOSED.
+# in verified_on_dataset_sha256 -- all SEVEN gates are CLOSED.
 # ---------------------------------------------------------------------------
 reliability_gates:
   - id: gate_rail_mismatch
@@ -541,6 +570,43 @@ reliability_gates:
     measured_extra: {distinct_ips: 1875319, ips_with_multiple_senders: 119387, share_ips_reused: 0.0637}
     status: closed
     reason: "At most 5 distinct senders per IP and a unique IP per headless transaction, so no shared-infrastructure cluster exists."
+
+  - id: gate_balance_retention
+    gates: [T3]
+    test: normal_population_median_hold_hours
+    description: >
+      median `median_hold_hours` across normal accounts -- those that both send
+      and receive and sit outside the one-way chain cohorts (group A, group B,
+      send-only, receive-only), all 23,500 of them
+    opens_when: {operator: ">=", threshold: 6}
+    measured: 0.518194
+    measured_extra: {p90: 0.683333, max: 1.048472, accounts_at_or_above_24h: 0}
+    status: closed
+    reason: >
+      Normal accounts hold an inflow for 31 minutes at the median and never
+      longer than 1.05 h, because the generator gives every account a steady
+      drip in both directions. T3 ("median_hold_hours >= 24") can never fire on
+      this file, and a lower threshold would reward the QUIETEST accounts
+      rather than the most organic. T3 goes to weight 0 and its 15 points move
+      to T1 / T4 / T5 in proportion.
+
+  - id: gate_recurring_inflows
+    gates: [T6]
+    test: normal_population_median_recurring_sender_share
+    description: >
+      median `recurring_sender_share` across the same 23,500 normal accounts;
+      a sender counts as recurring once it has sent on at least
+      feature_rules.recurring_min_days DISTINCT DAYS
+    opens_when: {operator: ">=", threshold: 0.05}
+    measured: 0.0
+    measured_extra: {p90: 0.0, max: 0.041096, accounts_at_or_above_0_30: 0}
+    status: closed
+    reason: >
+      Counterparties are drawn at random, so a sender almost never returns to
+      the same account on 3 different days: the median is 0.0 and the maximum
+      across all 23,500 normal accounts is 0.0411. T6
+      ("recurring_sender_share >= 0.30") can never fire. T6 goes to weight 0
+      and its 5 points move to T1 / T4 / T5 in proportion.
 
 # ---------------------------------------------------------------------------
 # Profile validation (Section 10). seed_profile.py enforces these.

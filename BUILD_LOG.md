@@ -22,3 +22,22 @@ Append-only log of build steps. Spec lives in PROJECT_CONTEXT.md — never edite
 - Re-seeded the **locked** `v1-verified` in place as instructed; the context's own rule says a change should mint a new `profile_id`.
 - `in_cycle` NULL (TODO graph.py). `pass_through_share` now NULL (was 0.0) for send-only, per 4.6.
 - Unreachable on this dataset: **T6** (max `recurring_sender_share` 0.0411, 0 accounts ≥ 0.30) and `amount_diversity`'s T4 clause (min 0.9655, all 24,873 pass). **T7** = 1 only for the 300 send-only accounts.
+
+## 2026-10-02 — Step 3 features: episode rule, order audit, T3/T6 gates (Section 4.6)
+
+**Files** — new `engine\sql\features_episode.sql` (replaces the deleted `features_alloc.sql`); edited `engine\sql\features.sql` (sections (b) flow and the hold CTE), `engine\features.py`, `engine\config.yaml`. `features` unchanged at 30 columns / 24,873 rows.
+
+**Episode rule** — nothing is paired any more. Inflows whose forwarding windows (`windows.single_forward_max_minutes`, 3600 s) overlap form one **episode**; every outflow in the episode window counts against the episode's inflow TOTAL. Key names: temp tables `ep_inflow` / `ep_window` / `ep_out`; CTEs `ep_fwd` / `ep_flow` / `flow` / `inflow_hold`; `features.py: build_episodes` (replaces `allocate`). Built with one gaps-and-islands pass plus one ASOF join — **no Python loop at all** (the round loop is gone). `@@AUDIT` aborts on an outflow in two episodes, a lag outside the window, an inflow not in exactly one episode, or overlapping episodes: all four zero.
+Removed the `valid` window filter in `features.sql` — that filter (split lag must be 3–15 min) was precisely what dropped out-of-order forwards. Split vs single is now a scoring question, as 4.6 intends.
+
+**tx_key order** — audited every `ORDER BY` / window / `row_number` in `engine\` and `audits\`. Only one tie-break survives in the pipeline: `out_gaps ... ORDER BY ts_sec, tx_key` in `features.sql`. Proved harmless two ways: reversing the tie-break changes **0 of 24,020** `timing_regularity` values, and rebuilding all 30 columns from a randomly shuffled copy of `tx` differs only in `timing_regularity`, 27 accounts, max **3.3e-16** (float64 accumulation order in `stddev_samp`, not row order; ZP4 is weight 0 anyway). `ingest.py` uses tx_key only to define itself and to order the `rejects` listing. Note `audits\victim_chains.py:954` tie-breaks a *displayed* demo path on `out_tx_key` — read-only, not in the pipeline, left alone.
+
+**Gates** — added `gate_balance_retention` (T3, `normal_population_median_hold_hours`, opens ≥ 6 h, **measured 0.5182**, p90 0.6833, max 1.0485, 0 accounts ≥ 24 h) and `gate_recurring_inflows` (T6, opens ≥ 0.05, **measured 0.0**, max 0.0411, 0 accounts ≥ 0.30), both measured on the 23,500 structurally-normal accounts, both **closed**. T3 and T6 → weight 0 / `enabled: false`. Their 20 points moved to T1/T4/T5 in proportion to 35:15:25 (+9.33/+4.00/+6.67, largest remainder → **+9/+4/+7**): T1 44, T4 19, T5 32, T7 5 = 100. 7 gates, all closed. Dropped the now-dead `feature_rules.max_alloc_rounds`.
+
+**Results** — `features.py` **3.53 s** (episodes 0.69 s, SQL 2.43 s); 2,000,000 inflows → 1,580,425 episodes (median 1 inflow, max 10), **421,594** outflows inside an episode window (was 216,301 allocated). `check_features.py`: **14 passed, 0 failed**. Group-B accounts with `pass_through_share` < 0.9: **0 of 559** (was 2). Both former failures now clean: `IPOS10000921` 0.9600 / 0.9600, `SBIN10001076` 0.9600 / 0.9600. Group A 0.98 commission (min=max), 4 receivers, 9.0 min lag; group B 0.96 (min=max), 1, 16.8 min. Max `commission_ratio_median` **1.0**.
+
+**Not done / deviations**
+- **Flag for scoring:** the 1.0 cap now binds for **7,317** accounts, and the normal cohort's median commission is 0.8245 with **2,252 of 23,500** inside MP2's half band 0.90–0.99 (1,237 inside the full band 0.94–0.99). MP2 half feeds the two-signal rule, so MP2 needs a structural co-condition (e.g. require the episode to be a real split or a lone single forward) before scoring.py lands. MP1 is unaffected: 0 normal accounts reach 0.60 pass-through.
+- 165,634 episodes send more than arrived (prior balance) — legitimate, ratio capped at 1.0, reported not failed.
+- Re-seeded the **locked** `v1-verified` in place again; the context's own rule says a weight change should mint a new `profile_id`.
+- `measure_before_burst: true` still unapplied. `in_cycle` NULL (TODO graph.py). `amount_diversity`'s T4 clause still passes all 24,873 accounts.

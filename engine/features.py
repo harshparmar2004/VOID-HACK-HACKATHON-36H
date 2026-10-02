@@ -5,12 +5,12 @@ Builds the `features` table: one row per account, every column a RAW
 measurement. No weight, threshold or score is applied here -- scoring.py reads
 these columns and the active profile to produce mule/trust/final/role scores.
 
-    tx + accounts  ->  alloc_pair (temp)  ->  features   (CREATE OR REPLACE)
+    tx + accounts  ->  episode temp tables  ->  features  (CREATE OR REPLACE)
 
 Rules this script obeys (PROJECT_CONTEXT.md Sections 7, 8 and 4.6):
-  * All data work is DuckDB SQL. No Python loop touches a transaction row: the
-    allocation is applied set-based in rounds, and the only Python loop is over
-    those rounds (a handful).
+  * All data work is DuckDB SQL. No Python loop runs at all: the episode rule
+    (Section 4.6) is three set-based passes, so the round loop the old
+    one-to-one allocation needed is gone.
   * Windows, cash-out categories AND every measurement cut-off come from the
     ACTIVE scoring profile -- nothing hard-coded (Section 8 rule 5, 4.6).
   * NULL means NOT APPLICABLE, never 0 (Section 4.6).
@@ -40,7 +40,7 @@ ROOT = ENGINE_DIR.parent
 
 DEFAULT_DB = ROOT / "data" / "case.duckdb"
 SQL_PATH = ENGINE_DIR / "sql" / "features.sql"
-ALLOC_SQL_PATH = ENGINE_DIR / "sql" / "features_alloc.sql"
+EPISODE_SQL_PATH = ENGINE_DIR / "sql" / "features_episode.sql"
 
 MEMORY_LIMIT = "3GB"
 
@@ -49,9 +49,9 @@ MEMORY_LIMIT = "3GB"
 NULLABLE = {
     # flow features: no inflow at all, or no inflow ever forwarded
     "pass_through_share": "no inflow at all (send-only): not applicable",
-    "forward_lag_median_s": "no window-valid forward: not applicable",
-    "split_count_median": "no window-valid forward: not applicable",
-    "commission_ratio_median": "no window-valid forward: not applicable",
+    "forward_lag_median_s": "no episode forwarded anything: not applicable",
+    "split_count_median": "no episode forwarded anything: not applicable",
+    "commission_ratio_median": "no episode forwarded anything: not applicable",
     "median_hold_hours": "account never forwards an inflow: not applicable (4.6, no imputed end-of-data ts)",
     # inflow-side features: account never receives
     "flagged_in_share": "account never receives: not applicable",
@@ -108,6 +108,9 @@ def sql_params(profile: dict) -> dict[str, str]:
 
     needed = ("victim_like_max_outflows", "recurring_min_days",
               "odd_hour_from", "odd_hour_to", "round_unit_paise")
+    # max_alloc_rounds is deliberately NOT required: the episode rule (4.6)
+    # has no re-offer rounds, so a profile carrying that key is stale, not
+    # richer.
     missing = [k for k in needed if k not in fr]
     if missing:
         raise SystemExit(f"profile feature_rules is missing: {missing}")
@@ -133,45 +136,44 @@ def sql_params(profile: dict) -> dict[str, str]:
 
 
 def split_sections(text: str) -> dict[str, str]:
-    """Split features_alloc.sql on its '-- @@SECTION' markers."""
+    """Split features_episode.sql on its '-- @@SECTION' markers."""
     parts = re.split(r"(?m)^--\s*@@(\w+)\s*$", text)
     return {parts[i].upper(): parts[i + 1] for i in range(1, len(parts), 2)}
 
 
-def allocate(con: duckdb.DuckDBPyConnection, params: dict[str, str],
-             max_rounds: int) -> tuple[int, int, int]:
-    """Run the re-offer allocation rounds. Returns (rounds, pairs, candidates)."""
+def build_episodes(con: duckdb.DuckDBPyConnection,
+                   params: dict[str, str]) -> tuple[int, int, int, int]:
+    """Build the episode temp tables (Section 4.6) and audit the invariants.
+
+    Returns (episodes, inflows, outflows_in_an_episode, episodes_out_over_in).
+    """
     sections = split_sections(
-        Template(ALLOC_SQL_PATH.read_text(encoding="utf-8")).substitute(params))
-    for name in ("INIT", "ROUND", "SETTLE", "AUDIT"):
+        Template(EPISODE_SQL_PATH.read_text(encoding="utf-8")).substitute(params))
+    for name in ("BUILD", "AUDIT"):
         if name not in sections:
-            raise SystemExit(f"{ALLOC_SQL_PATH.name} is missing section @@{name}")
+            raise SystemExit(f"{EPISODE_SQL_PATH.name} is missing section @@{name}")
 
-    con.execute(sections["INIT"])
-    n_cand = con.execute("SELECT count(*) FROM cand").fetchone()[0]
+    con.execute(sections["BUILD"])
 
-    total = rounds = 0
-    for rounds in range(1, max_rounds + 1):
-        con.execute(sections["ROUND"])
-        con.execute(sections["SETTLE"])
-        n = con.execute("SELECT count(*) FROM alloc_pair").fetchone()[0]
-        gained, total = n - total, n
-        print(f"    round {rounds:>2}: +{gained:,} allocated  (total {total:,})")
-        if gained == 0:
-            break
-    else:
+    n_ep, n_in, n_out = con.execute(
+        "SELECT (SELECT count(*) FROM ep_window),"
+        "       (SELECT count(*) FROM ep_inflow),"
+        "       (SELECT count(*) FROM ep_out)").fetchone()
+
+    twice, bad_lag, uncovered, overlap, out_over_in = con.execute(
+        sections["AUDIT"]).fetchone()
+    print(f"    audit     : outflow in 2 episodes={twice}, lag outside window="
+          f"{bad_lag}, inflows not in exactly 1 episode={uncovered}, "
+          f"overlapping episodes={overlap}")
+    # out_over_in is NOT a failure: an account can send more inside a window
+    # than arrived in it, which is why 4.6 caps the per-episode ratio at 1.0.
+    if twice or bad_lag or uncovered or overlap:
         raise SystemExit(
-            f"allocation did not converge in {max_rounds} rounds -- raise "
-            f"feature_rules.max_alloc_rounds or investigate")
-
-    twice, overdrawn, placeable = con.execute(sections["AUDIT"]).fetchone()
-    print(f"    audit     : allocated twice={twice}, inflows overdrawn={overdrawn}, "
-          f"still placeable={placeable}")
-    if twice or overdrawn or placeable:
-        raise SystemExit(
-            "allocation invariants violated: "
-            f"allocated_twice={twice} overdrawn={overdrawn} still_placeable={placeable}")
-    return rounds, total, n_cand
+            "episode invariants violated: "
+            f"outflows_in_two_episodes={twice} lags_outside_window={bad_lag} "
+            f"inflows_not_in_exactly_one_episode={uncovered} "
+            f"overlapping_episodes={overlap}")
+    return n_ep, n_in, n_out, out_over_in
 
 
 def main() -> None:
@@ -183,7 +185,7 @@ def main() -> None:
 
     t0 = time.perf_counter()
 
-    for p in (SQL_PATH, ALLOC_SQL_PATH):
+    for p in (SQL_PATH, EPISODE_SQL_PATH):
         if not p.is_file():
             raise SystemExit(f"SQL not found: {p}")
     if not args.db.is_file():
@@ -201,7 +203,6 @@ def main() -> None:
 
         profile_id, profile = active_profile(con)
         params = sql_params(profile)
-        max_rounds = int(profile["feature_rules"].get("max_alloc_rounds", 25))
 
         print(f"database     : {args.db}")
         print(f"profile      : {profile_id}")
@@ -213,10 +214,10 @@ def main() -> None:
               f" odd_hours=[{params['odd_hour_from']},{params['odd_hour_to']}),"
               f" round_unit={params['round_unit_paise']}p")
 
-        print("  allocation :")
-        t_alloc = time.perf_counter()
-        rounds, n_pairs, n_cand = allocate(con, params, max_rounds)
-        alloc_seconds = time.perf_counter() - t_alloc
+        print("  episodes   :")
+        t_ep = time.perf_counter()
+        n_ep, n_in_tx, n_out_tx, out_over_in = build_episodes(con, params)
+        ep_seconds = time.perf_counter() - t_ep
 
         sql = Template(SQL_PATH.read_text(encoding="utf-8")).substitute(params)
         t_sql = time.perf_counter()
@@ -231,16 +232,17 @@ def main() -> None:
             "SELECT " + ", ".join(f'count(*) - count("{c}") AS "{c}"' for c in cols)
             + " FROM features").fetchone()))
 
-        con.execute("DROP TABLE IF EXISTS cand")
-        con.execute("DROP TABLE IF EXISTS rem")
-        con.execute("DROP TABLE IF EXISTS allocated_out")
-        con.execute("DROP TABLE IF EXISTS alloc_pair")
+        for t in ("ep_inflow", "ep_window", "ep_out"):
+            con.execute(f"DROP TABLE IF EXISTS {t}")
 
-        print(f"  candidates : {n_cand:,} pairs -> {n_pairs:,} allocated"
-              f" in {rounds} round(s), {alloc_seconds:.2f}s")
+        print(f"  episodes   : {n_in_tx:,} inflows -> {n_ep:,} episodes;"
+              f" {n_out_tx:,} outflows inside an episode window,"
+              f" {ep_seconds:.2f}s")
+        print(f"  (episodes sending more than arrived, ratio capped at 1.0:"
+              f" {out_over_in:,})")
         print(f"rows         : {n_rows:,}   (accounts: {n_accts:,})")
         print(f"columns      : {len(cols)}")
-        print(f"alloc seconds: {alloc_seconds:.2f}")
+        print(f"episode secs : {ep_seconds:.2f}")
         print(f"sql seconds  : {sql_seconds:.2f}")
 
         if n_rows != n_accts:
