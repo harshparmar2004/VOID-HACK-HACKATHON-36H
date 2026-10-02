@@ -561,7 +561,8 @@ def run_jury_blind_evaluation():
 # ==============================================================================
 
 class EmergencyFreezePayload(BaseModel):
-    account_ids: List[str]
+    account_ids: Optional[List[str]] = None
+    target_accounts: Optional[List[str]] = None
 
 @app.get("/api/scanner/summary")
 def get_scanner_summary():
@@ -609,7 +610,8 @@ def execute_emergency_freeze(payload: EmergencyFreezePayload):
     global scanner
     if scanner is None:
         scanner = FraudScanner(engine.con)
-    return scanner.execute_emergency_freeze(payload.account_ids)
+    accounts = payload.account_ids or payload.target_accounts or []
+    return scanner.execute_emergency_freeze(accounts)
 
 # ==============================================================================
 # SETTINGS & LLM/JEV API INTEGRATION ENDPOINTS
