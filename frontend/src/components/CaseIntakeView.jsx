@@ -186,76 +186,32 @@ export default function CaseIntakeView({
 
   return (
     <div className="space-y-6 select-none pb-12">
-      {/* Top Header & Forensic Workflow Architecture Banner */}
-      <div className="bg-[#1C1917] text-white rounded-2xl p-6 shadow-sm border border-[#2E2824] space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
-              <span className="text-[10px] font-mono tracking-widest uppercase text-[#A8A29E] font-bold">
-                Operation Abhedya-Chakra • Dual-Stream Forensic Intake
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-[#D96B27] text-white">
-                Sec 63 BSA / Sec 65B Evidence Act
-              </span>
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-white font-serif">
-              Case Evidence Intake & Universal Data Ingestion
-            </h1>
-            <p className="text-xs text-[#A8A29E] max-w-3xl">
-              Correlates two distinct evidentiary streams: (1) Bulk Multi-Bank Datasets from banks/1930 portals, and (2) Specific Complainant FIRs from citizens.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              onClick={() => onRefreshData && onRefreshData()}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2A2420] hover:bg-[#38312B] border border-[#443B34] text-xs font-mono text-[#E7E5E4] transition-all cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-[#D96B27]" />
-              <span>Reload Engine</span>
-            </button>
-            <button
-              onClick={onOpenRegisterModal}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-mono font-bold shadow-md transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Register New FIR</span>
-            </button>
-          </div>
+      {/* Clean Top Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E8E2D5] pb-4">
+        <div>
+          <h1 className="text-2xl font-serif font-bold text-[#2C2623] tracking-tight">
+            Case Evidence Intake
+          </h1>
+          <p className="text-xs text-[#7C746D] mt-0.5">
+            Universal ingestion for multi-bank statements (.csv, .xlsx, .parquet) and Google Sheets.
+          </p>
         </div>
 
-        {/* Dual-Stream Forensic Pipeline Explainer Banner */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-[#332B25] text-xs font-mono">
-          <div className="p-3 rounded-xl bg-[#25201C] border border-[#3A322A] space-y-1">
-            <div className="text-[#D96B27] font-bold flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5" />
-              <span>STREAM 1: Bulk Bank Ledger</span>
-            </div>
-            <p className="text-[11px] text-[#A8A29E] font-sans">
-              2,000,000 multi-bank transaction pool provided by banks / 1930 Helpline. Ingested into in-memory DuckDB to map the full financial network.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-[#25201C] border border-[#3A322A] space-y-1">
-            <div className="text-[#34D399] font-bold flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>STREAM 2: Citizen FIR Intake</span>
-            </div>
-            <p className="text-[11px] text-[#A8A29E] font-sans">
-              Complainant Sunil Kumar Verma (<span className="text-white font-mono">PUNB10000001</span>) files FIR for ₹3,70,415.81 stolen funds. Acts as the root anchor (Hop 0).
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-[#25201C] border border-[#3A322A] space-y-1">
-            <div className="text-[#60A5FA] font-bold flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>THE CORRELATION ENGINE</span>
-            </div>
-            <p className="text-[11px] text-[#A8A29E] font-sans">
-              BFS algorithm traces Sunil's money forward across the 2M ledger: Hop 1 (L1) → Hop 2 (L2) → Hop 3/4 (L3), isolating where money is trapped to issue Section 91 freeze orders.
-            </p>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => onRefreshData && onRefreshData()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] transition-colors shadow-2xs cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-[#7C746D]" />
+            <span>Reload Engine</span>
+          </button>
+          <button
+            onClick={onOpenRegisterModal}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Register New FIR</span>
+          </button>
         </div>
       </div>
 

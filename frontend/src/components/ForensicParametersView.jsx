@@ -255,23 +255,23 @@ export default function ForensicParametersView({
 
   return (
     <div className="space-y-5 pb-12 select-none">
-      {/* Top Command Header Bar */}
-      <div className="bg-[#1C1917] text-white rounded-2xl p-5 shadow-sm border border-[#2E2824] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      {/* Clean Top Command Header */}
+      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
-            <span className="text-[10px] font-mono tracking-widest uppercase text-[#A8A29E] font-semibold">
-              Forensic Intelligence Hub • Type-Safe JEV Sorter
+            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+            <span className="text-[10px] font-mono tracking-widest uppercase text-[#7C746D] font-semibold">
+              Forensic Intelligence Hub
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-[#D96B27] text-white">
+            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5]">
               PRD P1–P10 Engine
             </span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <span>Investigation Parameters & Dynamic Rule Studio</span>
+          <h1 className="text-xl font-serif font-bold text-[#2C2623]">
+            Investigation Parameters & Dynamic Rule Studio
           </h1>
-          <p className="text-xs text-[#A8A29E] max-w-3xl">
-            Configure multi-hop BFS money trail bounds, add custom investigative parameter rules, adjust 0–100 Mule Risk Index heuristics, and execute live simulations across 2,000,000 banking records.
+          <p className="text-xs text-[#7C746D] max-w-3xl">
+            Configure multi-hop BFS money trail bounds, add custom investigative parameter rules, and adjust 0–100 Mule Risk Index heuristics.
           </p>
         </div>
 
@@ -280,7 +280,7 @@ export default function ForensicParametersView({
           <button
             type="button"
             onClick={handleAddCustomRule}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2A2420] hover:bg-[#38312B] border border-[#443B34] text-xs font-semibold text-[#E7E5E4] transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAF6EE] hover:bg-[#F3EDE2] border border-[#E8E2D5] text-xs font-semibold text-[#2C2623] transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 text-[#D96B27]" />
             <span>Add Custom Rule</span>
@@ -289,7 +289,7 @@ export default function ForensicParametersView({
           <button
             type="button"
             onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-transparent hover:bg-[#2A2420] border border-[#443B34] text-xs font-mono text-[#A8A29E] hover:text-white transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-xs font-mono text-[#7C746D] hover:text-[#2C2623] transition-all cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Baseline</span>
@@ -298,7 +298,7 @@ export default function ForensicParametersView({
           <button
             type="button"
             onClick={handleSave}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-md transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Save & Apply Parameters</span>
@@ -1009,24 +1009,24 @@ export default function ForensicParametersView({
               type="button"
               onClick={() => runLiveSimulation(formState)}
               disabled={simulating}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1C1917] text-white text-xs font-mono hover:bg-[#2E2824] transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] text-xs font-mono font-semibold transition-all cursor-pointer shadow-2xs"
             >
               <span>{simulating ? "Evaluating..." : "Re-Run Query Simulation"}</span>
             </button>
           </div>
 
           {/* Compiled SQL Query Display */}
-          <div className="bg-[#1C1917] text-[#10B981] rounded-xl p-3.5 font-mono text-xs space-y-1.5 overflow-x-auto border border-[#2E2824]">
-            <div className="flex items-center justify-between text-[#A8A29E] text-[10px]">
-              <span className="flex items-center gap-1.5">
+          <div className="bg-[#FAF6EE] text-[#2C2623] rounded-xl p-3.5 font-mono text-xs space-y-1.5 overflow-x-auto border border-[#E8E2D5]">
+            <div className="flex items-center justify-between text-[#7C746D] text-[10px]">
+              <span className="flex items-center gap-1.5 font-bold">
                 <Terminal className="w-3.5 h-3.5 text-[#D96B27]" />
                 COMPILED DUCKDB SQL FILTER CLAUSE
               </span>
               <span>Latency: {simulationData ? `${simulationData.latency_ms} ms` : "..."}</span>
             </div>
-            <code className="text-white text-[11px] block">
+            <code className="text-[#2C2623] font-bold text-[11px] block">
               SELECT * FROM transactions WHERE{" "}
-              <span className="text-[#34D399]">
+              <span className="text-[#D96B27]">
                 {simulationData ? simulationData.generated_where_clause : "1=1"}
               </span>
             </code>
