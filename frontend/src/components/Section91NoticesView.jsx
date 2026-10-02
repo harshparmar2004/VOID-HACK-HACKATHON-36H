@@ -845,9 +845,13 @@ export default function Section91NoticesView({
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
                               acc.hop_level === 1
-                                ? "bg-[#FEE2E2] text-[#DC2626] border border-[#FCA5A5]"
+                                ? "bg-[#FFEDD5] text-[#EA580C] border border-[#FDBA74]"
                                 : acc.hop_level === 2
                                 ? "bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A]"
+                                : acc.hop_level === 3
+                                ? "bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]"
+                                : acc.hop_level >= 4
+                                ? "bg-[#FFE4E6] text-[#E11D48] border border-[#FDA4AF]"
                                 : "bg-[#FAF6EE] text-[#746D65] border border-[#E8E2D5]"
                             }`}
                           >

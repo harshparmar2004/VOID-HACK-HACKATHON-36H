@@ -44,11 +44,11 @@ export default function NetworkGraphView({ traceData }) {
   const visibleLinksCount = Math.max(1, Math.floor((rawLinks.length * timeProgress) / 100));
   const activeRawLinks = rawLinks.slice(0, visibleLinksCount);
 
-  // Group nodes by hop level
+  // Group nodes by hop level (Hops 0, 1, 2, 3, 4)
   const hopGroups = useMemo(() => {
-    const groups = { 0: [], 1: [], 2: [], 3: [] };
+    const groups = { 0: [], 1: [], 2: [], 3: [], 4: [] };
     nodes.forEach((n) => {
-      const h = Math.min(n.hop, 3);
+      const h = Math.min(n.hop ?? 0, 4);
       if (groups[h]) groups[h].push(n);
     });
     return groups;
@@ -62,6 +62,7 @@ export default function NetworkGraphView({ traceData }) {
     const h1 = hopGroups[1] || [];
     const h2 = hopGroups[2] || [];
     const h3 = hopGroups[3] || [];
+    const h4 = hopGroups[4] || [];
 
     if (h0[0] && h1[0]) {
       generated.push({
@@ -107,6 +108,22 @@ export default function NetworkGraphView({ traceData }) {
       });
     }
 
+    if (h4.length > 0 && h3.length > 0) {
+      h4.forEach((n4, idx) => {
+        const srcNode = h3[idx % h3.length];
+        generated.push({
+          txn_id: `TXN-TREE-04-${idx + 1}`,
+          source: srcNode.id,
+          target: n4.id,
+          amount: n4.tainted_received || 45000.0,
+          payment_mode: "SWIFT/P2P",
+          timestamp: `2026-10-13 00:28:${String(idx * 5).padStart(2, "0")}`,
+          narration: "Offshore Crypto Terminal Exit",
+          hop: 4
+        });
+      });
+    }
+
     return generated;
   }, [activeRawLinks, traceData, hopGroups]);
 
@@ -116,6 +133,7 @@ export default function NetworkGraphView({ traceData }) {
     const h1 = hopGroups[1] || [];
     const h2 = hopGroups[2] || [];
     const h3 = hopGroups[3] || [];
+    const h4 = hopGroups[4] || [];
 
     const isHorizontal = treeOrientation === "horizontal";
     const nodeW = isHorizontal ? 260 : 220;
@@ -156,6 +174,25 @@ export default function NetworkGraphView({ traceData }) {
       // Level 3 (Hop 3 Leaves): branch out to the right of their respective Hop 2 parent
       h3.forEach((n, idx) => {
         const x = 60 + (nodeW + hGap) * 3;
+        const parentLink = effectiveLinks.find(
+          (l) => (typeof l.target === "object" ? l.target.id : l.target) === n.id
+        );
+        let targetY;
+        if (
+          parentLink &&
+          nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source]
+        ) {
+          targetY =
+            nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].y;
+        } else {
+          targetY = startY + idx * (nodeH + vGap) * 2.5;
+        }
+        nodePositions[n.id] = { ...n, x, y: targetY, width: nodeW, height: nodeH };
+      });
+
+      // Level 4 (Hop 4 Terminal Exit Leaves): branch out to the right of Hop 3
+      h4.forEach((n, idx) => {
+        const x = 60 + (nodeW + hGap) * 4;
         const parentLink = effectiveLinks.find(
           (l) => (typeof l.target === "object" ? l.target.id : l.target) === n.id
         );
@@ -214,6 +251,25 @@ export default function NetworkGraphView({ traceData }) {
           targetX = startX + idx * (nodeW + hGap) * 2;
         }
         const y = 80 + (nodeH + vGap) * 3;
+        nodePositions[n.id] = { ...n, x: targetX, y, width: nodeW, height: nodeH };
+      });
+
+      // Level 4: below Hop 3
+      h4.forEach((n, idx) => {
+        const parentLink = effectiveLinks.find(
+          (l) => (typeof l.target === "object" ? l.target.id : l.target) === n.id
+        );
+        let targetX;
+        if (
+          parentLink &&
+          nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source]
+        ) {
+          targetX =
+            nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].x;
+        } else {
+          targetX = startX + idx * (nodeW + hGap) * 2;
+        }
+        const y = 80 + (nodeH + vGap) * 4;
         nodePositions[n.id] = { ...n, x: targetX, y, width: nodeW, height: nodeH };
       });
     }
@@ -553,21 +609,24 @@ export default function NetworkGraphView({ traceData }) {
           >
             <defs>
               <marker id="tarrow-hop1" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EA580C" />
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10B981" />
               </marker>
               <marker id="tarrow-hop2" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#D97706" />
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EA580C" />
               </marker>
               <marker id="tarrow-hop3" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7C3AED" />
+              </marker>
+              <marker id="tarrow-hop4" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#E11D48" />
               </marker>
             </defs>
 
             {/* Tree Branch Connecting Lines */}
             {treeLayout.positionedLinks.map((l, i) => {
               const active = isLinkActive(l);
-              const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : "#7C3AED";
-              const marker = l.hop === 1 ? "url(#tarrow-hop1)" : l.hop === 2 ? "url(#tarrow-hop2)" : "url(#tarrow-hop3)";
+              const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : l.hop === 3 ? "#7C3AED" : "#E11D48";
+              const marker = l.hop === 1 ? "url(#tarrow-hop1)" : l.hop === 2 ? "url(#tarrow-hop2)" : l.hop === 3 ? "url(#tarrow-hop3)" : "url(#tarrow-hop4)";
 
               return (
                 <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.15}>
@@ -660,9 +719,10 @@ export default function NetworkGraphView({ traceData }) {
             const isL1 = node.hop === 1;
             const isL2 = node.hop === 2;
             const isL3 = node.hop === 3;
+            const isL4 = (node.hop ?? 0) >= 4;
 
-            const themeColor = isRoot ? "#10B981" : isL1 ? "#EA580C" : isL2 ? "#D97706" : "#7C3AED";
-            const badgeBg = isRoot ? "#E6F7F0" : isL1 ? "#FFF7ED" : isL2 ? "#FEF3C7" : "#EDE9FE";
+            const themeColor = isRoot ? "#10B981" : isL1 ? "#EA580C" : isL2 ? "#D97706" : isL3 ? "#7C3AED" : "#E11D48";
+            const badgeBg = isRoot ? "#E6F7F0" : isL1 ? "#FFF7ED" : isL2 ? "#FEF3C7" : isL3 ? "#EDE9FE" : "#FFE4E6";
 
             return (
               <div
@@ -694,7 +754,7 @@ export default function NetworkGraphView({ traceData }) {
                         className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
                       />
                     )}
-                    {!isL3 && (
+                    {!isL4 && (
                       <div
                         style={{ backgroundColor: themeColor }}
                         className="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
@@ -709,7 +769,7 @@ export default function NetworkGraphView({ traceData }) {
                         className="absolute top-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
                       />
                     )}
-                    {!isL3 && (
+                    {!isL4 && (
                       <div
                         style={{ backgroundColor: themeColor }}
                         className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-white shadow-xs"
@@ -732,7 +792,7 @@ export default function NetworkGraphView({ traceData }) {
                     style={{ backgroundColor: badgeBg, color: themeColor }}
                     className="text-[9px] px-1.5 py-0.2 rounded font-bold font-mono"
                   >
-                    {isRoot ? "VICTIM" : isL1 ? "L1 MULE" : isL2 ? `SCORE ${node.risk_score}` : "CRYPTO EXIT"}
+                    {isRoot ? "VICTIM" : isL1 ? "L1 MULE" : isL2 ? `SCORE ${node.risk_score}` : isL3 ? "L3 ESCROW" : "L4 TERMINAL"}
                   </span>
                 </div>
 

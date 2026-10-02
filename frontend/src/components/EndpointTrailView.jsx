@@ -69,13 +69,14 @@ export default function EndpointTrailView({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  // Group nodes by hop level (0: Victim, 1: L1 Collector, 2: L2 Distributors, 3: L3 Cashout)
+  // Group nodes by hop level (0: Victim, 1: L1 Collector, 2: L2 Distributors, 3: L3 Cashout, 4: L4 Terminal)
   const hopGroups = React.useMemo(() => {
-    const groups = { 0: [], 1: [], 2: [], 3: [] };
+    const groups = { 0: [], 1: [], 2: [], 3: [], 4: [] };
     if (traceData && traceData.nodes) {
       traceData.nodes.forEach((n) => {
-        const h = Math.min(n.hop, 3);
-        if (groups[h]) groups[h].push(n);
+        const h = Math.min(n.hop ?? 0, 4);
+        if (!groups[h]) groups[h] = [];
+        groups[h].push(n);
       });
     }
     return groups;
@@ -91,6 +92,7 @@ export default function EndpointTrailView({
     const h1 = hopGroups[1] || [];
     const h2 = hopGroups[2] || [];
     const h3 = hopGroups[3] || [];
+    const h4 = hopGroups[4] || [];
 
     if (h0[0] && h1[0]) {
       generated.push({
@@ -129,6 +131,21 @@ export default function EndpointTrailView({
           payment_mode: "UPI/P2P",
           narration: "Crypto USDT Exit",
           hop: 3
+        });
+      });
+    }
+
+    if (h4.length > 0 && h3.length > 0) {
+      h4.forEach((n4, idx) => {
+        const srcNode = h3[idx % h3.length];
+        generated.push({
+          txn_id: `TXN-HOP4-${idx + 1}`,
+          source: srcNode.id,
+          target: n4.id,
+          amount: n4.tainted_received || 45000.0,
+          payment_mode: "CRYPTO/OFFSHORE",
+          narration: "Terminal Crypto Off-Ramp",
+          hop: 4
         });
       });
     }
@@ -352,12 +369,12 @@ export default function EndpointTrailView({
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 text-[#746D65] font-mono text-[10px] uppercase font-bold pr-2.5 border-r border-[#E8E2D5] shrink-0">
             <Eye className="w-3 h-3 text-[#D96B27]" />
-            <span>DEMO TARGETS:</span>
+            <span>4-HOP BENCHMARK TARGETS:</span>
           </div>
           {[
-            { id: "100000000001", name: "Sunil Kumar", loss: "₹14.7L", type: "Digital Arrest" },
-            { id: "100000000002", name: "Priya Sharma", loss: "₹8.9L", type: "Task Scam" },
-            { id: "100000000003", name: "Ramesh Patel", loss: "₹11.2L", type: "Crypto Fraud" }
+            { id: "KKBK10000000", name: "Sunil Verma", loss: "₹4.55L", type: "4-Hop Digital Arrest" },
+            { id: "SBIN10015314", name: "Dr. Priya Sharma", loss: "₹1.01L", type: "4-Hop Task Scam" },
+            { id: "BARB10005606", name: "Ramesh Patel", loss: "₹1.94L", type: "4-Hop IPO Syndicate" }
           ].map((d) => {
             const isActive = inputAcct === d.id;
             return (
@@ -603,7 +620,7 @@ export default function EndpointTrailView({
           {/* SVG CONNECTOR LINES LAYER (Behind Nodes) */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{ minWidth: "1700px", minHeight: "1200px", overflow: "visible" }}
+            style={{ minWidth: "2200px", minHeight: "1200px", overflow: "visible" }}
           >
             <defs>
               {/* Hop 0 -> Hop 1 Gradient */}
@@ -624,6 +641,12 @@ export default function EndpointTrailView({
                 <stop offset="100%" stopColor="#7C3AED" />
               </linearGradient>
 
+              {/* Hop 3 -> Hop 4 Gradient */}
+              <linearGradient id="grad-hop4" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#7C3AED" />
+                <stop offset="100%" stopColor="#DC2626" />
+              </linearGradient>
+
               {/* Markers / Arrowheads */}
               <marker id="marker-hop1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EA580C" />
@@ -636,14 +659,18 @@ export default function EndpointTrailView({
               <marker id="marker-hop3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7C3AED" />
               </marker>
+
+              <marker id="marker-hop4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#DC2626" />
+              </marker>
             </defs>
 
             {/* Dynamic Rendered SVG Pipeline Connectors */}
             {renderedLinks.map((l, i) => {
               const active = isLinkActive(l);
-              const hopGrad = l.hop === 1 ? "url(#grad-hop1)" : l.hop === 2 ? "url(#grad-hop2)" : "url(#grad-hop3)";
-              const marker = l.hop === 1 ? "url(#marker-hop1)" : l.hop === 2 ? "url(#marker-hop2)" : "url(#marker-hop3)";
-              const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : "#7C3AED";
+              const hopGrad = l.hop === 1 ? "url(#grad-hop1)" : l.hop === 2 ? "url(#grad-hop2)" : l.hop === 3 ? "url(#grad-hop3)" : "url(#grad-hop4)";
+              const marker = l.hop === 1 ? "url(#marker-hop1)" : l.hop === 2 ? "url(#marker-hop2)" : l.hop === 3 ? "url(#marker-hop3)" : "url(#marker-hop4)";
+              const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : l.hop === 3 ? "#7C3AED" : "#DC2626";
 
               return (
                 <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.18}>
@@ -956,18 +983,18 @@ export default function EndpointTrailView({
             </div>
 
             {/* ------------------------------------------------------------- */}
-            {/* COLUMN 3: HOP 3 • L3 TERMINAL CASHOUT                         */}
+            {/* COLUMN 3: HOP 3 • L3 CASHOUT / ESCROW                         */}
             {/* ------------------------------------------------------------- */}
             <div className="w-80 flex-shrink-0 space-y-4">
               <div className="bg-[#EDE9FE] border border-[#DDD6FE] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
                 <div>
                   <span className="text-xs font-bold text-[#7C3AED] uppercase font-mono tracking-wider">
-                    HOP 3 • L3 CASHOUT / EXIT
+                    HOP 3 • L3 CASHOUT / ESCROW ({hopGroups[3]?.length || 0})
                   </span>
-                  <p className="text-[10px] text-[#6D28D9]">Crypto P2P / Offshore IP Terminal Nodes</p>
+                  <p className="text-[10px] text-[#6D28D9]">Crypto P2P / Offshore IP Transit Nodes</p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#7C3AED] font-bold border border-[#DDD6FE]">
-                  Terminal
+                  P2P Escrow
                 </span>
               </div>
 
@@ -995,6 +1022,8 @@ export default function EndpointTrailView({
                     >
                       {/* Incoming Left Connector Port */}
                       <div className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#7C3AED] border-2 border-white shadow-xs" />
+                      {/* Outgoing Right Connector Port to Hop 4 */}
+                      <div className="absolute right-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#7C3AED] border-2 border-white shadow-xs" />
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
@@ -1025,6 +1054,84 @@ export default function EndpointTrailView({
 
                       <div className="mt-2 text-[10px] text-[#9E968D] font-mono">
                         IP: <span className="text-[#DC2626] font-semibold">{node.ip_address || "194.26.29.11"}</span> (Foreign)
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ------------------------------------------------------------- */}
+            {/* COLUMN 4: HOP 4 • L4 TERMINAL EXIT & OFFSHORE CRYPTO          */}
+            {/* ------------------------------------------------------------- */}
+            <div className="w-80 flex-shrink-0 space-y-4">
+              <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
+                <div>
+                  <span className="text-xs font-bold text-[#DC2626] uppercase font-mono tracking-wider">
+                    HOP 4 • L4 TERMINAL EXIT ({hopGroups[4]?.length || 0})
+                  </span>
+                  <p className="text-[10px] text-[#991B1B]">Binance Crypto P2P / Offshore Terminal</p>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#DC2626] font-bold border border-[#FECACA]">
+                  L4 Terminal
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {hopGroups[4]?.map((node) => {
+                  const active = isNodeActive(node.id);
+                  const isSelected = selectedNode?.id === node.id;
+
+                  return (
+                    <div
+                      key={node.id}
+                      ref={(el) => {
+                        if (el) nodeRefs.current[node.id] = el;
+                      }}
+                      onMouseEnter={() => setHoveredNodeId(node.id)}
+                      onMouseLeave={() => setHoveredNodeId(null)}
+                      onClick={() => setSelectedNode(node)}
+                      className={`interactive-node-card relative bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
+                        isSelected
+                          ? "border-[#DC2626] ring-3 ring-[#DC2626]/30 scale-102"
+                          : active
+                          ? "border-[#DC2626] hover:shadow-md"
+                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
+                      }`}
+                    >
+                      {/* Incoming Left Connector Port */}
+                      <div className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#DC2626] border-2 border-white shadow-xs" />
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
+                          <button
+                            onClick={(e) => handleCopy(node.id, e)}
+                            title="Copy Account ID"
+                            className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
+                          >
+                            {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#FEF2F2] text-[#DC2626] font-bold border border-[#FECACA]">
+                          Offshore Exit
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-[#746D65] mt-1 font-medium">
+                        {node.bank} ({node.ifsc})
+                      </div>
+
+                      <div className="mt-2.5 p-2 rounded-xl bg-[#FFF5F5] border border-[#FECACA]">
+                        <span className="text-[9px] uppercase font-bold text-[#DC2626]">Terminal Dissipation</span>
+                        <div className="text-xs font-mono font-bold text-[#DC2626]">
+                          ₹{node.tainted_received ? Number(node.tainted_received).toLocaleString("en-IN") : "0"}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between text-[10px] font-mono">
+                        <span className="text-[#DC2626] font-bold">● L4 Irreversible Exit</span>
+                        <span className="text-[#9E968D]">{node.ip_address || "185.220.101.4"}</span>
                       </div>
                     </div>
                   );

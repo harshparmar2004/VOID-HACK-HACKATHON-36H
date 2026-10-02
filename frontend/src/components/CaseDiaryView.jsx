@@ -91,7 +91,8 @@ export default function CaseDiaryView({
 
   const l1Nodes = useMemo(() => muleNodes.filter((n) => n.hop === 1), [muleNodes]);
   const l2Nodes = useMemo(() => muleNodes.filter((n) => n.hop === 2), [muleNodes]);
-  const l3Nodes = useMemo(() => muleNodes.filter((n) => (n.hop || 0) >= 3), [muleNodes]);
+  const l3Nodes = useMemo(() => muleNodes.filter((n) => n.hop === 3), [muleNodes]);
+  const l4Nodes = useMemo(() => muleNodes.filter((n) => (n.hop || 0) >= 4), [muleNodes]);
 
   const noticesList = useMemo(() => {
     if (liveData?.notices && Array.isArray(liveData.notices)) return liveData.notices;
@@ -362,7 +363,7 @@ export default function CaseDiaryView({
                 {nodes.length} Nodes • {liveData?.edges_count || 11} Links
               </div>
               <div className="text-[10px] font-mono text-[#746D65] mt-1">
-                Hop 0 (Intake) → Hop 3 (Cashout)
+                Hop 0 (Intake) → Hop 4 (Terminal Exit)
               </div>
             </div>
 
@@ -424,7 +425,7 @@ export default function CaseDiaryView({
                 2
               </span>
               <h3 className="text-base font-serif font-bold text-[#2C2623]">
-                Multi-Hop Algorithmic Graph Traversal & Topology Analysis
+                Multi-Hop Algorithmic Graph Traversal & Topology Analysis (L1 ➔ L4)
               </h3>
             </div>
 
@@ -433,7 +434,7 @@ export default function CaseDiaryView({
               via DuckDB columnar acceleration with sub-second execution latency ({liveData?.latency_ms || 73.28} ms).
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* L1 Card */}
               <div className="bg-[#FAF8F5] border border-[#E8E2D5] rounded-sm p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
@@ -476,18 +477,35 @@ export default function CaseDiaryView({
               <div className="bg-[#FAF8F5] border border-[#E8E2D5] rounded-sm p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="px-2 py-0.5 rounded-sm bg-purple-100 text-purple-800 font-mono font-bold text-[10px]">
-                    HOP 3+: L3 CASHOUT
+                    HOP 3: L3 CASHOUT / ESCROW
                   </span>
                   <span className="font-mono font-bold text-xs text-[#2C2623]">
                     {l3Nodes.length || 7} Accounts
                   </span>
                 </div>
                 <h4 className="text-xs font-serif font-bold text-[#2C2623]">
-                  Terminal Exit & Crypto Funnel
+                  P2P Merchant & Escrow Layer
                 </h4>
                 <p className="text-[11px] text-[#746D65] leading-relaxed">
-                  Terminal nodes executing cash-out via crypto P2P escrows, payment gateway merchants, and overseas
-                  proxy IPs (185.x / 194.x).
+                  Transit nodes funneled into high-frequency escrow accounts, payment gateway aggregators, and proxy merchant pools.
+                </p>
+              </div>
+
+              {/* L4 Card */}
+              <div className="bg-[#FAF8F5] border border-[#E8E2D5] rounded-sm p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded-sm bg-rose-100 text-rose-900 font-mono font-bold text-[10px]">
+                    HOP 4: L4 TERMINAL EXIT
+                  </span>
+                  <span className="font-mono font-bold text-xs text-[#DC2626]">
+                    {l4Nodes.length || 3} Accounts
+                  </span>
+                </div>
+                <h4 className="text-xs font-serif font-bold text-[#2C2623]">
+                  Terminal Offshore / Crypto Funnel
+                </h4>
+                <p className="text-[11px] text-[#746D65] leading-relaxed">
+                  Terminal dissipation points executing irreversible off-ramps: Binance/P2P crypto wallets, offshore bank accounts, and ATM cash-out clusters.
                 </p>
               </div>
             </div>
@@ -536,10 +554,12 @@ export default function CaseDiaryView({
                                   ? "bg-red-50 text-red-700 border border-red-200"
                                   : m.hop === 2
                                   ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                  : "bg-purple-50 text-purple-700 border border-purple-200"
+                                  : m.hop === 3
+                                  ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                  : "bg-rose-100 text-rose-900 border border-rose-300 font-extrabold"
                               }`}
                             >
-                              Hop {m.hop} ({m.role ? m.role.split("_")[0] : "MULE"})
+                              Hop {m.hop} ({m.role ? m.role.split("_")[0] : m.hop >= 4 ? "L4_TERMINAL" : "MULE"})
                             </span>
                           </td>
                           <td className="py-2.5 px-3 font-bold text-[#2C2623]">

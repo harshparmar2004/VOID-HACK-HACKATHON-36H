@@ -29,12 +29,14 @@ import { fetchMules } from "../api";
 // Canonical role normalizer to guarantee exact matching regardless of backend or mock label variant
 const canonicalRole = (r, hop) => {
   const s = String(r || "").toUpperCase();
+  if (s.includes("L4") || s.includes("TERMINAL")) return "L4_TERMINAL";
   if (s.includes("L1") || s.includes("COLLECTOR")) return "L1_COLLECTOR";
   if (s.includes("L2") || s.includes("DISTRIBUTOR") || s.includes("LAYER")) return "L2_DISTRIBUTOR";
   if (s.includes("L3") || s.includes("CASHOUT") || s.includes("EXIT") || s.includes("CRYPTO")) return "L3_CASHOUT";
   if (hop === 1) return "L1_COLLECTOR";
   if (hop === 2) return "L2_DISTRIBUTOR";
   if (hop === 3) return "L3_CASHOUT";
+  if (hop >= 4) return "L4_TERMINAL";
   return "L1_COLLECTOR";
 };
 
@@ -217,10 +219,11 @@ export default function MuleDossierView({
     const l1 = normalizedMules.filter((m) => m.role === "L1_COLLECTOR").length;
     const l2 = normalizedMules.filter((m) => m.role === "L2_DISTRIBUTOR").length;
     const l3 = normalizedMules.filter((m) => m.role === "L3_CASHOUT").length;
+    const l4 = normalizedMules.filter((m) => m.role === "L4_TERMINAL").length;
     const highRisk = normalizedMules.filter((m) => m.risk_index >= 90).length;
     const totalHolding = normalizedMules.reduce((acc, m) => acc + (m.current_holding_balance || 0), 0);
     const totalInflow = normalizedMules.reduce((acc, m) => acc + (m.total_incoming_amt || 0), 0);
-    return { total, l1, l2, l3, highRisk, totalHolding, totalInflow };
+    return { total, l1, l2, l3, l4, highRisk, totalHolding, totalInflow };
   }, [normalizedMules]);
 
   // Filtered & Sorted list for the table
@@ -592,7 +595,8 @@ export default function MuleDossierView({
                 { id: "ALL", label: "ALL MULES", count: stats.total },
                 { id: "L1_COLLECTOR", label: "L1 COLLECTOR", count: stats.l1 },
                 { id: "L2_DISTRIBUTOR", label: "L2 DISTRIBUTOR", count: stats.l2 },
-                { id: "L3_CASHOUT", label: "L3 CASHOUT", count: stats.l3 }
+                { id: "L3_CASHOUT", label: "L3 CASHOUT", count: stats.l3 },
+                { id: "L4_TERMINAL", label: "L4 TERMINAL", count: stats.l4 }
               ].map((tab) => {
                 const isSelected = (!activeFilter && tab.id === "ALL") || activeFilter === tab.id;
                 return (
@@ -706,6 +710,8 @@ export default function MuleDossierView({
                               ? "bg-[#FFEDD5] text-[#EA580C] border border-[#FDBA74]"
                               : m.role === "L2_DISTRIBUTOR"
                               ? "bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A]"
+                              : m.role === "L4_TERMINAL"
+                              ? "bg-[#FFE4E6] text-[#E11D48] border border-[#FDA4AF]"
                               : "bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]"
                           }`}
                         >
@@ -951,6 +957,8 @@ export default function MuleDossierView({
                         ? "bg-[#FFEDD5] text-[#EA580C] border border-[#FDBA74]"
                         : displayedMule.role === "L2_DISTRIBUTOR"
                         ? "bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A]"
+                        : displayedMule.role === "L4_TERMINAL"
+                        ? "bg-[#FFE4E6] text-[#E11D48] border border-[#FDA4AF]"
                         : "bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]"
                     }`}
                   >
