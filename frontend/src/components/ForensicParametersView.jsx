@@ -1,15 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   SlidersHorizontal,
   Plus,
   Trash2,
   Check,
-  ShieldCheck,
   RotateCcw,
   Sparkles,
   CheckCircle2,
   Layers,
-  Settings2
+  Settings2,
+  Pencil,
+  Copy,
+  X,
+  ArrowRight,
+  Filter,
+  CheckCheck
 } from "lucide-react";
 
 export default function ForensicParametersView({
@@ -28,14 +33,14 @@ export default function ForensicParametersView({
     minRisk: 0,
 
     // Core Heuristic Weights (P1 to P6)
-    p1Weight: 30,
-    p2Weight: 15,
-    p3Weight: 15,
-    p4Weight: 25,
-    p5Weight: 10,
-    p6Weight: 5,
+    p1Weight: 30, // Pass-through velocity
+    p2Weight: 15, // Fan-in centrality
+    p3Weight: 15, // Fan-out smurfing split
+    p4Weight: 20, // ATM/Crypto Cash-out
+    p5Weight: 10, // Geolocation / IP Anomaly
+    p6Weight: 5,  // Burst Hold Time
 
-    // Active status for core parameters
+    // Core Toggles
     p1Enabled: true,
     p2Enabled: true,
     p3Enabled: true,
@@ -43,29 +48,8 @@ export default function ForensicParametersView({
     p5Enabled: true,
     p6Enabled: true,
 
-    // Custom Forensic Parameters (User-Extensible P7, P8, P9...)
-    customRules: [
-      {
-        id: "rule_crypto_p2p",
-        name: "Crypto P2P Narration",
-        field: "Narration",
-        operator: "contains",
-        value: "CRYPTO",
-        points: 25,
-        action: "FLAG_SUSPICIOUS",
-        enabled: true
-      },
-      {
-        id: "rule_foreign_proxy",
-        name: "Foreign Proxy Subnet 194.x",
-        field: "IP_Address",
-        operator: "starts_with",
-        value: "194.",
-        points: 20,
-        action: "AUTO_FREEZE",
-        enabled: true
-      }
-    ]
+    // Dynamic Custom Rules (P7, P8, P9... P20+)
+    customRules: []
   };
 
   const [formState, setFormState] = useState(() => ({
@@ -76,14 +60,21 @@ export default function ForensicParametersView({
 
   const [filterCategory, setFilterCategory] = useState("ALL"); // 'ALL' | 'CORE' | 'CUSTOM'
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
-  // New Rule Form State
+  // Builder Form State (Add / Update)
+  const [editingRuleId, setEditingRuleId] = useState(null); // null when adding, string when editing
   const [newRuleName, setNewRuleName] = useState("");
   const [newRuleField, setNewRuleField] = useState("Narration");
   const [newRuleOperator, setNewRuleOperator] = useState("contains");
   const [newRuleValue, setNewRuleValue] = useState("");
   const [newRulePoints, setNewRulePoints] = useState(20);
   const [newRuleAction, setNewRuleAction] = useState("FLAG_SUSPICIOUS");
+
+  // Preset Category Filter
+  const [presetCategory, setPresetCategory] = useState("ALL"); // ALL | SCAMS | BOTS | IPS | AMOUNTS | CHANNELS
+
+  const builderRef = useRef(null);
 
   useEffect(() => {
     if (forensicParams && Object.keys(forensicParams).length > 0) {
@@ -94,6 +85,11 @@ export default function ForensicParametersView({
       }));
     }
   }, [forensicParams]);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 3500);
+  };
 
   // Total Active Parameters Count
   const activeParamsCount = useMemo(() => {
@@ -130,62 +126,155 @@ export default function ForensicParametersView({
       onSaveParams(formState);
     }
     setSaveSuccess(true);
+    showToast("Parameters saved successfully! All graph traces, dossier risk scores, and 60s scanner alerts updated.");
     setTimeout(() => setSaveSuccess(false), 3500);
   };
 
   // Reset to Defaults
   const handleReset = () => {
     setFormState(defaultParams);
+    setEditingRuleId(null);
+    resetBuilderForm();
     if (onSaveParams) {
       onSaveParams(defaultParams);
     }
     setSaveSuccess(true);
+    showToast("Reset all parameters and thresholds to PRD baseline defaults.");
     setTimeout(() => setSaveSuccess(false), 3500);
   };
 
-  // Add Custom Parameter Manually
-  const handleAddManualParameter = (e) => {
+  // Reset Builder Form
+  const resetBuilderForm = () => {
+    setEditingRuleId(null);
+    setNewRuleName("");
+    setNewRuleField("Narration");
+    setNewRuleOperator("contains");
+    setNewRuleValue("");
+    setNewRulePoints(20);
+    setNewRuleAction("FLAG_SUSPICIOUS");
+  };
+
+  // Submit Builder: Handles both ADD and UPDATE (Free Will to Edit)
+  const handleSubmitBuilder = (e) => {
     e.preventDefault();
     if (!newRuleValue.trim()) {
       alert("Please enter a Target Value for the parameter.");
       return;
     }
 
-    const nextIndex = (formState.customRules?.length || 0) + 7;
-    const name = newRuleName.trim() || `P${nextIndex}: ${newRuleField} ${newRuleOperator} "${newRuleValue}"`;
+    if (editingRuleId) {
+      // UPDATE EXISTING PARAMETER
+      const updatedRules = (formState.customRules || []).map((rule) => {
+        if (rule.id === editingRuleId) {
+          return {
+            ...rule,
+            name: newRuleName.trim() || rule.name,
+            field: newRuleField,
+            operator: newRuleOperator,
+            value: newRuleValue.trim(),
+            points: Number(newRulePoints) || 15,
+            action: newRuleAction
+          };
+        }
+        return rule;
+      });
 
-    const newParam = {
-      id: `param_${Date.now()}`,
-      name,
-      field: newRuleField,
-      operator: newRuleOperator,
-      value: newRuleValue.trim(),
-      points: Number(newRulePoints) || 15,
-      action: newRuleAction,
+      const updatedState = { ...formState, customRules: updatedRules };
+      setFormState(updatedState);
+      if (onSaveParams) onSaveParams(updatedState);
+
+      showToast(`Updated parameter "${newRuleName || 'Custom Rule'}" successfully.`);
+      resetBuilderForm();
+    } else {
+      // ADD NEW PARAMETER
+      const nextIndex = (formState.customRules?.length || 0) + 7;
+      const name = newRuleName.trim() || `P${nextIndex}: ${newRuleField} ${newRuleOperator} "${newRuleValue}"`;
+
+      const newParam = {
+        id: `param_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        name,
+        field: newRuleField,
+        operator: newRuleOperator,
+        value: newRuleValue.trim(),
+        points: Number(newRulePoints) || 15,
+        action: newRuleAction,
+        enabled: true
+      };
+
+      const updatedRules = [...(formState.customRules || []), newParam];
+      const updatedState = { ...formState, customRules: updatedRules };
+      setFormState(updatedState);
+      if (onSaveParams) onSaveParams(updatedState);
+
+      showToast(`Added parameter "${name}" to engine.`);
+      resetBuilderForm();
+    }
+  };
+
+  // Start Editing a Custom Rule (Loads into Builder)
+  const handleStartEdit = (rule) => {
+    setEditingRuleId(rule.id);
+    setNewRuleName(rule.name);
+    setNewRuleField(rule.field);
+    setNewRuleOperator(rule.operator);
+    setNewRuleValue(rule.value);
+    setNewRulePoints(rule.points);
+    setNewRuleAction(rule.action);
+
+    // Scroll builder into view
+    if (builderRef.current) {
+      builderRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    showToast(`Loaded "${rule.name}" into builder. Update values below.`);
+  };
+
+  // Duplicate / Clone a Rule
+  const handleDuplicateRule = (rule) => {
+    const nextIndex = (formState.customRules?.length || 0) + 7;
+    const cloned = {
+      ...rule,
+      id: `param_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      name: `${rule.name} (Copy)`,
       enabled: true
     };
-
-    const updatedRules = [...(formState.customRules || []), newParam];
-    const updatedState = { ...formState, customRules: updatedRules };
+    const updated = [...(formState.customRules || []), cloned];
+    const updatedState = { ...formState, customRules: updated };
     setFormState(updatedState);
-
-    // Reset Form
-    setNewRuleName("");
-    setNewRuleValue("");
-    setNewRulePoints(20);
-
-    // Auto-save
     if (onSaveParams) onSaveParams(updatedState);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    showToast(`Duplicated parameter as "${cloned.name}".`);
+  };
+
+  // Clone a Core Heuristic (P1 to P6) into a Custom Rule for user customization
+  const handleCloneCoreToCustom = (code, title, desc, defaultPoints) => {
+    const nextIndex = (formState.customRules?.length || 0) + 7;
+    const cloned = {
+      id: `param_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      name: `Custom ${code}: ${title}`,
+      field: code === "P1" ? "Pass_Through_Velocity" : code === "P4" ? "Narration" : code === "P5" ? "IP_Address" : "Amount_INR",
+      operator: "contains",
+      value: code === "P4" ? "CRYPTO" : code === "P5" ? "185." : "> 85%",
+      points: defaultPoints,
+      action: "FLAG_SUSPICIOUS",
+      enabled: true
+    };
+    const updated = [...(formState.customRules || []), cloned];
+    const updatedState = { ...formState, customRules: updated };
+    setFormState(updatedState);
+    if (onSaveParams) onSaveParams(updatedState);
+    showToast(`Cloned ${code} into Custom Rule P${nextIndex} for free editing.`);
   };
 
   // Delete Custom Rule
   const handleDeleteCustomRule = (index) => {
+    const ruleToDelete = (formState.customRules || [])[index];
+    if (ruleToDelete && ruleToDelete.id === editingRuleId) {
+      resetBuilderForm();
+    }
     const updated = (formState.customRules || []).filter((_, i) => i !== index);
     const updatedState = { ...formState, customRules: updated };
     setFormState(updatedState);
     if (onSaveParams) onSaveParams(updatedState);
+    showToast("Deleted parameter from engine.");
   };
 
   // Toggle Custom Rule
@@ -197,69 +286,46 @@ export default function ForensicParametersView({
     if (onSaveParams) onSaveParams(updatedState);
   };
 
-  // 1-Click Quick Add Presets
-  const quickPresets = [
-    {
-      title: "Digital Arrest Threat",
-      name: "Digital Arrest Modus Operandi",
-      field: "Narration",
-      operator: "contains",
-      value: "ARREST",
-      points: 30,
-      action: "FLAG_SUSPICIOUS"
-    },
-    {
-      title: "Telegram Task Scam",
-      name: "Telegram Task Scam Narration",
-      field: "Narration",
-      operator: "contains",
-      value: "TASK",
-      points: 25,
-      action: "FLAG_SUSPICIOUS"
-    },
-    {
-      title: "Heavy Whale > ₹50L",
-      name: "High Value Outlier > ₹50L",
-      field: "Amount_INR",
-      operator: ">",
-      value: "5000000",
-      points: 20,
-      action: "AUTO_FREEZE"
-    },
-    {
-      title: "Midnight Drain (12AM–4AM)",
-      name: "Midnight Dormancy Burst",
-      field: "Narration",
-      operator: "contains",
-      value: "IMPS",
-      points: 15,
-      action: "FLAG_SUSPICIOUS"
-    },
-    {
-      title: "Headless Bot Script",
-      name: "Headless Automated Bot",
-      field: "Device_Type",
-      operator: "contains",
-      value: "Linux_Script",
-      points: 20,
-      action: "AUTO_FREEZE"
-    },
-    {
-      title: "Foreign IP 185.x",
-      name: "Foreign Proxy IP 185.x",
-      field: "IP_Address",
-      operator: "starts_with",
-      value: "185.",
-      points: 25,
-      action: "AUTO_FREEZE"
-    }
-  ];
+  // Direct Inline Action Change for Custom Rule
+  const handleInlineActionChange = (index, newAction) => {
+    const updated = [...(formState.customRules || [])];
+    updated[index] = { ...updated[index], action: newAction };
+    const updatedState = { ...formState, customRules: updated };
+    setFormState(updatedState);
+    if (onSaveParams) onSaveParams(updatedState);
+  };
 
-  const handleApplyPreset = (preset) => {
+  // Direct Inline Points Change for Custom Rule
+  const handleInlinePointsChange = (index, points) => {
+    const updated = [...(formState.customRules || [])];
+    updated[index] = { ...updated[index], points: Math.max(0, Math.min(100, Number(points) || 0)) };
+    const updatedState = { ...formState, customRules: updated };
+    setFormState(updatedState);
+    if (onSaveParams) onSaveParams(updatedState);
+  };
+
+  // 1-Click Load into Builder Preset (User can edit or apply instantly)
+  const handleLoadPresetToBuilder = (preset) => {
+    setEditingRuleId(null);
+    setNewRuleName(preset.name);
+    setNewRuleField(preset.field);
+    setNewRuleOperator(preset.operator);
+    setNewRuleValue(preset.value);
+    setNewRulePoints(preset.points);
+    setNewRuleAction(preset.action);
+
+    if (builderRef.current) {
+      builderRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    showToast(`Loaded preset "${preset.title}" into builder. Tweak or click Add below.`);
+  };
+
+  // 1-Click Direct Add Preset
+  const handleDirectAddPreset = (preset) => {
     const nextIndex = (formState.customRules?.length || 0) + 7;
     const newParam = {
-      id: `param_${Date.now()}`,
-      name: `P${nextIndex}: ${preset.name}`,
+      id: `param_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      name: preset.name,
       field: preset.field,
       operator: preset.operator,
       value: preset.value,
@@ -267,18 +333,312 @@ export default function ForensicParametersView({
       action: preset.action,
       enabled: true
     };
-    const updated = {
-      ...formState,
-      customRules: [...(formState.customRules || []), newParam]
-    };
-    setFormState(updated);
-    if (onSaveParams) onSaveParams(updated);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    const updated = [...(formState.customRules || []), newParam];
+    const updatedState = { ...formState, customRules: updated };
+    setFormState(updatedState);
+    if (onSaveParams) onSaveParams(updatedState);
+    showToast(`Directly added preset "${preset.title}" (+${preset.points} pts).`);
   };
+
+  // 25+ Comprehensive Presets Directly Derived from the 2,000,000 DuckDB Dataset
+  const realDataPresets = [
+    // 1. SCAMS & FRAUD NARRATIONS (from actual dataset occurrences)
+    {
+      cat: "SCAMS",
+      title: "Digital Arrest Extortion",
+      name: "Digital Arrest Modus Operandi (CBI/Police)",
+      field: "Narration",
+      operator: "contains",
+      value: "ARREST",
+      points: 35,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "SCAMS",
+      title: "Supreme Court Escrow Scam",
+      name: "Urgent Supreme Court Security Escrow",
+      field: "Narration",
+      operator: "contains",
+      value: "SUPREME-COURT",
+      points: 35,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "SCAMS",
+      title: "CBI Security Escrow",
+      name: "CBI National Security Escrow Transfer",
+      field: "Narration",
+      operator: "contains",
+      value: "CBI",
+      points: 35,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "SCAMS",
+      title: "SEBI Fake IPO Block",
+      name: "SEBI Institutional Block IPO Allotment",
+      field: "Narration",
+      operator: "contains",
+      value: "IPO-ALLOTMENT",
+      points: 30,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "SCAMS",
+      title: "Mahadev Betting VIP",
+      name: "Mahadev VIP Commission Settlement",
+      field: "Narration",
+      operator: "contains",
+      value: "MAHADEV",
+      points: 30,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "SCAMS",
+      title: "P2P Binance USDT Exit",
+      name: "Binance P2P Crypto Off-Ramp Drain",
+      field: "Narration",
+      operator: "contains",
+      value: "BINANCE",
+      points: 30,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "SCAMS",
+      title: "Telegram Task Scam",
+      name: "Telegram Daily Task Review Scam",
+      field: "Narration",
+      operator: "contains",
+      value: "Telegram",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "SCAMS",
+      title: "Task Bonus Ponzi Bait",
+      name: "Task Bonus Refund Bait & Switch",
+      field: "Narration",
+      operator: "contains",
+      value: "Task-Bonus",
+      points: 20,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "SCAMS",
+      title: "Shadow Payout Gateway",
+      name: "Express Payout Shadow Payment Gateway",
+      field: "Narration",
+      operator: "contains",
+      value: "Express-Payout",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "SCAMS",
+      title: "Fast Settlement Hawala",
+      name: "Fast Settlement Liquidity Pool",
+      field: "Narration",
+      operator: "contains",
+      value: "Settlement-Pool",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "SCAMS",
+      title: "P2P USDT Layering Settle",
+      name: "P2P USDT Rapid OTC Settlement",
+      field: "Narration",
+      operator: "contains",
+      value: "USDT",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+
+    // 2. DEVICE & AUTOMATION BOTS (from actual Device_Type)
+    {
+      cat: "BOTS",
+      title: "Linux Headless Script Bot",
+      name: "Linux Python/Curl Automated Drain Bot",
+      field: "Device_Type",
+      operator: "equals",
+      value: "Linux_Script",
+      points: 25,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "BOTS",
+      title: "Web Mobile Emulator (Nox)",
+      name: "Android Virtualized Emulator / Nox",
+      field: "Device_Type",
+      operator: "equals",
+      value: "Web_Emulator",
+      points: 20,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "BOTS",
+      title: "API Automation Script (curl)",
+      name: "Automated API Request / Postman / curl",
+      field: "Device_Type",
+      operator: "contains",
+      value: "curl",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+
+    // 3. OFFSHORE & PROXY IP SUBNETS (from actual IP_Address)
+    {
+      cat: "IPS",
+      title: "Bulletproof Offshore IP (185.x)",
+      name: "Offshore Bulletproof Hosting (185.x Subnet)",
+      field: "IP_Address",
+      operator: "starts_with",
+      value: "185.",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "IPS",
+      title: "Tor / VPN Exit Proxy (194.x)",
+      name: "Tor / VPN Anonymized Proxy (194.x Subnet)",
+      field: "IP_Address",
+      operator: "starts_with",
+      value: "194.",
+      points: 25,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "IPS",
+      title: "Seychelles/HK Proxy (45.x)",
+      name: "Foreign Proxy Gateway (45.x Subnet)",
+      field: "IP_Address",
+      operator: "starts_with",
+      value: "45.",
+      points: 20,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "IPS",
+      title: "Offshore Layering IP (91.x)",
+      name: "Foreign Evasion Host (91.x Subnet)",
+      field: "IP_Address",
+      operator: "starts_with",
+      value: "91.",
+      points: 20,
+      action: "FLAG_SUSPICIOUS"
+    },
+
+    // 4. AMOUNTS & SLICING (from actual Amount distributions)
+    {
+      cat: "AMOUNTS",
+      title: "Heavy Whale Outlier (> ₹50L)",
+      name: "High Value Whale Anomaly > ₹50 Lakh",
+      field: "Amount_INR",
+      operator: ">",
+      value: "5000000",
+      points: 30,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "AMOUNTS",
+      title: "Multi-Crore Syndicate Drain (> ₹1 Cr)",
+      name: "Multi-Crore Catastrophic Siphon > ₹1 Crore",
+      field: "Amount_INR",
+      operator: ">",
+      value: "10000000",
+      points: 35,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "AMOUNTS",
+      title: "Extortion Loss Median (> ₹2.5L)",
+      name: "Digital Arrest Standard Extortion > ₹2.5 Lakh",
+      field: "Amount_INR",
+      operator: ">",
+      value: "250000",
+      points: 25,
+      action: "AUTO_FREEZE"
+    },
+    {
+      cat: "AMOUNTS",
+      title: "Smurfing Micro-Split (< ₹50K)",
+      name: "Rapid Slicing Smurfing Below ₹50K",
+      field: "Amount_INR",
+      operator: "<",
+      value: "50000",
+      points: 15,
+      action: "FLAG_SUSPICIOUS"
+    },
+
+    // 5. CHANNELS & BANKS (from actual Payment_Mode & IFSC)
+    {
+      cat: "CHANNELS",
+      title: "RTGS High-Value Corridor",
+      name: "RTGS Syndicate High-Value Exit",
+      field: "Payment_Mode",
+      operator: "equals",
+      value: "RTGS",
+      points: 20,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "CHANNELS",
+      title: "IMPS Automated Siphon Burst",
+      name: "Instant IMPS Rapid Layering Burst",
+      field: "Payment_Mode",
+      operator: "equals",
+      value: "IMPS",
+      points: 15,
+      action: "FLAG_SUSPICIOUS"
+    },
+    {
+      cat: "CHANNELS",
+      title: "State Bank Siphon Route (SBIN)",
+      name: "Target State Bank Receiver Route",
+      field: "Receiver_IFSC",
+      operator: "starts_with",
+      value: "SBIN",
+      points: 10,
+      action: "FILTER_MATCH"
+    },
+    {
+      cat: "CHANNELS",
+      title: "Punjab National Route (PUNB)",
+      name: "Target Punjab National Receiver Route",
+      field: "Receiver_IFSC",
+      operator: "starts_with",
+      value: "PUNB",
+      points: 10,
+      action: "FILTER_MATCH"
+    },
+    {
+      cat: "CHANNELS",
+      title: "Axis Bank Corridor (UTIB)",
+      name: "Target Axis Bank Channel",
+      field: "Receiver_IFSC",
+      operator: "starts_with",
+      value: "UTIB",
+      points: 10,
+      action: "FILTER_MATCH"
+    }
+  ];
+
+  // Filtered Presets based on presetCategory
+  const displayedPresets = useMemo(() => {
+    if (presetCategory === "ALL") return realDataPresets;
+    return realDataPresets.filter((p) => p.cat === presetCategory);
+  }, [presetCategory]);
 
   return (
     <div className="space-y-5">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 p-3 bg-[#2C2623] text-white rounded-md shadow-lg border border-[#D96B27] flex items-center gap-2.5 text-xs font-mono animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-[#D96B27] shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* ======================================================== */}
       {/* 1. TOP: Forensic Parameters Manager (Header & Actions)   */}
       {/* ======================================================== */}
@@ -295,7 +655,7 @@ export default function ForensicParametersView({
               Forensic Parameters Manager
             </h1>
             <p className="text-xs text-[#746D65] mt-1">
-              Configure detection heuristics, risk point weights, and custom parameters across 2,000,000 transactions.
+              Real-time parameter engine running across 2,000,000 transactions. Freely edit weights, customize conditions, and apply fraud presets.
             </p>
           </div>
 
@@ -312,6 +672,7 @@ export default function ForensicParametersView({
             <button
               onClick={handleReset}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] transition-all cursor-pointer shadow-2xs"
+              title="Reset all parameters to baseline"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset Defaults</span>
@@ -337,56 +698,130 @@ export default function ForensicParametersView({
       </div>
 
       {/* ======================================================== */}
-      {/* 2. BELOW: Add Forensic Parameter (Full Width Left to Right) */}
+      {/* 2. BELOW: Add / Edit Parameter (Full Width Left to Right) */}
       {/* ======================================================== */}
-      <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
+      <div
+        ref={builderRef}
+        className={`bg-white border rounded-md shadow-2xs overflow-hidden transition-all ${
+          editingRuleId ? "border-[#D96B27] ring-1 ring-[#D96B27]/30" : "border-[#E8E2D5]"
+        }`}
+      >
         {/* Card Header */}
         <div className="bg-[#FAF6EE] border-b border-[#E8E2D5] p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-sm bg-white border border-[#D4CEBF] flex items-center justify-center text-[#D96B27]">
-              <Plus className="w-4 h-4" />
+            <div className={`w-7 h-7 rounded-sm border flex items-center justify-center ${
+              editingRuleId ? "bg-[#D96B27] text-white border-[#D96B27]" : "bg-white text-[#D96B27] border-[#D4CEBF]"
+            }`}>
+              {editingRuleId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             </div>
             <div>
-              <h2 className="text-sm font-serif font-bold text-[#2C2623]">
-                Add Forensic Parameter
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-serif font-bold text-[#2C2623]">
+                  {editingRuleId ? "Edit Forensic Parameter" : "Add Forensic Parameter"}
+                </h2>
+                {editingRuleId && (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-xs bg-[#FEF3C7] text-[#B45309] border border-[#FCD34D]">
+                    EDIT MODE ACTIVE
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-[#746D65]">
-                Manual condition builder and 1-click preset library (P7–P20+)
+                {editingRuleId
+                  ? "Modifying parameter condition and weights. Click 'Update Parameter' to save changes."
+                  : "Manual condition builder and 1-click real dataset preset library (P7–P25+)"}
               </p>
             </div>
           </div>
-          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-xs bg-[#E6F7F0] text-[#059669] border border-[#A7F3D0]">
-            Real-Time DuckDB Compilation
-          </span>
+
+          <div className="flex items-center gap-2">
+            {editingRuleId && (
+              <button
+                type="button"
+                onClick={resetBuilderForm}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#DC2626] text-xs font-mono cursor-pointer transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Cancel Edit</span>
+              </button>
+            )}
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-xs bg-[#E6F7F0] text-[#059669] border border-[#A7F3D0]">
+              Real-Time DuckDB Compilation
+            </span>
+          </div>
         </div>
 
-        {/* 1-Click Quick Presets Strip */}
-        <div className="p-3.5 bg-[#FDFBF7] border-b border-[#F0EAE1] space-y-2">
-          <div className="flex items-center justify-between text-xs font-mono font-bold text-[#746D65]">
-            <div className="flex items-center gap-1.5 text-[#D96B27]">
+        {/* 1-Click Quick Presets Strip (Derived directly from Excel/Parquet 2M Dataset) */}
+        <div className="p-3.5 bg-[#FDFBF7] border-b border-[#F0EAE1] space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-[#D96B27]">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>1-CLICK QUICK PRESETS:</span>
+              <span>REAL DATASET FRAUD PRESETS ({displayedPresets.length}):</span>
             </div>
-            <span className="text-[11px] text-[#9E968D]">Click any preset to instantly add as a new active parameter</span>
+
+            {/* Preset Category Pills */}
+            <div className="flex flex-wrap items-center gap-1 text-[11px] font-mono">
+              {[
+                { id: "ALL", label: `All (${realDataPresets.length})` },
+                { id: "SCAMS", label: "Scam Narrations (11)" },
+                { id: "BOTS", label: "Bots & Scripts (3)" },
+                { id: "IPS", label: "Proxy / Tor IPs (4)" },
+                { id: "AMOUNTS", label: "Whales & Amounts (4)" },
+                { id: "CHANNELS", label: "Banks & Modes (5)" }
+              ].map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setPresetCategory(c.id)}
+                  className={`px-2 py-0.5 rounded-xs transition-colors cursor-pointer ${
+                    presetCategory === c.id
+                      ? "bg-[#D96B27] text-white font-bold"
+                      : "bg-white text-[#746D65] border border-[#E8E2D5] hover:border-[#D4CEBF]"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {quickPresets.map((preset) => (
-              <button
+
+          <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
+            {displayedPresets.map((preset) => (
+              <div
                 key={preset.title}
-                type="button"
-                onClick={() => handleApplyPreset(preset)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#FAF6EE] border border-[#D4CEBF] hover:border-[#D96B27] text-xs font-mono text-[#2C2623] transition-all cursor-pointer shadow-2xs"
+                className="group flex items-center bg-white hover:bg-[#FAF6EE] border border-[#D4CEBF] hover:border-[#D96B27] rounded-sm transition-all shadow-2xs overflow-hidden"
               >
-                <Plus className="w-3 h-3 text-[#D96B27]" />
-                <span>{preset.title}</span>
-                <span className="text-[10px] text-[#059669] font-bold">+{preset.points} pts</span>
-              </button>
+                {/* Click to load into form for free editing */}
+                <button
+                  type="button"
+                  onClick={() => handleLoadPresetToBuilder(preset)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-mono text-[#2C2623] cursor-pointer"
+                  title="Click to load into form and edit freely before applying"
+                >
+                  <Pencil className="w-3 h-3 text-[#9E968D] group-hover:text-[#D96B27]" />
+                  <span>{preset.title}</span>
+                  <span className="text-[10px] text-[#059669] font-bold">+{preset.points} pts</span>
+                </button>
+
+                {/* Direct 1-Click Add Button */}
+                <button
+                  type="button"
+                  onClick={() => handleDirectAddPreset(preset)}
+                  className="px-2 py-1.5 bg-[#FAF6EE] group-hover:bg-[#D96B27] group-hover:text-white border-l border-[#E8E2D5] text-[#746D65] text-[10px] font-mono font-bold cursor-pointer transition-colors"
+                  title="Direct 1-Click Add without editing"
+                >
+                  + Add
+                </button>
+              </div>
             ))}
+          </div>
+          <div className="text-[10px] text-[#9E968D] font-mono flex items-center justify-between">
+            <span>Tip: Click preset name to load & customize in builder, or click "+ Add" for instant application.</span>
+            <span>Dataset: DuckDB 2,000,008 Rows</span>
           </div>
         </div>
 
         {/* Manual Parameter Builder Form (Horizontal Grid) */}
-        <form onSubmit={handleAddManualParameter} className="p-4 sm:p-5 space-y-3.5 text-xs">
+        <form onSubmit={handleSubmitBuilder} className="p-4 sm:p-5 space-y-3.5 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
             {/* 1. Parameter Name */}
             <div className="lg:col-span-3">
@@ -412,13 +847,13 @@ export default function ForensicParametersView({
                 onChange={(e) => setNewRuleField(e.target.value)}
                 className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none transition-colors cursor-pointer"
               >
-                <option value="Narration">Narration (Remarks)</option>
-                <option value="Amount_INR">Amount_INR (Amount)</option>
-                <option value="IP_Address">IP_Address (IP / VPN)</option>
-                <option value="Device_Type">Device_Type (Bot / OS)</option>
-                <option value="Receiver_IFSC">Receiver_IFSC (Bank)</option>
-                <option value="Sender_IFSC">Sender_IFSC (Bank)</option>
-                <option value="Payment_Mode">Payment_Mode (UPI/IMPS)</option>
+                <option value="Narration">Narration (Remarks / MoP)</option>
+                <option value="Amount_INR">Amount_INR (Amount / Value)</option>
+                <option value="IP_Address">IP_Address (Subnet / Proxy)</option>
+                <option value="Device_Type">Device_Type (Bot / OS / VM)</option>
+                <option value="Payment_Mode">Payment_Mode (UPI/IMPS/RTGS)</option>
+                <option value="Receiver_IFSC">Receiver_IFSC (Target Bank)</option>
+                <option value="Sender_IFSC">Sender_IFSC (Source Bank)</option>
               </select>
             </div>
 
@@ -437,13 +872,14 @@ export default function ForensicParametersView({
                     <option value=">">&gt; (Greater than)</option>
                     <option value=">=">&gt;= (Greater or equal)</option>
                     <option value="<">&lt; (Less than)</option>
+                    <option value="<=">&lt;= (Less or equal)</option>
                     <option value="==">== (Exact amount)</option>
                   </>
                 ) : (
                   <>
-                    <option value="contains">contains (Sub-string)</option>
-                    <option value="starts_with">starts_with (Prefix)</option>
-                    <option value="equals">equals (Exact match)</option>
+                    <option value="contains">contains (Sub-string match)</option>
+                    <option value="starts_with">starts_with (Prefix match)</option>
+                    <option value="equals">equals (Exact string match)</option>
                   </>
                 )}
               </select>
@@ -456,30 +892,34 @@ export default function ForensicParametersView({
               </label>
               <input
                 type="text"
-                placeholder={newRuleField === "Amount_INR" ? "e.g. 5000000" : 'e.g. "CRYPTO" or "194."'}
+                placeholder={
+                  newRuleField === "Amount_INR"
+                    ? "e.g. 5000000"
+                    : newRuleField === "IP_Address"
+                    ? "e.g. 185. or 194."
+                    : newRuleField === "Device_Type"
+                    ? "e.g. Linux_Script"
+                    : 'e.g. "ARREST", "BINANCE"'
+                }
                 value={newRuleValue}
                 onChange={(e) => setNewRuleValue(e.target.value)}
-                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs font-mono font-bold text-[#D96B27] focus:outline-none transition-colors"
+                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2.5 text-xs font-mono text-[#2C2623] focus:outline-none transition-colors"
               />
             </div>
 
-            {/* 5. Points */}
+            {/* 5. Points Weight (Free Will Input) */}
             <div className="lg:col-span-1">
               <label className="text-[11px] font-bold text-[#2C2623] block mb-1">
-                Points
+                Points (+/-)
               </label>
-              <select
+              <input
+                type="number"
+                min="0"
+                max="100"
                 value={newRulePoints}
-                onChange={(e) => setNewRulePoints(Number(e.target.value))}
-                className="w-full h-8.5 bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm px-1.5 text-xs font-mono font-bold text-[#D96B27] focus:outline-none cursor-pointer"
-              >
-                <option value={5}>+5</option>
-                <option value={10}>+10</option>
-                <option value={15}>+15</option>
-                <option value={20}>+20</option>
-                <option value={25}>+25</option>
-                <option value={30}>+30</option>
-              </select>
+                onChange={(e) => setNewRulePoints(Number(e.target.value) || 0)}
+                className="w-full h-8.5 bg-[#FAF6EE] focus:bg-white border border-[#D4CEBF] focus:border-[#D96B27] rounded-sm px-2 text-xs font-mono font-bold text-[#D96B27] text-center focus:outline-none"
+              />
             </div>
 
             {/* 6. Action */}
@@ -499,14 +939,43 @@ export default function ForensicParametersView({
             </div>
           </div>
 
-          <div className="flex justify-end pt-1">
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-5 py-2 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Parameter to Engine</span>
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-[#F0EAE1]">
+            <div className="flex items-center gap-2 text-[11px] font-mono text-[#746D65]">
+              <span>Quick Points:</span>
+              {[10, 15, 20, 25, 30, 35, 50].map((pt) => (
+                <button
+                  key={pt}
+                  type="button"
+                  onClick={() => setNewRulePoints(pt)}
+                  className={`px-1.5 py-0.5 rounded-xs text-[10px] cursor-pointer transition-colors ${
+                    Number(newRulePoints) === pt
+                      ? "bg-[#D96B27] text-white font-bold"
+                      : "bg-[#FAF6EE] hover:bg-[#EAE4D8] text-[#2C2623] border border-[#D4CEBF]"
+                  }`}
+                >
+                  +{pt}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {editingRuleId && (
+                <button
+                  type="button"
+                  onClick={resetBuilderForm}
+                  className="px-4 py-2 rounded-sm bg-white hover:bg-[#FAF6EE] border border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                type="submit"
+                className="flex items-center gap-2 px-5 py-2 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
+              >
+                {editingRuleId ? <CheckCheck className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                <span>{editingRuleId ? "Update Parameter (Save Changes)" : "Add Parameter to Engine"}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -537,6 +1006,7 @@ export default function ForensicParametersView({
               <option value={0}>All Amounts (₹0+)</option>
               <option value={50000}>₹50K+ (Smurfing Cutoff)</option>
               <option value={100000}>₹1 Lakh+ (Significant Loss)</option>
+              <option value={250000}>₹2.5 Lakh+ (Digital Arrest Median)</option>
               <option value={5000000}>₹50 Lakh+ (Whales Only)</option>
               <option value={10000000}>₹1 Crore+ (Severe Outliers)</option>
             </select>
@@ -635,7 +1105,6 @@ export default function ForensicParametersView({
 
         {/* Parameters List Rows (Full Width) */}
         <div className="divide-y divide-[#EFEAE1]">
-          
           {/* CORE PARAMETER P1 */}
           {(filterCategory === "ALL" || filterCategory === "CORE") && (
             <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAF6EE]/40 transition-colors">
@@ -654,19 +1123,29 @@ export default function ForensicParametersView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
                   <input
                     type="number"
                     min="0"
-                    max="50"
+                    max="100"
                     value={formState.p1Weight}
                     onChange={(e) => setFormState({ ...formState, p1Weight: Number(e.target.value) || 0 })}
                     className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                   />
                   <span className="text-[11px] text-[#746D65] font-mono">pts</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleCloneCoreToCustom("P1", "Pass-Through Velocity", "Forwarding >= 85% funds in 15m", formState.p1Weight)}
+                  className="p-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#D96B27] hover:border-[#D96B27] transition-colors cursor-pointer"
+                  title="Clone to Custom Rules to freely edit conditions"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setFormState({ ...formState, p1Enabled: !formState.p1Enabled })}
@@ -700,19 +1179,29 @@ export default function ForensicParametersView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
                   <input
                     type="number"
                     min="0"
-                    max="50"
+                    max="100"
                     value={formState.p2Weight}
                     onChange={(e) => setFormState({ ...formState, p2Weight: Number(e.target.value) || 0 })}
                     className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                   />
                   <span className="text-[11px] text-[#746D65] font-mono">pts</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleCloneCoreToCustom("P2", "Fan-In Centrality", "Multiple victim accounts converging", formState.p2Weight)}
+                  className="p-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#D96B27] hover:border-[#D96B27] transition-colors cursor-pointer"
+                  title="Clone to Custom Rules to freely edit conditions"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setFormState({ ...formState, p2Enabled: !formState.p2Enabled })}
@@ -746,19 +1235,29 @@ export default function ForensicParametersView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
                   <input
                     type="number"
                     min="0"
-                    max="50"
+                    max="100"
                     value={formState.p3Weight}
                     onChange={(e) => setFormState({ ...formState, p3Weight: Number(e.target.value) || 0 })}
                     className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                   />
                   <span className="text-[11px] text-[#746D65] font-mono">pts</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleCloneCoreToCustom("P3", "Fan-Out Smurfing", "Slicing funds to 3-50 downstream accounts", formState.p3Weight)}
+                  className="p-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#D96B27] hover:border-[#D96B27] transition-colors cursor-pointer"
+                  title="Clone to Custom Rules to freely edit conditions"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setFormState({ ...formState, p3Enabled: !formState.p3Enabled })}
@@ -783,28 +1282,38 @@ export default function ForensicParametersView({
                 </span>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-bold text-[#2C2623] font-serif">Digital Footprint & Proxy Anomalies</h3>
+                    <h3 className="text-xs font-bold text-[#2C2623] font-serif">Cash-Out & Anomaly Markers</h3>
                     <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
                   </div>
                   <p className="text-[11px] text-[#746D65] mt-0.5">
-                    Foreign VPN/Proxy IPs (185/194 CIDR block) and automated headless script signatures.
+                    Terminal cashouts: ATM withdrawals, crypto exchange P2P off-ramps (USDT/Binance), or illegal hawala nodes.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
                   <input
                     type="number"
                     min="0"
-                    max="50"
+                    max="100"
                     value={formState.p4Weight}
                     onChange={(e) => setFormState({ ...formState, p4Weight: Number(e.target.value) || 0 })}
                     className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                   />
                   <span className="text-[11px] text-[#746D65] font-mono">pts</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleCloneCoreToCustom("P4", "Cash-Out & Crypto", "P2P Crypto or terminal cashout markers", formState.p4Weight)}
+                  className="p-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#D96B27] hover:border-[#D96B27] transition-colors cursor-pointer"
+                  title="Clone to Custom Rules to freely edit conditions"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setFormState({ ...formState, p4Enabled: !formState.p4Enabled })}
@@ -829,28 +1338,38 @@ export default function ForensicParametersView({
                 </span>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-bold text-[#2C2623] font-serif">Shared Infrastructure Cluster</h3>
+                    <h3 className="text-xs font-bold text-[#2C2623] font-serif">Shared IP & Device Cluster Anomaly</h3>
                     <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#EAE4D8] text-[#746D65]">CORE HEURISTIC</span>
                   </div>
                   <p className="text-[11px] text-[#746D65] mt-0.5">
-                    Shared device fingerprints or foreign proxy subnets clustered across multiple accounts.
+                    Operating from shared headless devices (Linux scripts/emulators) or foreign proxy IP subnets (185.x, 194.x).
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
                   <input
                     type="number"
                     min="0"
-                    max="50"
+                    max="100"
                     value={formState.p5Weight}
                     onChange={(e) => setFormState({ ...formState, p5Weight: Number(e.target.value) || 0 })}
                     className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                   />
                   <span className="text-[11px] text-[#746D65] font-mono">pts</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleCloneCoreToCustom("P5", "IP/Device Cluster", "Foreign IPs and automated devices", formState.p5Weight)}
+                  className="p-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#D96B27] hover:border-[#D96B27] transition-colors cursor-pointer"
+                  title="Clone to Custom Rules to freely edit conditions"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setFormState({ ...formState, p5Enabled: !formState.p5Enabled })}
@@ -884,19 +1403,29 @@ export default function ForensicParametersView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-[#746D65] font-mono">Weight:</span>
                   <input
                     type="number"
                     min="0"
-                    max="50"
+                    max="100"
                     value={formState.p6Weight}
                     onChange={(e) => setFormState({ ...formState, p6Weight: Number(e.target.value) || 0 })}
                     className="w-14 h-7 text-center bg-[#FAF6EE] border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                   />
                   <span className="text-[11px] text-[#746D65] font-mono">pts</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleCloneCoreToCustom("P6", "Burst Hold Time", "Burst outgoing transactions immediately upon receipt", formState.p6Weight)}
+                  className="p-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#D96B27] hover:border-[#D96B27] transition-colors cursor-pointer"
+                  title="Clone to Custom Rules to freely edit conditions"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setFormState({ ...formState, p6Enabled: !formState.p6Enabled })}
@@ -912,12 +1441,16 @@ export default function ForensicParametersView({
             </div>
           )}
 
-          {/* CUSTOM USER-ADDED PARAMETERS (P7, P8, P9... P20+) */}
+          {/* CUSTOM USER-ADDED PARAMETERS (P7, P8, P9... P25+) */}
           {(filterCategory === "ALL" || filterCategory === "CUSTOM") &&
             (formState.customRules || []).map((rule, idx) => (
               <div
                 key={rule.id || idx}
-                className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 bg-[#FAF6EE]/20 hover:bg-[#FAF6EE]/60 transition-colors"
+                className={`p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 transition-colors ${
+                  editingRuleId === rule.id
+                    ? "bg-[#FFF9F5] border-l-4 border-[#D96B27]"
+                    : "bg-[#FAF6EE]/20 hover:bg-[#FAF6EE]/60"
+                }`}
               >
                 <div className="flex items-start gap-3">
                   <span className="w-7 h-7 rounded-sm bg-[#D96B27]/10 border border-[#D96B27] flex items-center justify-center font-mono font-bold text-xs text-[#D96B27] shrink-0">
@@ -929,11 +1462,13 @@ export default function ForensicParametersView({
                       <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#E0E7FF] text-[#4338CA]">
                         CUSTOM RULE
                       </span>
-                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#FEF3C7] text-[#D97706]">
-                        {rule.action}
-                      </span>
+                      {editingRuleId === rule.id && (
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-xs bg-[#D96B27] text-white">
+                          NOW EDITING
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] font-mono text-[#746D65] mt-1">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-[#746D65] mt-1">
                       <span>Field: <strong className="text-[#2C2623]">{rule.field}</strong></span>
                       <span>•</span>
                       <span>Condition: <strong className="text-[#2C2623]">{rule.operator}</strong></span>
@@ -943,24 +1478,53 @@ export default function ForensicParametersView({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Inline Action Selector (Free Will Edit) */}
+                  <select
+                    value={rule.action}
+                    onChange={(e) => handleInlineActionChange(idx, e.target.value)}
+                    className="h-7 bg-white border border-[#D4CEBF] rounded-sm px-1.5 text-[10px] font-mono font-semibold text-[#2C2623] focus:outline-none cursor-pointer"
+                  >
+                    <option value="FLAG_SUSPICIOUS">Flag Mule</option>
+                    <option value="AUTO_FREEZE">Lien Freeze</option>
+                    <option value="FILTER_MATCH">Filter Only</option>
+                  </select>
+
+                  {/* Inline Points Editor (Free Will Edit) */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-[#746D65] font-mono">Points:</span>
+                    <span className="text-[11px] text-[#746D65] font-mono">Pts:</span>
                     <input
                       type="number"
                       min="0"
-                      max="50"
+                      max="100"
                       value={rule.points || 20}
-                      onChange={(e) => {
-                        const updated = [...(formState.customRules || [])];
-                        updated[idx] = { ...updated[idx], points: Number(e.target.value) || 0 };
-                        setFormState({ ...formState, customRules: updated });
-                      }}
+                      onChange={(e) => handleInlinePointsChange(idx, e.target.value)}
                       className="w-14 h-7 text-center bg-white border border-[#D4CEBF] rounded-sm text-xs font-mono font-bold text-[#D96B27]"
                     />
-                    <span className="text-[11px] text-[#746D65] font-mono">pts</span>
                   </div>
 
+                  {/* Edit in Builder Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(rule)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#D96B27] hover:border-[#D96B27] text-xs font-mono cursor-pointer transition-colors"
+                    title="Load into Builder to customize name, field, condition, value, and action"
+                  >
+                    <Pencil className="w-3 h-3 text-[#D96B27]" />
+                    <span>Edit</span>
+                  </button>
+
+                  {/* Duplicate / Clone Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateRule(rule)}
+                    className="p-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#746D65] hover:text-[#2C2623] hover:bg-[#FAF6EE] transition-colors cursor-pointer"
+                    title="Clone / Duplicate this parameter"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+
+                  {/* Toggle Active / Off */}
                   <button
                     type="button"
                     onClick={() => handleToggleCustomRule(idx)}
@@ -973,6 +1537,7 @@ export default function ForensicParametersView({
                     {rule.enabled ? "ACTIVE" : "OFF"}
                   </button>
 
+                  {/* Delete Button */}
                   <button
                     type="button"
                     onClick={() => handleDeleteCustomRule(idx)}
@@ -988,20 +1553,12 @@ export default function ForensicParametersView({
           {/* Empty state for custom filter */}
           {filterCategory === "CUSTOM" && (formState.customRules || []).length === 0 && (
             <div className="p-8 text-center text-xs text-[#746D65] font-mono">
-              No custom parameters created yet. Use the Add Forensic Parameter section above or select a 1-click preset.
+              <p>No custom parameters added yet.</p>
+              <p className="mt-1 text-[#9E968D]">
+                Use the "Add Forensic Parameter" form above or choose from the 25+ real dataset presets.
+              </p>
             </div>
           )}
-        </div>
-
-        {/* Bottom Guardrail Info Banner */}
-        <div className="p-3 bg-[#FAF6EE] border-t border-[#E8E2D5] flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1.5 text-[11px] text-[#059669] font-medium">
-            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-            <span>Two-Signal Merchant Protection Active: suppresses false-positives for genuine vendors</span>
-          </div>
-          <span className="font-mono text-[11px] font-bold text-[#2C2623]">
-            Total Active Weight: {totalPoints} pts
-          </span>
         </div>
       </div>
     </div>
