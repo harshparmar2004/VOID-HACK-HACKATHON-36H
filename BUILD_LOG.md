@@ -265,3 +265,28 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - Burst fan-in scores 0 in the edge score: the ZP1 cut-offs are null in the profile, so 20 of the 100 points cannot be earned on this file.
 - Every victim on this file has one payment, so "highest-scoring payment among several" is untested on real data.
 - The edge-score part definitions are my reading of the one-line step 0; they are written out in the `config.yaml` comment for review.
+
+## 2026-10-02 — Step 6 batch B1: API skeleton + status, victims, mules, entities
+
+**Step** — read-only FastAPI layer over `data\case.duckdb` (API_CONTRACT.md rows B1). No table, column or row written.
+
+**Files** — new `api\`: `main.py`, `middleware.py`, `deps.py`, `schemas\`, `routers\`, `services\`, `repositories\` (status, victims, mules, entities, profiles); new `audits\check_api.py`; `requirements.txt` (+ fastapi 0.142.2, uvicorn 0.54.0, installed in `.venv`).
+
+**Key names** — `get_con` (read_only=True per request, closed in finally), `get_profile` / `Profile`, `db_path` (`ABHEDYA_DB` override), `ApiModel` (extra fields forbidden), `fetch_dicts`, `TIMING_HEADER` = `X-Process-Time-Ms`, `ALLOWED_ORIGINS`; errors are `{detail, status, path[, errors]}`.
+
+**Endpoints** — GET `/api/status`, `/api/victims`, `/api/detected-victims` (same handler), `/api/mules?limit,role_filter,min_risk,min_amount,bank_filter`, `/api/entities?limit,bank_filter,min_amount`.
+- Mules = `is_flagged` accounts of the active profile, sorted by `final_index` desc. `role_filter` takes `L2` or the UI label `L2_DISTRIBUTOR`; `min_risk` on `final_index`; `min_amount` on total money received; `bank_filter` on `accounts.bank`.
+- Money is returned in rupees (paise / 100). Totals and distinct senders / receivers are aggregated from `tx` in SQL.
+- Victim `amount` / `timestamp` = the victim's proven `VICTIM_L1` links (null if none).
+
+**Results** — `audits\check_api.py` PASSED, 104 checks, 3.2 s: counts equal SQL written in the audit (flagged 1073; L1 129, L2 559, L3 385; victims 300; accounts 24873; cells 129); every response passes its schema; 404 / 422 are clean JSON; CORS only for `http://localhost:5173`; no non-GET route; database size and modified time unchanged, no `.wal`.
+- Timings: status 46 ms, victims 35 ms, mules 60-100 ms, entities about 120 ms. Real uvicorn start smoke-tested.
+
+**Null fields (UI expects, tables lack)** — mules: `hop`, `p1_score`..`p6_score` (ours are in `param_points`); entities `bank_stats[].name` (`bank_directory` is empty), so `bank` is the 4-letter code everywhere.
+
+**Deviations / open items**
+- fastapi and uvicorn were not installed; installed from PyPI (one network call by pip, none in code).
+- `/victims` returns a bare list (like `/mules`); the files I was allowed to read do not show which shape the UI expects — check in Step 7.
+- `high_risk_mules` = flagged accounts (1073); the UI's own ">= 90" cut is not an engine concept. `bands` is returned beside it.
+- `/entities`: `type` is a label of `scores.role` ("Not flagged" when role is null), `risk` = "<BAND> (<final_index>)", `min_amount` applies to the larger of money in / money out; `bank_stats` `count` / `share` are numbers, not the UI's formatted strings.
+- UI role mapping sends UNCLASSIFIED_MULE to "L1_COLLECTOR" (none on this file) — fix in Step 7.
