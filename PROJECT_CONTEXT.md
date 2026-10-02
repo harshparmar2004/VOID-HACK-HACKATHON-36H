@@ -231,8 +231,13 @@ Display example: `Final 84 (Mule 90, Trust 14) · Role L2 confirmed (L1 31, L2 8
 - **NULL = not applicable**, never 0: send-only accounts have no inflow features, receive-only accounts
   have no outflow features, flow features are NULL when no inflow was ever forwarded. Scoring: a NULL
   feature gives 0 points and never counts toward the two-signal rule.
-- **Allocation:** each outflow goes to the earliest inflow that still has remaining amount (re-offer to the
-  next inflow if the earliest is full); never drop it just because the earliest inflow is full.
+- **Allocation → episodes:** mules may forward out of order (verified: an L2 receives ₹65,008 then ₹38,052,
+  and forwards 0.96 × ₹38,052 first, then 0.96 × ₹65,008). One-to-one earliest-first allocation drops such
+  outflows. Rule: group inflows whose forwarding windows overlap into one **episode**; allocate outflows inside
+  the episode window to the episode as a whole (an outflow may span several inflows); compute
+  `pass_through_share` and `commission_ratio_median` from episode totals (out ÷ in per episode, never > 1.0).
+  `split_count_median` = distinct receivers per episode ÷ inflows in it, rounded (or per inflow when the
+  episode has one inflow).
 - **median_hold_hours:** NULL when the account never forwards (no imputed end-of-data timestamp), so sinks
   can never earn balance-retention trust.
 - **device_consistency:** spec boolean — 1 only if one device family AND only domestic IPs, else 0
@@ -249,6 +254,24 @@ Display example: `Final 84 (Mule 90, Trust 14) · Role L2 confirmed (L1 31, L2 8
   **MP6 = full points if send-only or receive-only, else 0** (no reciprocity component).
 - `features.py` takes an optional `--db` path (default data\case.duckdb) so reviewers can run it on a copy.
 - Zero-weight extras still to add: `burst_fan_in`, `ip_churn`; `in_cycle` stays NULL until the graph step.
+- **More closed gates on this dataset:** normal accounts' median `recurring_sender_share` = 0 and median
+  `median_hold_hours` = 0.5 h, so **T6 (recurring inflows) and T3 (balance retention) carry no signal here**.
+  Gate rule: T3 informative only if the normal-population median hold ≥ 6 h; T6 only if the normal median
+  recurring share ≥ 0.05. When closed, their weight moves to T1 / T4 / T5 proportionally. On this dataset
+  Trust rests on T1 (activity spread), T4 (organic amounts) and T5 (clean neighbourhood).
+- **Forbidden (new fingerprint):** the generator writes each mule inflow and its forward on ADJACENT CSV rows
+  (e.g. tx_key 1676 → 1677). Never use tx_key order/adjacency to link transactions; match by time and amount only.
+- **Forbidden (verified 2 Oct): file position.** ALL injected rows sit in one block at the START of the CSV:
+  tx_key 1–2,954 = the 300 victim payments + 2,654 mule transfers; every normal row has tx_key ≥ 2,955.
+  Never use tx_key / row position in any way for scoring, roles, links, tracing, sampling or demos
+  (tx_key is only a unique key; tie-breaks on it are allowed but must not change results).
+- **Forbidden: IP prefix as a role label.** 185.x (1,327 rows) and 194.x (1,327 rows) each map to one transfer
+  type; use "foreign IP" as one combined flag only, never 185 vs 194 to tell L1→L2 from L2→L3.
+- **Checked, NOT fingerprints:** Transaction_ID number ranges (overlap fully), amount decimal precision
+  (~10% one-decimal in all groups), timestamp seconds (~2% at :00 in all groups).
+- **Real signal, not decisive:** mule transfers are rarely under ₹1,000 (1.7% vs 53.9% of normal rows) but
+  small chains exist (smallest mule transfer ₹96.85; one L2 forwarded ₹251 → ₹241). MP8 stays a 5-point
+  supporting signal; amount must never decide a flag or a role on its own.
 
 ### 4.4 Victim trace
 
