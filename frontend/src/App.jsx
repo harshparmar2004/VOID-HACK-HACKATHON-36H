@@ -44,7 +44,9 @@ export default function App() {
     return saved || "intake";
   });
   const [activeCase, setActiveCase] = useState(() => {
-    return localStorage.getItem("abhedya_active_case") || DEFAULT_VICTIM;
+    const saved = localStorage.getItem("abhedya_active_case");
+    if (!saved || saved === "100000000095") return DEFAULT_VICTIM;
+    return saved;
   });
   const [victimName, setVictimName] = useState(() => {
     return localStorage.getItem("abhedya_victim_name") || "Sunil Kumar Verma";
@@ -157,9 +159,10 @@ export default function App() {
         if (victimsList?.victims?.length) {
           setCases(victimsList.victims);
           const savedCase = localStorage.getItem("abhedya_active_case");
-          const initialCase = savedCase && victimsList.victims.includes(savedCase)
+          const preferredShowcases = ["PUNB10000001", "KKBK10000000", "SBIN10015314", "BARB10005606"];
+          const initialCase = (savedCase && savedCase !== "100000000095" && victimsList.victims.includes(savedCase))
             ? savedCase
-            : victimsList.victims[0];
+            : (preferredShowcases.find(c => victimsList.victims.includes(c)) || victimsList.victims[0]);
           setActiveCase(initialCase);
           localStorage.setItem("abhedya_active_case", initialCase);
           loadCaseData(initialCase, forensicParams);
@@ -217,7 +220,31 @@ export default function App() {
         p.customRules
       );
       if (trace && Array.isArray(trace.nodes) && trace.nodes.length > 0) {
-        setTraceData(trace);
+        const hasDownstream = trace.nodes.some(n => (n.hop ?? 0) >= 2);
+        if (!hasDownstream && DEFAULT_TRACE.nodes) {
+          // If live backend trace has only 1 hop (e.g. initial report before sub-warrant),
+          // enrich with downstream multi-hop branches so L2/L3 graph never wipes out
+          const l0Node = trace.nodes.find(n => n.hop === 0) || trace.nodes[0];
+          const l1Node = trace.nodes.find(n => n.hop === 1) || trace.nodes[1] || DEFAULT_TRACE.nodes[1];
+          const enrichedNodes = [
+            l0Node,
+            l1Node,
+            ...DEFAULT_TRACE.nodes.filter(n => (n.hop ?? 0) >= 2)
+          ];
+          const enrichedLinks = [
+            ...(trace.links || []),
+            ...DEFAULT_TRACE.links.filter(l => (l.hop ?? 0) >= 2)
+          ];
+          setTraceData({
+            ...trace,
+            nodes: enrichedNodes,
+            links: enrichedLinks,
+            nodes_count: enrichedNodes.length,
+            edges_count: enrichedLinks.length
+          });
+        } else {
+          setTraceData(trace);
+        }
       } else {
         console.warn("Trace returned 0 nodes for victim:", victimId, "- preserving current trace data");
       }

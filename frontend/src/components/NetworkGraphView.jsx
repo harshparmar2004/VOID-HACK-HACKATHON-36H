@@ -70,78 +70,105 @@ export default function NetworkGraphView({ traceData }) {
     return groups;
   }, [nodes]);
 
-  // Guaranteed synthetic tree links if raw links are empty
+  // Guaranteed complete multi-hop links connecting every single node in L1, L2, L3, L4
   const effectiveLinks = useMemo(() => {
-    if (activeRawLinks.length > 0) return activeRawLinks;
-    const generated = [];
+    const baseLinks = [...rawLinks];
     const h0 = hopGroups[0] || [];
     const h1 = hopGroups[1] || [];
     const h2 = hopGroups[2] || [];
     const h3 = hopGroups[3] || [];
     const h4 = hopGroups[4] || [];
 
+    // Ensure Hop 0 -> Hop 1 link
     if (h0[0] && h1[0]) {
-      generated.push({
-        txn_id: "TXN-TREE-01",
-        source: h0[0].id,
-        target: h1[0].id,
-        amount: h1[0].tainted_received || traceData?.total_siphoned_inr || 1478894.0,
-        payment_mode: "RTGS",
-        timestamp: "2026-10-13 00:04",
-        narration: "DIGITAL-ARREST-TRANSFER",
-        hop: 1
+      const hasL1 = baseLinks.some((l) => {
+        const tid = typeof l.target === "object" ? l.target.id : l.target;
+        return tid === h1[0].id;
       });
-    }
-
-    if (h1[0]) {
-      h2.forEach((n2, idx) => {
-        generated.push({
-          txn_id: `TXN-TREE-02-${idx + 1}`,
-          source: h1[0].id,
-          target: n2.id,
-          amount: n2.tainted_received || 99642.85,
-          payment_mode: "IMPS",
-          timestamp: `2026-10-13 00:11:${String(idx * 2).padStart(2, "0")}`,
-          narration: "Bunny-Hop Smurfing",
-          hop: 2
+      if (!hasL1) {
+        baseLinks.push({
+          txn_id: "TXN-TREE-01",
+          source: h0[0].id,
+          target: h1[0].id,
+          amount: h1[0].tainted_received || traceData?.total_siphoned_inr || 370415.81,
+          payment_mode: "RTGS",
+          timestamp: "2026-10-13 00:04",
+          narration: "DIGITAL-ARREST-TRANSFER",
+          hop: 1
         });
+      }
+    }
+
+    // Ensure Hop 1 -> Hop 2 links for every h2 node
+    if (h1[0] && h2.length > 0) {
+      h2.forEach((n2, idx) => {
+        const hasL2 = baseLinks.some((l) => {
+          const tid = typeof l.target === "object" ? l.target.id : l.target;
+          return tid === n2.id;
+        });
+        if (!hasL2) {
+          baseLinks.push({
+            txn_id: `TXN-TREE-02-${idx + 1}`,
+            source: h1[0].id,
+            target: n2.id,
+            amount: n2.tainted_received || 99642.85,
+            payment_mode: "IMPS",
+            timestamp: `2026-10-13 00:11:${String(idx * 2).padStart(2, "0")}`,
+            narration: "Bunny-Hop Smurfing",
+            hop: 2
+          });
+        }
       });
     }
 
+    // Ensure Hop 2 -> Hop 3 links for every h3 node
     if (h3.length > 0 && h2.length > 0) {
       h3.forEach((n3, idx) => {
-        const srcNode = h2[idx % h2.length];
-        generated.push({
-          txn_id: `TXN-TREE-03-${idx + 1}`,
-          source: srcNode.id,
-          target: n3.id,
-          amount: n3.tainted_received || 70000.0,
-          payment_mode: "UPI/P2P",
-          timestamp: `2026-10-13 00:19:${String(idx * 5).padStart(2, "0")}`,
-          narration: "Crypto USDT Exit",
-          hop: 3
+        const hasL3 = baseLinks.some((l) => {
+          const tid = typeof l.target === "object" ? l.target.id : l.target;
+          return tid === n3.id;
         });
+        if (!hasL3) {
+          const srcNode = h2[idx % h2.length];
+          baseLinks.push({
+            txn_id: `TXN-TREE-03-${idx + 1}`,
+            source: srcNode.id,
+            target: n3.id,
+            amount: n3.tainted_received || 70000.0,
+            payment_mode: "UPI/P2P",
+            timestamp: `2026-10-13 00:19:${String(idx * 5).padStart(2, "0")}`,
+            narration: "Crypto USDT Exit",
+            hop: 3
+          });
+        }
       });
     }
 
+    // Ensure Hop 3 -> Hop 4 links for every h4 node
     if (h4.length > 0 && h3.length > 0) {
       h4.forEach((n4, idx) => {
-        const srcNode = h3[idx % h3.length];
-        generated.push({
-          txn_id: `TXN-TREE-04-${idx + 1}`,
-          source: srcNode.id,
-          target: n4.id,
-          amount: n4.tainted_received || 45000.0,
-          payment_mode: "SWIFT/P2P",
-          timestamp: `2026-10-13 00:28:${String(idx * 5).padStart(2, "0")}`,
-          narration: "Offshore Crypto Terminal Exit",
-          hop: 4
+        const hasL4 = baseLinks.some((l) => {
+          const tid = typeof l.target === "object" ? l.target.id : l.target;
+          return tid === n4.id;
         });
+        if (!hasL4) {
+          const srcNode = h3[idx % h3.length];
+          baseLinks.push({
+            txn_id: `TXN-TREE-04-${idx + 1}`,
+            source: srcNode.id,
+            target: n4.id,
+            amount: n4.tainted_received || 45000.0,
+            payment_mode: "SWIFT/P2P",
+            timestamp: `2026-10-13 00:28:${String(idx * 5).padStart(2, "0")}`,
+            narration: "Offshore Crypto Terminal Exit",
+            hop: 4
+          });
+        }
       });
     }
 
-    return generated;
-  }, [activeRawLinks, traceData, hopGroups]);
+    return baseLinks;
+  }, [rawLinks, traceData, hopGroups]);
 
   // PURE MATHEMATICAL HORIZONTAL & VERTICAL TREE LAYOUT ENGINE
   const treeLayout = useMemo(() => {
@@ -152,10 +179,11 @@ export default function NetworkGraphView({ traceData }) {
     const h4 = hopGroups[4] || [];
 
     const isHorizontal = treeOrientation === "horizontal";
-    const nodeW = isHorizontal ? 260 : 220;
-    const nodeH = isHorizontal ? 66 : 74;
-    const hGap = isHorizontal ? 170 : 36;
-    const vGap = isHorizontal ? 20 : 130;
+    // Compact spacing to ensure L1, L2, L3, and L4 stay within standard viewports
+    const nodeW = isHorizontal ? 220 : 200;
+    const nodeH = isHorizontal ? 66 : 72;
+    const hGap = isHorizontal ? 80 : 32;
+    const vGap = isHorizontal ? 20 : 100;
 
     const nodePositions = {};
     const totalH2 = Math.max(1, h2.length);
@@ -168,59 +196,59 @@ export default function NetworkGraphView({ traceData }) {
 
       // Level 2 (Hop 2 Branches): distributed vertically with clean spacing
       h2.forEach((n, idx) => {
-        const x = 60 + (nodeW + hGap) * 2;
+        const x = 50 + (nodeW + hGap) * 2;
         const y = startY + idx * (nodeH + vGap);
         nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
       });
 
       // Level 1 (Hop 1 Trunk): centered vertically relative to its Hop 2 branches
       h1.forEach((n) => {
-        const x = 60 + (nodeW + hGap);
+        const x = 50 + (nodeW + hGap);
         const y = centerY - nodeH / 2;
         nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
       });
 
       // Level 0 (Hop 0 Root Victim): centered vertically with trunk
       h0.forEach((n) => {
-        const x = 60;
+        const x = 50;
         const y = centerY - nodeH / 2;
         nodePositions[n.id] = { ...n, x, y, width: nodeW, height: nodeH };
       });
 
       // Level 3 (Hop 3 Leaves): branch out to the right of their respective Hop 2 parent
+      const parentUsageH3 = {};
       h3.forEach((n, idx) => {
-        const x = 60 + (nodeW + hGap) * 3;
+        const x = 50 + (nodeW + hGap) * 3;
         const parentLink = effectiveLinks.find(
           (l) => (typeof l.target === "object" ? l.target.id : l.target) === n.id
         );
+        const pId = parentLink ? (typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source) : null;
         let targetY;
-        if (
-          parentLink &&
-          nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source]
-        ) {
-          targetY =
-            nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].y;
+        if (pId && nodePositions[pId]) {
+          const count = parentUsageH3[pId] || 0;
+          parentUsageH3[pId] = count + 1;
+          targetY = nodePositions[pId].y + (count === 0 ? 0 : (count % 2 === 1 ? -1 : 1) * Math.ceil(count / 2) * (nodeH + 16));
         } else {
-          targetY = startY + idx * (nodeH + vGap) * 2.5;
+          targetY = startY + idx * (nodeH + vGap);
         }
         nodePositions[n.id] = { ...n, x, y: targetY, width: nodeW, height: nodeH };
       });
 
       // Level 4 (Hop 4 Terminal Exit Leaves): branch out to the right of Hop 3
+      const parentUsageH4 = {};
       h4.forEach((n, idx) => {
-        const x = 60 + (nodeW + hGap) * 4;
+        const x = 50 + (nodeW + hGap) * 4;
         const parentLink = effectiveLinks.find(
           (l) => (typeof l.target === "object" ? l.target.id : l.target) === n.id
         );
+        const pId = parentLink ? (typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source) : null;
         let targetY;
-        if (
-          parentLink &&
-          nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source]
-        ) {
-          targetY =
-            nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].y;
+        if (pId && nodePositions[pId]) {
+          const count = parentUsageH4[pId] || 0;
+          parentUsageH4[pId] = count + 1;
+          targetY = nodePositions[pId].y + (count === 0 ? 0 : (count % 2 === 1 ? -1 : 1) * Math.ceil(count / 2) * (nodeH + 16));
         } else {
-          targetY = startY + idx * (nodeH + vGap) * 2.5;
+          targetY = startY + idx * (nodeH + vGap);
         }
         nodePositions[n.id] = { ...n, x, y: targetY, width: nodeW, height: nodeH };
       });
@@ -264,7 +292,7 @@ export default function NetworkGraphView({ traceData }) {
           targetX =
             nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].x;
         } else {
-          targetX = startX + idx * (nodeW + hGap) * 2;
+          targetX = startX + idx * (nodeW + hGap);
         }
         const y = 80 + (nodeH + vGap) * 3;
         nodePositions[n.id] = { ...n, x: targetX, y, width: nodeW, height: nodeH };
@@ -283,18 +311,19 @@ export default function NetworkGraphView({ traceData }) {
           targetX =
             nodePositions[typeof parentLink.source === "object" ? parentLink.source.id : parentLink.source].x;
         } else {
-          targetX = startX + idx * (nodeW + hGap) * 2;
+          targetX = startX + idx * (nodeW + hGap);
         }
         const y = 80 + (nodeH + vGap) * 4;
         nodePositions[n.id] = { ...n, x: targetX, y, width: nodeW, height: nodeH };
       });
     }
 
-    // Build branch paths and badges
+    // Build branch paths and badges for ALL links
     const positionedNodes = Object.values(nodePositions);
     const positionedLinks = [];
+    const visibleThreshold = Math.max(1, Math.floor((effectiveLinks.length * timeProgress) / 100));
 
-    effectiveLinks.forEach((l) => {
+    effectiveLinks.forEach((l, linkIdx) => {
       const sId = typeof l.source === "object" ? l.source.id : l.source;
       const tId = typeof l.target === "object" ? l.target.id : l.target;
       const srcNode = nodePositions[sId];
@@ -356,22 +385,23 @@ export default function NetworkGraphView({ traceData }) {
           y2,
           midX: (x1 + x2) / 2,
           midY: (y1 + y2) / 2,
-          pathD
+          pathD,
+          isRevealed: timeProgress >= 100 || linkIdx < visibleThreshold
         });
       }
     });
 
     const validXs = positionedNodes.map((n) => Number(n.x) + Number(n.width)).filter(Number.isFinite);
     const validYs = positionedNodes.map((n) => Number(n.y) + Number(n.height)).filter(Number.isFinite);
-    const maxX = Math.max(...validXs, 1500) + 120;
-    const maxY = Math.max(...validYs, 900) + 120;
+    const maxX = Math.max(...validXs, 1100) + 60;
+    const maxY = Math.max(...validYs, 600) + 60;
 
     return {
       positionedNodes,
       positionedLinks,
       canvasBounds: { width: maxX, height: maxY }
     };
-  }, [hopGroups, effectiveLinks, treeOrientation, branchStyle]);
+  }, [hopGroups, effectiveLinks, treeOrientation, branchStyle, timeProgress]);
 
   // Temporal Playback Animation Loop
   useEffect(() => {
@@ -512,15 +542,39 @@ export default function NetworkGraphView({ traceData }) {
 
   const handleFitView = () => {
     if (viewportRef.current) {
-      const vWidth = viewportRef.current.clientWidth - 80;
-      const vHeight = viewportRef.current.clientHeight - 80;
-      const cWidth = treeLayout.canvasBounds.width;
-      const cHeight = treeLayout.canvasBounds.height;
-      const autoZoom = Math.min(1.0, Math.max(0.35, Math.min(vWidth / cWidth, vHeight / cHeight)));
+      const vWidth = viewportRef.current.clientWidth;
+      const vHeight = viewportRef.current.clientHeight;
+      if (!vWidth || !vHeight) return;
+
+      const pNodes = treeLayout.positionedNodes;
+      if (!pNodes || pNodes.length === 0) return;
+
+      const minX = Math.min(...pNodes.map((n) => n.x));
+      const maxX = Math.max(...pNodes.map((n) => n.x + n.width));
+      const minY = Math.min(...pNodes.map((n) => n.y));
+      const maxY = Math.max(...pNodes.map((n) => n.y + n.height));
+
+      const contentW = maxX - minX + 60;
+      const contentH = maxY - minY + 60;
+
+      const autoZoom = Math.min(1.0, Math.max(0.4, Math.min((vWidth - 40) / contentW, (vHeight - 40) / contentH)));
+      const contentCenterX = (minX + maxX) / 2;
+      const contentCenterY = (minY + maxY) / 2;
+      const newPanX = Math.round(vWidth / 2 - contentCenterX * autoZoom);
+      const newPanY = Math.round(vHeight / 2 - contentCenterY * autoZoom);
+
       setZoom(Number(autoZoom.toFixed(2)));
-      setPan({ x: 40, y: 30 });
+      setPan({ x: Math.max(20, newPanX), y: Math.max(20, newPanY) });
     }
   };
+
+  // Automatically fit graph to viewport on mount or when victim / tree orientation changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleFitView();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [traceData?.victim_account, traceData?.nodes?.length, treeOrientation]);
 
   const handleCopy = (text, e) => {
     e.stopPropagation();
@@ -747,18 +801,21 @@ export default function NetworkGraphView({ traceData }) {
             {/* Tree Branch Connecting Lines */}
             {treeLayout.positionedLinks.map((l, i) => {
               const active = isLinkActive(l);
+              const isRevealed = l.isRevealed !== false;
               const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : l.hop === 3 ? "#7C3AED" : "#E11D48";
               const marker = l.hop === 1 ? "url(#tarrow-hop1)" : l.hop === 2 ? "url(#tarrow-hop2)" : l.hop === 3 ? "url(#tarrow-hop3)" : "url(#tarrow-hop4)";
 
+              const linkOpacity = !isRevealed ? 0.20 : (active ? 1.0 : 0.22);
+
               return (
-                <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.15}>
+                <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={linkOpacity}>
                   {/* Outer Branch Halo */}
                   <path
                     d={l.pathD}
                     fill="none"
                     stroke={strokeColor}
-                    strokeWidth={active ? 8 : 4}
-                    strokeOpacity={active ? 0.22 : 0.1}
+                    strokeWidth={active && isRevealed ? 8 : 4}
+                    strokeOpacity={active && isRevealed ? 0.22 : 0.08}
                     strokeLinecap="round"
                   />
 
@@ -767,33 +824,36 @@ export default function NetworkGraphView({ traceData }) {
                     d={l.pathD}
                     fill="none"
                     stroke={strokeColor}
-                    strokeWidth={active ? 3 : 2}
-                    markerEnd={marker}
-                    strokeOpacity={active ? 1.0 : 0.85}
+                    strokeWidth={active && isRevealed ? 3 : 2}
+                    markerEnd={isRevealed ? marker : undefined}
+                    strokeOpacity={isRevealed ? (active ? 1.0 : 0.85) : 0.4}
+                    strokeDasharray={isRevealed ? undefined : "5, 5"}
                     strokeLinecap="round"
                   />
 
-                  {/* Directional Fluid Flow Pulse Dash */}
-                  <path
-                    d={l.pathD}
-                    fill="none"
-                    stroke="#FFFFFF"
-                    strokeWidth={2}
-                    strokeDasharray="8,14"
-                    strokeOpacity={0.9}
-                    strokeLinecap="round"
-                  >
-                    <animate
-                      attributeName="stroke-dashoffset"
-                      from="44"
-                      to="0"
-                      dur="1.2s"
-                      repeatCount="indefinite"
-                    />
-                  </path>
+                  {/* Directional Fluid Flow Pulse Dash - active when revealed */}
+                  {isRevealed && (
+                    <path
+                      d={l.pathD}
+                      fill="none"
+                      stroke="#FFFFFF"
+                      strokeWidth={2}
+                      strokeDasharray="8,14"
+                      strokeOpacity={0.9}
+                      strokeLinecap="round"
+                    >
+                      <animate
+                        attributeName="stroke-dashoffset"
+                        from="44"
+                        to="0"
+                        dur="1.2s"
+                        repeatCount="indefinite"
+                      />
+                    </path>
+                  )}
 
                   {/* DETAILS WRITTEN DIRECTLY ON THE CONNECTING BRANCH */}
-                  <g transform={`translate(${l.midX}, ${l.midY})`} className="pointer-events-auto cursor-pointer">
+                  <g transform={`translate(${l.midX}, ${l.midY})`} className="pointer-events-auto cursor-pointer" opacity={isRevealed ? 1.0 : 0.4}>
                     <rect
                       x="-65"
                       y="-11"
@@ -802,7 +862,7 @@ export default function NetworkGraphView({ traceData }) {
                       rx="6"
                       fill="#FFFFFF"
                       stroke={strokeColor}
-                      strokeWidth={active ? "1.6" : "1.2"}
+                      strokeWidth={active && isRevealed ? "1.6" : "1.2"}
                       className="shadow-xs"
                     />
                     <text

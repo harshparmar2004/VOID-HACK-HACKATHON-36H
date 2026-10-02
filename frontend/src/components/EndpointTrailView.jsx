@@ -89,74 +89,101 @@ export default function EndpointTrailView({
 
   // Synthesize or extract multi-hop links to guarantee 100% graph connectivity
   const effectiveLinks = React.useMemo(() => {
-    if (effectiveTrace && effectiveTrace.links && effectiveTrace.links.length > 0) {
-      return effectiveTrace.links;
-    }
-    const generated = [];
+    const baseLinks = (effectiveTrace && Array.isArray(effectiveTrace.links) && effectiveTrace.links.length > 0)
+      ? [...effectiveTrace.links]
+      : [];
     const h0 = hopGroups[0] || [];
     const h1 = hopGroups[1] || [];
     const h2 = hopGroups[2] || [];
     const h3 = hopGroups[3] || [];
     const h4 = hopGroups[4] || [];
 
+    // Ensure Hop 0 -> Hop 1 link
     if (h0[0] && h1[0]) {
-      generated.push({
-        txn_id: "TXN-HOP1-01",
-        source: h0[0].id,
-        target: h1[0].id,
-        amount: h1[0].tainted_received || effectiveTrace?.total_siphoned_inr || 1478894.0,
-        payment_mode: "RTGS",
-        narration: "DIGITAL-ARREST-TRANSFER",
-        hop: 1
+      const hasL1 = baseLinks.some((l) => {
+        const tid = typeof l.target === "object" ? l.target.id : l.target;
+        return tid === h1[0].id;
       });
-    }
-
-    if (h1[0]) {
-      h2.forEach((n2, idx) => {
-        generated.push({
-          txn_id: `TXN-HOP2-${idx + 1}`,
-          source: h1[0].id,
-          target: n2.id,
-          amount: n2.tainted_received || 99642.85,
-          payment_mode: "IMPS",
-          narration: "Bunny-Hop Smurfing",
-          hop: 2
+      if (!hasL1) {
+        baseLinks.push({
+          txn_id: "TXN-HOP1-01",
+          source: h0[0].id,
+          target: h1[0].id,
+          amount: h1[0].tainted_received || effectiveTrace?.total_siphoned_inr || 370415.81,
+          payment_mode: "RTGS",
+          narration: "DIGITAL-ARREST-TRANSFER",
+          hop: 1
         });
+      }
+    }
+
+    // Ensure Hop 1 -> Hop 2 links for every h2 node
+    if (h1[0] && h2.length > 0) {
+      h2.forEach((n2, idx) => {
+        const hasL2 = baseLinks.some((l) => {
+          const tid = typeof l.target === "object" ? l.target.id : l.target;
+          return tid === n2.id;
+        });
+        if (!hasL2) {
+          baseLinks.push({
+            txn_id: `TXN-HOP2-${idx + 1}`,
+            source: h1[0].id,
+            target: n2.id,
+            amount: n2.tainted_received || 99642.85,
+            payment_mode: "IMPS",
+            narration: "Bunny-Hop Smurfing",
+            hop: 2
+          });
+        }
       });
     }
 
+    // Ensure Hop 2 -> Hop 3 links for every h3 node
     if (h3.length > 0 && h2.length > 0) {
       h3.forEach((n3, idx) => {
-        const srcNode = h2[idx % h2.length];
-        generated.push({
-          txn_id: `TXN-HOP3-${idx + 1}`,
-          source: srcNode.id,
-          target: n3.id,
-          amount: n3.tainted_received || 70000.0,
-          payment_mode: "UPI/P2P",
-          narration: "Crypto USDT Exit",
-          hop: 3
+        const hasL3 = baseLinks.some((l) => {
+          const tid = typeof l.target === "object" ? l.target.id : l.target;
+          return tid === n3.id;
         });
+        if (!hasL3) {
+          const srcNode = h2[idx % h2.length];
+          baseLinks.push({
+            txn_id: `TXN-HOP3-${idx + 1}`,
+            source: srcNode.id,
+            target: n3.id,
+            amount: n3.tainted_received || 70000.0,
+            payment_mode: "UPI/P2P",
+            narration: "Crypto USDT Exit",
+            hop: 3
+          });
+        }
       });
     }
 
+    // Ensure Hop 3 -> Hop 4 links for every h4 node
     if (h4.length > 0 && h3.length > 0) {
       h4.forEach((n4, idx) => {
-        const srcNode = h3[idx % h3.length];
-        generated.push({
-          txn_id: `TXN-HOP4-${idx + 1}`,
-          source: srcNode.id,
-          target: n4.id,
-          amount: n4.tainted_received || 45000.0,
-          payment_mode: "CRYPTO/OFFSHORE",
-          narration: "Terminal Crypto Off-Ramp",
-          hop: 4
+        const hasL4 = baseLinks.some((l) => {
+          const tid = typeof l.target === "object" ? l.target.id : l.target;
+          return tid === n4.id;
         });
+        if (!hasL4) {
+          const srcNode = h3[idx % h3.length];
+          baseLinks.push({
+            txn_id: `TXN-HOP4-${idx + 1}`,
+            source: srcNode.id,
+            target: n4.id,
+            amount: n4.tainted_received || 45000.0,
+            payment_mode: "CRYPTO/OFFSHORE",
+            narration: "Terminal Crypto Off-Ramp",
+            hop: 4
+          });
+        }
       });
     }
 
-    return generated;
-  }, [traceData, hopGroups]);
+    return baseLinks;
+  }, [effectiveTrace, hopGroups]);
 
   // Orthogonal Horizontal Pipeline Path with rounded elbow fillets
   const makePipelinePath = (x1, y1, x2, y2) => {

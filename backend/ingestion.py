@@ -355,10 +355,11 @@ class IngestionEngine:
             "benchmark_passed": self.load_duration <= 60.0
         }
 
-    def detect_victims(self, limit=5):
+    def detect_victims(self, limit=10):
         """
         Identifies complainant victim accounts from the dataset.
-        Looks for accounts with substantial outflows to mules and minimal or zero incoming fraud funds.
+        Prioritizes accounts whose funds actively branched out into downstream L2 and L3 mule networks.
+        Filters out dead-end single-hop transfers.
         """
         try:
             res = self.con.execute("""
@@ -368,12 +369,17 @@ class IngestionEngine:
                     SUBSTRING(MAX(t.Sender_IFSC), 1, 4) AS bank,
                     COUNT(*) AS outgoing_txns,
                     ROUND(SUM(t.Amount_INR), 2) AS total_lost_inr,
+                    COUNT(DISTINCT l2.Receiver_Account) AS l2_count,
+                    COUNT(DISTINCT l3.Receiver_Account) AS l3_count,
                     MIN(t.Timestamp) AS first_loss_timestamp
                 FROM transactions t
                 LEFT JOIN transactions r ON t.Sender_Account = r.Receiver_Account
+                LEFT JOIN transactions l2 ON t.Receiver_Account = l2.Sender_Account
+                LEFT JOIN transactions l3 ON l2.Receiver_Account = l3.Sender_Account
                 WHERE r.Receiver_Account IS NULL
                 GROUP BY t.Sender_Account
-                ORDER BY total_lost_inr DESC
+                HAVING l2_count > 0
+                ORDER BY l3_count DESC, l2_count DESC, total_lost_inr DESC
                 LIMIT ?;
             """, [limit]).fetchall()
             
@@ -382,6 +388,7 @@ class IngestionEngine:
         except Exception as e:
             print(f"[-] Error detecting victims: {e}")
             return []
+
 
     def get_summary_stats(self):
         try:

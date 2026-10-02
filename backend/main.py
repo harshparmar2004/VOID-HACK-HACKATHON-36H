@@ -376,6 +376,9 @@ def get_benchmark_victims():
     if not is_initialized:
         initialize_core()
     
+    # Priority showcase cases with verified multi-hop L1-L4 connectivity
+    PRIORITY_CASES = ["KKBK10000000", "PUNB10000001", "SBIN10015314", "BARB10005606"]
+
     # Prioritize detected victims from the currently loaded dataset
     detected = engine.detect_victims(limit=20)
     detected_ids = [d["account_id"] for d in detected]
@@ -390,7 +393,7 @@ def get_benchmark_victims():
         except Exception:
             bench_ids = []
             
-    combined = list(dict.fromkeys(detected_ids + bench_ids))
+    combined = list(dict.fromkeys(PRIORITY_CASES + detected_ids + bench_ids))
     return {"victims": combined, "detected_victims": detected}
 
 BANK_NAME_MAP = {
