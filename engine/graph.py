@@ -173,10 +173,11 @@ def build(db: Path, force: bool = False, quiet: bool = False) -> dict:
 
 
 def load(db: Path) -> dict[str, np.ndarray]:
-    """Memory-map the arrays (building them first if they are stale)."""
+    """Load the arrays into memory (building them first if they are stale)."""
     build(db, quiet=True)
     gdir = graph_dir(db)
-    return {name: np.load(gdir / f"{name}.npy", mmap_mode="r") for name in ARRAYS}
+    return {name: np.load(gdir / f"{name}.npy") for name in ARRAYS}
+
 
 
 def main() -> None:

@@ -118,6 +118,17 @@ DETAIL_SQL = (
 _CONTEXTS: dict[tuple, "Context"] = {}
 
 
+def release_context():
+    """Explicitly release all in-memory contexts and force garbage collection."""
+    global _CONTEXTS
+    for ctx in list(_CONTEXTS.values()):
+        if hasattr(ctx, "g"):
+            ctx.g.clear()
+    _CONTEXTS.clear()
+    import gc
+    gc.collect()
+
+
 class Context:
     """Everything a trace needs, loaded once: graph arrays and profile lookups."""
 

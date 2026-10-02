@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from api import middleware, ui
 from api.routers import (
     benchmark, cases, deferred, entities, legal, mules, profiles, scanner, status, templates,
-    trace, transactions, victims)
+    trace, transactions, upload, victims)
 from api.services import legal as legal_service
 
 API_PREFIX = "/api"
@@ -47,6 +47,6 @@ middleware.install(app)
 
 for _router in (status.router, victims.router, mules.router, entities.router, trace.router,
                 profiles.router, transactions.router, scanner.router, templates.router,
-                benchmark.router, cases.router, legal.router, deferred.router):
+                benchmark.router, cases.router, legal.router, upload.router, deferred.router):
     app.include_router(_router, prefix=API_PREFIX)
 ui.install(app, API_PREFIX)        # last: the API routes match first

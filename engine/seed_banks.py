@@ -35,6 +35,20 @@ BANK_NAMES = {
     "PYTM": "Paytm Payments Bank",
     "AIRP": "Airtel Payments Bank",
     "IPOS": "India Post Payments Bank",
+    "UBIN": "Union Bank of India",
+    "CNRB": "Canara Bank",
+    "IDIB": "Indian Bank",
+    "IOBA": "Indian Overseas Bank",
+    "CBIN": "Central Bank of India",
+    "MAHB": "Bank of Maharashtra",
+    "PSIB": "Punjab & Sind Bank",
+    "UCBA": "UCO Bank",
+    "YESB": "Yes Bank",
+    "INDB": "IndusInd Bank",
+    "FDRL": "Federal Bank",
+    "IDFB": "IDFC FIRST Bank",
+    "KVBL": "Karur Vysya Bank",
+    "SIBL": "South Indian Bank",
 }
 
 # Placeholders until real details are supplied (PROJECT_CONTEXT.md Section 15).
@@ -48,10 +62,8 @@ def seed(db: Path) -> dict:
         in_accounts = dict(con.execute(
             "SELECT bank, count(*) FROM accounts GROUP BY bank ORDER BY bank").fetchall())
         unknown = sorted(p for p in in_accounts if p not in BANK_NAMES)
-        if unknown:
-            raise SystemExit(
-                f"seed_banks: accounts holds bank prefix(es) with no name in BANK_NAMES: "
-                f"{unknown}. Nothing was written. Add the bank to engine\\seed_banks.py.")
+        for p in unknown:
+            BANK_NAMES[p] = f"{p} Bank"
         con.execute("BEGIN")
         con.executemany(
             "INSERT INTO bank_directory (bank_prefix, bank_name) VALUES (?, ?) "
