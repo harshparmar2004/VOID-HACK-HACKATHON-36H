@@ -22,9 +22,8 @@ import {
   Share2,
   Move
 } from "lucide-react";
-import { DEFAULT_TRACE } from "../mockData";
 
-export default function NetworkGraphView({ traceData }) {
+export default function NetworkGraphView({ traceData, serverMs }) {
   const [treeOrientation, setTreeOrientation] = useState("horizontal"); // "horizontal" (L->R) or "vertical" (T->B)
   const [branchStyle, setBranchStyle] = useState("curved"); // "curved" (organic tree limbs) or "orthogonal" (stepped pipeline)
   const [zoom, setZoom] = useState(0.85);
@@ -48,19 +47,19 @@ export default function NetworkGraphView({ traceData }) {
   wheelModeRef.current = wheelMode;
   const wheelTimeoutRef = useRef(null);
 
-  // Guaranteed non-empty nodes and links to prevent graph disappearance
-  const nodes = (Array.isArray(traceData?.nodes) && traceData.nodes.length > 0)
-    ? traceData.nodes
-    : DEFAULT_TRACE.nodes;
-  const rawLinks = (Array.isArray(traceData?.links) && traceData.links.length > 0)
-    ? traceData.links
-    : DEFAULT_TRACE.links;
+  // The parent mounts this view only with a trace that has nodes.
+  const nodes = traceData.nodes;
+  // Replay order: by transfer time.
+  const rawLinks = useMemo(
+    () => [...(traceData.links || [])].sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || ""))),
+    [traceData.links]
+  );
 
-  // Temporal link slicing for 15-day slider
+  // Replay slider: how many of the transfers are drawn
   const visibleLinksCount = Math.max(1, Math.floor((rawLinks.length * timeProgress) / 100));
-  const activeRawLinks = rawLinks.slice(0, visibleLinksCount);
+  const effectiveLinks = useMemo(() => rawLinks.slice(0, visibleLinksCount), [rawLinks, visibleLinksCount]);
 
-  // Group nodes by hop level (Hops 0, 1, 2, 3, 4)
+  // Group nodes by hop. Hop is used for layout and colour only; roles come from the engine.
   const hopGroups = useMemo(() => {
     const groups = { 0: [], 1: [], 2: [], 3: [], 4: [] };
     nodes.forEach((n) => {
@@ -69,79 +68,6 @@ export default function NetworkGraphView({ traceData }) {
     });
     return groups;
   }, [nodes]);
-
-  // Guaranteed synthetic tree links if raw links are empty
-  const effectiveLinks = useMemo(() => {
-    if (activeRawLinks.length > 0) return activeRawLinks;
-    const generated = [];
-    const h0 = hopGroups[0] || [];
-    const h1 = hopGroups[1] || [];
-    const h2 = hopGroups[2] || [];
-    const h3 = hopGroups[3] || [];
-    const h4 = hopGroups[4] || [];
-
-    if (h0[0] && h1[0]) {
-      generated.push({
-        txn_id: "TXN-TREE-01",
-        source: h0[0].id,
-        target: h1[0].id,
-        amount: h1[0].tainted_received || traceData?.total_siphoned_inr || 1478894.0,
-        payment_mode: "RTGS",
-        timestamp: "2026-10-13 00:04",
-        narration: "DIGITAL-ARREST-TRANSFER",
-        hop: 1
-      });
-    }
-
-    if (h1[0]) {
-      h2.forEach((n2, idx) => {
-        generated.push({
-          txn_id: `TXN-TREE-02-${idx + 1}`,
-          source: h1[0].id,
-          target: n2.id,
-          amount: n2.tainted_received || 99642.85,
-          payment_mode: "IMPS",
-          timestamp: `2026-10-13 00:11:${String(idx * 2).padStart(2, "0")}`,
-          narration: "Bunny-Hop Smurfing",
-          hop: 2
-        });
-      });
-    }
-
-    if (h3.length > 0 && h2.length > 0) {
-      h3.forEach((n3, idx) => {
-        const srcNode = h2[idx % h2.length];
-        generated.push({
-          txn_id: `TXN-TREE-03-${idx + 1}`,
-          source: srcNode.id,
-          target: n3.id,
-          amount: n3.tainted_received || 70000.0,
-          payment_mode: "UPI/P2P",
-          timestamp: `2026-10-13 00:19:${String(idx * 5).padStart(2, "0")}`,
-          narration: "Crypto USDT Exit",
-          hop: 3
-        });
-      });
-    }
-
-    if (h4.length > 0 && h3.length > 0) {
-      h4.forEach((n4, idx) => {
-        const srcNode = h3[idx % h3.length];
-        generated.push({
-          txn_id: `TXN-TREE-04-${idx + 1}`,
-          source: srcNode.id,
-          target: n4.id,
-          amount: n4.tainted_received || 45000.0,
-          payment_mode: "SWIFT/P2P",
-          timestamp: `2026-10-13 00:28:${String(idx * 5).padStart(2, "0")}`,
-          narration: "Offshore Crypto Terminal Exit",
-          hop: 4
-        });
-      });
-    }
-
-    return generated;
-  }, [activeRawLinks, traceData, hopGroups]);
 
   // PURE MATHEMATICAL HORIZONTAL & VERTICAL TREE LAYOUT ENGINE
   const treeLayout = useMemo(() => {
@@ -558,9 +484,14 @@ export default function NetworkGraphView({ traceData }) {
               <GitBranch className="w-3 h-3 text-[#D96B27]" />
               BRANCHING TREE GRAPH
             </span>
+            <span className="text-[11px] font-mono text-[#746D65]" title="Time the API spent on this trace">
+              {traceData.full_hops ?? "—"} hops
+              {traceData.display_trimmed ? ` (${traceData.filters?.max_hops_shown ?? "—"} shown)` : ""} • trace time{" "}
+              {serverMs == null ? "—" : `${serverMs} ms`}
+            </span>
           </div>
           <p className="text-xs text-[#746D65] mt-0.5">
-            Dendrogram-style branching graph showing fund fan-out from Victim Root to Terminal Exit leaves with transaction details written on each branch.
+            Branching graph of the selected victim's money: one column per hop, with the amount and time written on each transfer.
           </p>
         </div>
 
@@ -568,19 +499,19 @@ export default function NetworkGraphView({ traceData }) {
         <div className="flex items-center gap-3 text-xs font-semibold">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E6F7F0] border border-[#A7F3D0] text-[#059669]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]"></span>
-            <span>Root: Victim</span>
+            <span>Hop 0 (victim)</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FFF7ED] border border-[#FFEDD5] text-[#EA580C]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#EA580C]"></span>
-            <span>Trunk: L1 Collector</span>
+            <span>Hop 1</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FEF3C7] border border-[#FDE68A] text-[#D97706]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#D97706]"></span>
-            <span>Branches: L2 Mules</span>
+            <span>Hop 2</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EDE9FE] border border-[#DDD6FE] text-[#7C3AED]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#7C3AED]"></span>
-            <span>Leaves: L3 Terminal</span>
+            <span>Hop 3 and beyond</span>
           </div>
         </div>
       </div>
@@ -751,7 +682,7 @@ export default function NetworkGraphView({ traceData }) {
               const marker = l.hop === 1 ? "url(#tarrow-hop1)" : l.hop === 2 ? "url(#tarrow-hop2)" : l.hop === 3 ? "url(#tarrow-hop3)" : "url(#tarrow-hop4)";
 
               return (
-                <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.15}>
+                <g key={l.tx_key ?? i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.15}>
                   {/* Outer Branch Halo */}
                   <path
                     d={l.pathD}
@@ -825,7 +756,7 @@ export default function NetworkGraphView({ traceData }) {
                       fill={strokeColor}
                       fontFamily="sans-serif"
                     >
-                      {l.payment_mode || "IMPS"} • {l.timestamp ? l.timestamp.split(" ")[1] || "00:11" : "Instant"}
+                      {l.payment_mode || "—"} • {l.timestamp ? String(l.timestamp).split(" ")[1] || "—" : "—"}
                     </text>
                   </g>
                 </g>
@@ -914,18 +845,18 @@ export default function NetworkGraphView({ traceData }) {
                     style={{ backgroundColor: badgeBg, color: themeColor }}
                     className="text-[9px] px-1.5 py-0.2 rounded font-bold font-mono"
                   >
-                    {isRoot ? "VICTIM" : isL1 ? "L1 MULE" : isL2 ? `SCORE ${node.risk_score}` : isL3 ? "L3 ESCROW" : "L4 TERMINAL"}
+                    {node.role || "—"} • {node.risk_score == null ? "—" : Math.round(node.risk_score)}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[#F5EDE1] font-mono">
                   <span className="text-[#746D65] truncate font-sans text-[10px]">
-                    {node.bank} ({node.ifsc})
+                    {node.bank || "—"} ({node.ifsc || "—"})
                   </span>
                   <span className="text-[#059669] font-bold">
                     {isRoot
-                      ? `Loss: ₹${traceData?.total_siphoned_inr ? Math.round(traceData.total_siphoned_inr).toLocaleString("en-IN") : "0"}`
-                      : `Lien: ₹${node.holding_amount ? Math.round(Number(node.holding_amount)).toLocaleString("en-IN") : "0"}`}
+                      ? `Paid: ₹${traceData?.total_siphoned_inr ? Math.round(traceData.total_siphoned_inr).toLocaleString("en-IN") : "0"}`
+                      : `Holding: ₹${node.holding_amount ? Math.round(Number(node.holding_amount)).toLocaleString("en-IN") : "0"}`}
                   </span>
                 </div>
               </div>
@@ -954,11 +885,11 @@ export default function NetworkGraphView({ traceData }) {
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
-            <span className="font-medium text-[#2C2623]">15-Day Chronological Tree Expansion Replay</span>
+            <span className="font-medium text-[#2C2623]">Transfer replay (in time order)</span>
           </div>
 
           <span className="font-mono text-xs text-[#746D65]">
-            Temporal Tree: {timeProgress}% ({treeLayout.positionedLinks.length} Active Branches)
+            {timeProgress}% ({treeLayout.positionedLinks.length} of {rawLinks.length} transfers)
           </span>
         </div>
 
@@ -990,20 +921,20 @@ export default function NetworkGraphView({ traceData }) {
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-bold text-[#2C2623]">{selectedNode.id}</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5]">
-                  Hop {selectedNode.hop} • {selectedNode.role || "MULE"}
+                  Hop {selectedNode.hop} • {selectedNode.role || "no role"}
                 </span>
                 <span className="text-xs font-bold text-[#DC2626]">
-                  Risk Score: {selectedNode.risk_score || 90}/100
+                  Risk Score: {selectedNode.risk_score == null ? "—" : selectedNode.risk_score}/100
                 </span>
               </div>
               <p className="text-xs text-[#746D65] mt-0.5">
-                Bank: <b>{selectedNode.bank}</b> | IFSC: <b>{selectedNode.ifsc}</b> | Device: {selectedNode.device_type}
+                Bank: <b>{selectedNode.bank}</b> | IFSC: <b>{selectedNode.ifsc}</b> | Device: {selectedNode.device_type || "—"}
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-[#059669] font-mono">
-                Trapped Balance: ₹{selectedNode.holding_amount ? Number(selectedNode.holding_amount).toLocaleString("en-IN") : "0"}
+                Holding: ₹{selectedNode.holding_amount ? Number(selectedNode.holding_amount).toLocaleString("en-IN") : "0"}
               </span>
             </div>
           </div>
@@ -1022,7 +953,7 @@ export default function NetworkGraphView({ traceData }) {
               </span>
             </div>
             <div className="p-3 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
-              <span className="text-[#9E968D] block text-[10px] uppercase font-bold">Trapped Balance</span>
+              <span className="text-[#9E968D] block text-[10px] uppercase font-bold">Holding</span>
               <span className="text-sm font-bold text-[#059669]">
                 ₹{selectedNode.holding_amount ? Number(selectedNode.holding_amount).toLocaleString("en-IN") : "0"}
               </span>
@@ -1030,7 +961,7 @@ export default function NetworkGraphView({ traceData }) {
             <div className="p-3 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
               <span className="text-[#9E968D] block text-[10px] uppercase font-bold">Device & IP</span>
               <span className="text-xs text-[#2C2623] truncate block">
-                {selectedNode.ip_address} ({selectedNode.device_type})
+                {selectedNode.ip_address || "—"} ({selectedNode.device_type || "—"})
               </span>
             </div>
           </div>

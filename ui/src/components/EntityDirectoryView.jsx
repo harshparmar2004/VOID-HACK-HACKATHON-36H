@@ -1,206 +1,186 @@
-import React, { useState, useEffect } from "react";
-import { Users, Search, Building2, CreditCard, ArrowDownRight, ArrowUpRight, Filter, RefreshCw } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Search, RefreshCw } from "lucide-react";
 import { fetchEntities } from "../api";
+import { inr, num, text } from "../format";
+import { EmptyState, ErrorState, LoadingState, PageHeader } from "./States";
 
-export default function EntityDirectoryView({ totalAccounts = "24,368", forensicParams }) {
+const PAGE_LIMIT = 500; // rows requested per call
+
+const ROLE_STYLES = {
+  VICTIM: "bg-[#E6F7F0] text-[#059669]",
+  L1: "bg-[#FFEDD5] text-[#EA580C]",
+  L2: "bg-[#FEF3C7] text-[#D97706]",
+  L3: "bg-[#EDE9FE] text-[#7C3AED]"
+};
+
+export default function EntityDirectoryView({ forensicParams }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBank, setSelectedBank] = useState("ALL");
-  const [entities, setEntities] = useState([]);
-  const [bankStats, setBankStats] = useState([]);
-  const [totalCount, setTotalCount] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [state, setState] = useState({ data: null, loading: true, error: null });
 
-  const defaultBankStats = [
-    { code: "SBIN", name: "State Bank of India", count: "4,821 accounts", share: "19.8%" },
-    { code: "HDFC", name: "HDFC Bank", count: "4,120 accounts", share: "16.9%" },
-    { code: "ICIC", name: "ICICI Bank", count: "3,890 accounts", share: "16.0%" },
-    { code: "UTIB", name: "Axis Bank", count: "2,980 accounts", share: "12.2%" },
-    { code: "PUNB", name: "Punjab National Bank", count: "2,410 accounts", share: "9.9%" },
-    { code: "UBIN", name: "Union Bank of India", count: "2,150 accounts", share: "8.8%" },
-    { code: "KKBK", name: "Kotak Mahindra Bank", count: "1,987 accounts", share: "8.2%" }
-  ];
+  const bankFilter = forensicParams?.bankFilter;
+  const minAmount = forensicParams?.minAmount;
 
-  const sampleEntities = [
-    { account: "100000000001", bank: "HDFC Bank", ifsc: "HDFC0000250", type: "Victim / Complainant", totalIn: 0, totalOut: 1478894, balance: 0, risk: "CLEAN" },
-    { account: "200000000002", bank: "Axis Bank", ifsc: "UTIB0000971", type: "Suspected L1 Collector", totalIn: 1478894, totalOut: 1395000, balance: 83894, risk: "HIGH RISK (95)" },
-    { account: "200000000010", bank: "State Bank of India", ifsc: "SBIN0001100", type: "Suspected L2 Distributor", totalIn: 99642, totalOut: 10000, balance: 89642, risk: "HIGH RISK (91)" },
-    { account: "200000000011", bank: "HDFC Bank", ifsc: "HDFC0001101", type: "Suspected L2 Distributor", totalIn: 99642, totalOut: 10000, balance: 89642, risk: "HIGH RISK (89)" },
-    { account: "200000000012", bank: "ICICI Bank", ifsc: "ICIC0001102", type: "Suspected L2 Distributor", totalIn: 99642, totalOut: 10000, balance: 89642, risk: "HIGH RISK (93)" },
-    { account: "200000000030", bank: "ICICI Bank", ifsc: "ICIC0000892", type: "Suspected L3 Cashout", totalIn: 70000, totalOut: 0, balance: 70000, risk: "CRITICAL (98)" },
-    { account: "300000000045", bank: "Punjab National Bank", ifsc: "PUNB0006734", type: "Regular Merchant", totalIn: 450000, totalOut: 420000, balance: 30000, risk: "CLEAN" },
-    { account: "300000000112", bank: "Canara Bank", ifsc: "CNRB0009823", type: "Regular Retail Account", totalIn: 85000, totalOut: 75000, balance: 10000, risk: "CLEAN" },
-    { account: "300000000219", bank: "Bank of Baroda", ifsc: "BARB0001129", type: "Corporate Payroll Account", totalIn: 2500000, totalOut: 2450000, balance: 50000, risk: "CLEAN" }
-  ];
-
-  const loadEntities = async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const bFilter = forensicParams?.bankFilter && forensicParams.bankFilter !== "ALL" ? forensicParams.bankFilter : null;
-      const mAmount = forensicParams?.minAmount || 0;
-      const data = await fetchEntities(500, bFilter, mAmount);
-      if (data && data.entities && data.entities.length > 0) {
-        setEntities(data.entities);
-        if (data.bank_stats && data.bank_stats.length > 0) {
-          setBankStats(data.bank_stats);
-        }
-        setTotalCount(data.total_accounts);
-      }
-    } catch (e) {
-      console.warn("Could not fetch entities from backend, using sample dataset:", e);
-    } finally {
-      setLoading(false);
+      setState({ data: await fetchEntities({ limit: PAGE_LIMIT, bankFilter, minAmount }), loading: false, error: null });
+    } catch (err) {
+      setState({ data: null, loading: false, error: err.message });
     }
-  };
+  }, [bankFilter, minAmount]);
 
   useEffect(() => {
-    loadEntities();
-  }, [forensicParams?.bankFilter, forensicParams?.minAmount]);
+    load();
+  }, [load]);
 
-  const activeEntities = entities.length > 0 ? entities : sampleEntities;
-  const activeBankStats = bankStats.length > 0 ? bankStats : defaultBankStats;
+  const entities = state.data?.entities || [];
+  const bankStats = state.data?.bank_stats || [];
+  const term = searchTerm.trim().toLowerCase();
 
-  const filtered = activeEntities.filter((e) => {
-    const matchesSearch = e.account.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      e.ifsc.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      e.bank.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBank = selectedBank === "ALL" || e.ifsc.toUpperCase().startsWith(selectedBank.toUpperCase());
-    return matchesSearch && matchesBank;
+  const filtered = entities.filter((e) => {
+    const matchesSearch =
+      !term ||
+      String(e.account || "").toLowerCase().includes(term) ||
+      String(e.ifsc || "").toLowerCase().includes(term) ||
+      String(e.bank || "").toLowerCase().includes(term);
+    return matchesSearch && (selectedBank === "ALL" || e.bank === selectedBank);
   });
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#D96B27]"></span>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-              Master Banking Accounts Index
-            </span>
-          </div>
-          <h2 className="text-2xl font-serif font-bold text-[#2C2623] mt-1">
-            Entity Directory ({totalCount ? `${totalCount.toLocaleString()} Accounts` : totalAccounts})
-          </h2>
-          <p className="text-xs text-[#746D65] mt-1">
-            Dynamic database of unique sender and receiver accounts correlated across Indian banks and cyber crime statements.
-          </p>
+      <PageHeader
+        eyebrow="Accounts index"
+        title={`Entity Directory${state.data ? ` (${num(state.data.total_accounts)} accounts)` : ""}`}
+        subtitle="Every sender and receiver account in the loaded data, with its totals and the engine's score."
+      >
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search account, bank code or IFSC"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-72 bg-white border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+          />
+          <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-[#9E968D]" />
         </div>
+        <select
+          value={selectedBank}
+          onChange={(e) => setSelectedBank(e.target.value)}
+          className="bg-white border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+        >
+          <option value="ALL">All banks</option>
+          {bankStats.map((b) => (
+            <option key={b.code} value={b.code}>
+              {b.name ? `${b.name} (${b.code})` : b.code}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={load}
+          disabled={state.loading}
+          title="Refresh"
+          className="p-2 border border-[#E8E2D5] rounded-xl bg-white hover:bg-[#FAF6EE] text-[#746D65] cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${state.loading ? "animate-spin" : ""}`} />
+        </button>
+      </PageHeader>
 
-        {/* Search */}
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search Account ID, Bank, or IFSC..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-72 bg-white border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
-            />
-            <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-[#9E968D]" />
-          </div>
-
-          <select
-            value={selectedBank}
-            onChange={(e) => setSelectedBank(e.target.value)}
-            className="bg-white border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
-          >
-            <option value="ALL">All Banks</option>
-            {activeBankStats.map((b) => (
-              <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
+      {state.loading && !state.data ? (
+        <LoadingState label="Loading accounts..." />
+      ) : state.error ? (
+        <ErrorState title="The entity directory could not be loaded" message={state.error} onRetry={load} />
+      ) : entities.length === 0 ? (
+        <EmptyState title="No accounts match" hint="No account matches the current display filters." />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+            {bankStats.map((b) => (
+              <div
+                key={b.code}
+                onClick={() => setSelectedBank(selectedBank === b.code ? "ALL" : b.code)}
+                className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                  selectedBank === b.code
+                    ? "bg-[#FAF6EE] border-[#D96B27] shadow-sm"
+                    : "bg-white border-[#E8E2D5] hover:border-[#D96B27]"
+                }`}
+              >
+                <div className="text-xs font-mono font-bold text-[#D96B27]">{b.code}</div>
+                {b.name && <div className="text-xs font-bold text-[#2C2623] truncate mt-0.5">{b.name}</div>}
+                <div className="text-[11px] text-[#746D65] mt-1 font-mono">
+                  {num(b.count)} accounts{b.share == null ? "" : ` • ${num(b.share, 2)}%`}
+                </div>
+              </div>
             ))}
-          </select>
-
-          <button
-            onClick={loadEntities}
-            disabled={loading}
-            title="Refresh Directory"
-            className="p-2 border border-[#E8E2D5] rounded-xl bg-white hover:bg-[#FAF6EE] text-[#746D65] transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* Bank Share Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        {activeBankStats.map((b) => (
-          <div
-            key={b.code}
-            onClick={() => setSelectedBank(selectedBank === b.code ? "ALL" : b.code)}
-            className={`p-3 rounded-2xl border transition-all cursor-pointer ${
-              selectedBank === b.code
-                ? "bg-[#FAF6EE] border-[#D96B27] shadow-sm"
-                : "bg-white border-[#E8E2D5] hover:border-[#D96B27]"
-            }`}
-          >
-            <div className="text-[10px] font-mono font-bold text-[#D96B27]">{b.code}</div>
-            <div className="text-xs font-bold text-[#2C2623] truncate mt-0.5">{b.name}</div>
-            <div className="text-[11px] text-[#746D65] mt-1 font-mono">{b.count} • {b.share}</div>
           </div>
-        ))}
-      </div>
 
-      {/* Entities Table */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
-        <div className="p-4 border-b border-[#E8E2D5] bg-[#FAF6EE] flex items-center justify-between">
-          <h3 className="font-bold text-sm text-[#2C2623] font-serif">
-            Account Entity Profiles & Balance Distribution
-          </h3>
-          <span className="text-xs text-[#746D65] font-mono">
-            Showing {filtered.length} entities
-          </span>
-        </div>
+          <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
+            <div className="p-4 border-b border-[#E8E2D5] bg-[#FAF6EE] flex items-center justify-between">
+              <h3 className="font-bold text-sm text-[#2C2623] font-serif">Accounts</h3>
+              <span className="text-xs text-[#746D65] font-mono">
+                Showing {num(filtered.length)} of {num(state.data.returned)} loaded ({num(state.data.matched)} match the filters)
+              </span>
+            </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#746D65]">
-                <th className="py-3 px-4">Account ID</th>
-                <th className="py-3 px-4">Bank & IFSC Code</th>
-                <th className="py-3 px-4">Forensic Entity Category</th>
-                <th className="py-3 px-4">Total Inflow</th>
-                <th className="py-3 px-4">Total Outflow</th>
-                <th className="py-3 px-4">Active Balance</th>
-                <th className="py-3 px-4 text-right">Risk Assessment</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EFEAE1] font-mono">
-              {filtered.map((e, idx) => (
-                <tr key={idx} className="hover:bg-[#FAF6EE] transition-colors">
-                  <td className="py-3 px-4 font-bold text-[#2C2623]">{e.account}</td>
-                  <td className="py-3 px-4 font-sans">
-                    <div className="font-semibold text-[#2C2623]">{e.bank}</div>
-                    <div className="text-[11px] text-[#9E968D] font-mono">{e.ifsc}</div>
-                  </td>
-                  <td className="py-3 px-4 font-sans">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      e.type.includes("Victim") ? "bg-[#E6F7F0] text-[#059669]" :
-                      e.type.includes("L1") ? "bg-[#FFEDD5] text-[#EA580C]" :
-                      e.type.includes("L2") ? "bg-[#FEF3C7] text-[#D97706]" :
-                      e.type.includes("L3") ? "bg-[#EDE9FE] text-[#7C3AED]" :
-                      "bg-[#F3EDE2] text-[#746D65]"
-                    }`}>
-                      {e.type}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-[#059669]">₹{e.totalIn.toLocaleString('en-IN')}</td>
-                  <td className="py-3 px-4 text-[#DC2626]">₹{e.totalOut.toLocaleString('en-IN')}</td>
-                  <td className="py-3 px-4 font-bold text-[#2C2623]">₹{e.balance.toLocaleString('en-IN')}</td>
-                  <td className="py-3 px-4 text-right font-sans">
-                    <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                      e.risk.includes("HIGH") || e.risk.includes("CRITICAL")
-                        ? "bg-[#FEE2E2] text-[#DC2626]"
-                        : "bg-[#E6F7F0] text-[#059669]"
-                    }`}>
-                      {e.risk}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            {filtered.length === 0 ? (
+              <div className="p-4">
+                <EmptyState title="No account matches the search" />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#746D65]">
+                      <th className="py-3 px-4">Account</th>
+                      <th className="py-3 px-4">Bank &amp; IFSC</th>
+                      <th className="py-3 px-4">Role</th>
+                      <th className="py-3 px-4">Total inflow</th>
+                      <th className="py-3 px-4">Total outflow</th>
+                      <th className="py-3 px-4">Balance</th>
+                      <th className="py-3 px-4">Transactions</th>
+                      <th className="py-3 px-4 text-right">Risk</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#EFEAE1] font-mono">
+                    {filtered.map((e) => (
+                      <tr key={e.account} className="hover:bg-[#FAF6EE] transition-colors">
+                        <td className="py-3 px-4 font-bold text-[#2C2623]">{e.account}</td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-[#2C2623]">{text(e.bank)}</div>
+                          <div className="text-[11px] text-[#9E968D]">{text(e.ifsc)}</div>
+                        </td>
+                        <td className="py-3 px-4 font-sans">
+                          {e.role ? (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ROLE_STYLES[e.role] || "bg-[#F3EDE2] text-[#746D65]"}`}>
+                              {e.role}
+                              {e.role_confirmed ? " ✓" : ""}
+                            </span>
+                          ) : (
+                            <span className="text-[#9E968D]">{text(null)}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-[#059669]">{inr(e.totalIn)}</td>
+                        <td className="py-3 px-4 text-[#DC2626]">{inr(e.totalOut)}</td>
+                        <td className="py-3 px-4 font-bold text-[#2C2623]">{inr(e.balance)}</td>
+                        <td className="py-3 px-4">{num(e.tx_count)}</td>
+                        <td className="py-3 px-4 text-right font-sans">
+                          <span
+                            className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                              e.is_flagged ? "bg-[#FEE2E2] text-[#DC2626]" : "bg-[#E6F7F0] text-[#059669]"
+                            }`}
+                          >
+                            {text(e.risk)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

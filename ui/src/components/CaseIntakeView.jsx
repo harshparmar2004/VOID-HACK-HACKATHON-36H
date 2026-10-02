@@ -1,1291 +1,236 @@
-import React, { useState, useEffect } from "react";
-import {
-  ShieldCheck,
-  Eye,
-  RefreshCw,
-  Plus,
-  FileText,
-  CheckCircle2,
-  UploadCloud,
-  FileSpreadsheet,
-  Globe,
-  Sparkles,
-  ArrowRight,
-  Loader2,
-  Link2,
-  AlertCircle,
-  X,
-  Layers,
-  Database,
-  UserCheck,
-  Building,
-  KeyRound,
-  FileCheck,
-  Info,
-  ExternalLink,
-  ChevronRight,
-  Download,
-  Zap,
-  File,
-  Check
-} from "lucide-react";
-import { uploadBankStatement, ingestFromUrl, loadDemoVictim, getTemplateDownloadUrl } from "../api";
+import React, { useMemo, useState } from "react";
+import { Download, Plus, RefreshCw, Search, UploadCloud, ArrowRight } from "lucide-react";
+import { getTemplateDownloadUrl } from "../api";
+import { dateTime, inr, num, text } from "../format";
+import { EmptyState, ErrorState, LaterButton, LaterStep, LoadingState, PageHeader, Stat } from "./States";
 
-export default function CaseIntakeView({
-  victimAccount,
-  victimName = "Sunil Kumar Verma",
-  mobileNumber = "+91 9811000001",
-  firNumber = "FIR-0142/2026/CYBER-INDORE",
-  totalSiphoned,
-  systemStatus,
-  forensicParams,
-  onTraceNow,
-  onOpenRegisterModal,
-  onSelectCase,
-  onNavigateTab,
-  onRefreshData,
-  activeIngestResult,
-  onUpdateIngestResult
-}) {
-  const [ingestMode, setIngestMode] = useState("url"); // "url" | "file"
-  const [urlInput, setUrlInput] = useState(
-    "https://docs.google.com/spreadsheets/d/1gu9kFr5COmANUPTA5eSkApiXCtnpgyyE/edit?usp=sharing&ouid=104868621394170594289&rtpof=true&sd=true"
-  );
-  const [isIngesting, setIsIngesting] = useState(false);
-  const [ingestResult, setIngestResult] = useState(() => {
-    if (activeIngestResult) return activeIngestResult;
-    try {
-      const saved = localStorage.getItem("abhedya_ingest_result");
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
-  const [errorMessage, setErrorMessage] = useState(null);
-  const [selectedArtifactModal, setSelectedArtifactModal] = useState(null);
-  const [activePhase, setActivePhase] = useState(() => {
-    try {
-      return localStorage.getItem("abhedya_intake_phase") || "phase1";
-    } catch (e) {
-      return "phase1";
-    }
-  });
+const TEMPLATE_FILE = "transactions_template.csv";
+const PAGE_SIZE = 25;
 
-  const handlePhaseChange = (phase) => {
-    setActivePhase(phase);
-    try {
-      localStorage.setItem("abhedya_intake_phase", phase);
-    } catch (e) {}
-  };
+export default function CaseIntakeView({ status, victims, activeCase, trace, onReload, onSelectCase, onOpenRegisterModal }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const s = status.data;
 
-  const activeDisplayResult = ingestResult || (systemStatus?.records_parsed ? {
-    records_loaded: systemStatus.records_parsed,
-    high_risk_mules: systemStatus.records_parsed > 1000 ? 699 : 5,
-    file_name: systemStatus.records_parsed > 1000 ? "transactions_2m.parquet" : "cyber_crime_sample.csv",
-    ingestion_seconds: systemStatus.load_duration_seconds || 0.155,
-    detected_victim: victimAccount || "PUNB10000001"
-  } : null);
+  const filtered = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return victims.items;
+    return victims.items.filter(
+      (v) => String(v.account || "").toLowerCase().includes(term) || String(v.bank || "").toLowerCase().includes(term)
+    );
+  }, [victims.items, searchTerm]);
 
-  useEffect(() => {
-    if (activeIngestResult) {
-      setIngestResult(activeIngestResult);
-    }
-  }, [activeIngestResult]);
-
-  const artifactSlots = [
-    {
-      slot: "Core Banking Transaction Export (DuckDB)",
-      format: "2,000,000 records, 11 Columns (RBI/NPCI format)",
-      file: "transactions_2m.parquet",
-      records: systemStatus?.records_parsed ? `${systemStatus.records_parsed.toLocaleString("en-IN")} records` : "2,000,000 valid",
-      hash: "7F89E8B2A91D3C4E89F0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2",
-      status: "LOCKED & VERIFIED",
-      legalSignificance: "Master financial ledger establishing the total corpus of inter-bank money flow across India."
-    },
-    {
-      slot: "NPCI / Bank Statement Logs",
-      format: "Multi-bank transaction streams (.csv, .xlsx)",
-      file: "npci_upi_bank_statement.csv",
-      records: systemStatus?.unique_receivers ? `${systemStatus.unique_receivers.toLocaleString("en-IN")} accounts` : "24,368 accounts",
-      hash: "A1FC082673B0D1D8E9F0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2",
-      status: "LOCKED & VERIFIED",
-      legalSignificance: "Switch clearance logs proving funds crossed bank borders into recipient mule accounts."
-    },
-    {
-      slot: "Internet Protocol Detail Records (IPDR)",
-      format: "CGNAT public IP, source port, MSISDN session",
-      file: "jio_ipdr_session_log.csv",
-      records: systemStatus?.foreign_ip_txns ? `${systemStatus.foreign_ip_txns.toLocaleString("en-IN")} foreign IPs` : "2,564 foreign IPs",
-      hash: "638788C5E93DAE91E9F0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2",
-      status: "LOCKED & VERIFIED",
-      legalSignificance: "ISP logs linking digital transactions to foreign proxy VPNs (185.*, 194.*) and physical telecom towers."
-    },
-    {
-      slot: "Telecom Call Data Records (CDR)",
-      format: "Airtel, Jio, Vi formats (.csv, .xlsx, .tsv)",
-      file: "telecom_cdr_extract.csv",
-      records: "1,470 mules",
-      hash: "A9C8EBD3B99EE628E9F0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2",
-      status: "LOCKED & VERIFIED",
-      legalSignificance: "Proves syndication and synchronized calling between cyber fraud operators and mule holders."
-    },
-    {
-      slot: "WhatsApp / Messenger Chat Exports",
-      format: "Digital arrest transcripts (.txt, .json)",
-      file: "whatsapp_chat_export.txt",
-      records: "12 chat sessions",
-      hash: "257005884D2C482AE9F0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2",
-      status: "LOCKED & VERIFIED",
-      legalSignificance: "Primary evidence of intimidation, extortion, fake Supreme Court/CBI warrants, and digital arrest instructions."
-    },
-    {
-      slot: "Complaint Affidavit & 1930 Portal Log",
-      format: "Sec 63 BSA / Sec 65B Evidence Act Certificate",
-      file: "fir_complainant_affidavit.pdf",
-      records: "1 FIR complaint",
-      hash: "E8D9C0B1A2F3E4D5E9F0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2",
-      status: "LOCKED & VERIFIED",
-      legalSignificance: "Sworn statement of complainant victim triggering the police investigation under CrPC/BNSS."
-    }
-  ];
-
-  const handleIngestFromUrl = async (targetUrl = urlInput) => {
-    if (!targetUrl.trim()) return;
-    setIsIngesting(true);
-    setErrorMessage(null);
-
-    try {
-      const res = await ingestFromUrl(targetUrl);
-      setIngestResult(res);
-      if (onUpdateIngestResult) onUpdateIngestResult(res);
-      try {
-        localStorage.setItem("abhedya_ingest_result", JSON.stringify(res));
-      } catch (e) {}
-
-      const firstVictim = res.detected_victim || res.victims?.[0]?.account_id;
-      if (onRefreshData) {
-        await onRefreshData(firstVictim);
-      }
-      if (firstVictim && onSelectCase) {
-        onSelectCase(firstVictim);
-      }
-    } catch (err) {
-      setErrorMessage(err.message || "Failed to ingest data from URL.");
-    } finally {
-      setIsIngesting(false);
-    }
-  };
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsIngesting(true);
-    setErrorMessage(null);
-
-    try {
-      const res = await uploadBankStatement(file);
-      setIngestResult(res);
-      if (onUpdateIngestResult) onUpdateIngestResult(res);
-      try {
-        localStorage.setItem("abhedya_ingest_result", JSON.stringify(res));
-      } catch (e) {}
-
-      const firstVictim = res.detected_victim || res.victims?.[0]?.account_id;
-      if (onRefreshData) {
-        await onRefreshData(firstVictim);
-      }
-      if (firstVictim && onSelectCase) {
-        onSelectCase(firstVictim);
-      }
-    } catch (err) {
-      setErrorMessage(err.message || "Failed to ingest uploaded statement.");
-    } finally {
-      setIsIngesting(false);
-    }
-  };
-
-  const handleSelectVictim = (acctId) => {
-    if (onSelectCase) onSelectCase(acctId);
-    handlePhaseChange("phase2");
-  };
-
-  const handleOpenRegister = () => {
-    handlePhaseChange("phase2");
-    if (onOpenRegisterModal) onOpenRegisterModal();
-  };
-
-  // Phase 2 Dedicated State & Handlers
-  const [loadingDemoId, setLoadingDemoId] = useState(null);
-  const [demoLoadedMsg, setDemoLoadedMsg] = useState(null);
-  const [phase2File, setPhase2File] = useState(null);
-  const [isUploadingPhase2, setIsUploadingPhase2] = useState(false);
-  const [phase2UploadMsg, setPhase2UploadMsg] = useState(null);
-  const [phase2Error, setPhase2Error] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
-
-  const demoCases = [
-    {
-      id: "case_sunil_4hop",
-      name: "Sunil Kumar Verma",
-      bank: "Kotak Mahindra Bank",
-      account: "KKBK10000000",
-      loss: "₹4,55,541.61",
-      modus: "DIGITAL ARREST (CBI / Supreme Court Impersonation)",
-      hops: "Victim (Kotak) ➔ L1 (SBI) ➔ L2 (Axis & HDFC) ➔ L3 (ICICI & PNB) ➔ L4 (Paytm & Airtel)",
-      exitType: "Crypto Exchange P2P / Binance Off-Ramp",
-      badgeColor: "bg-[#FFF2E8] text-[#D96B27] border-[#FED7AA]"
-    },
-    {
-      id: "case_priya_4hop",
-      name: "Dr. Priya Sharma",
-      bank: "State Bank of India",
-      account: "SBIN10015314",
-      loss: "₹1,01,369.70",
-      modus: "TELEGRAM DAILY TASK & WORK-FROM-HOME FRAUD",
-      hops: "Victim (SBI) ➔ L1 (ICICI) ➔ L2 (SBI) ➔ L3 (Bank of Baroda) ➔ L4 (Kotak Terminal)",
-      exitType: "High Velocity Multi-State Layering across Wallets",
-      badgeColor: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]"
-    },
-    {
-      id: "case_ramesh_4hop",
-      name: "Ramesh Patel",
-      bank: "Bank of Baroda",
-      account: "BARB10005606",
-      loss: "₹1,94,223.94",
-      modus: "FAKE SEBI INSTITUTIONAL STOCK IPO SYNDICATE",
-      hops: "Victim (BoB) ➔ L1 (SBI) ➔ L2 (Axis Smurfs) ➔ L3 (HDFC Pools) ➔ L4 (Kotak Exit)",
-      exitType: "Massive 213-Node Multi-Hop ATM Cash Drain",
-      badgeColor: "bg-[#F5F3FF] text-[#7C3AED] border-[#DDD6FE]"
-    }
-  ];
-
-  const handleLoadDemo = async (demoId) => {
-    setLoadingDemoId(demoId);
-    setDemoLoadedMsg(null);
-    setPhase2Error(null);
-    setPhase2UploadMsg(null);
-    try {
-      const res = await loadDemoVictim(demoId);
-      if (res && res.demo) {
-        setDemoLoadedMsg(`Benchmark Case "${res.demo.victim_name}" loaded! Full 4-hop chain (L1 ➔ L4) active.`);
-        if (onSelectCase) {
-          onSelectCase(res.demo.victim_account, res.demo);
-        }
-        if (onRefreshData) {
-          await onRefreshData(res.demo.victim_account);
-        }
-      }
-    } catch (err) {
-      setPhase2Error(err.message || "Failed to load 4-hop benchmark scenario");
-    } finally {
-      setLoadingDemoId(null);
-    }
-  };
-
-  const handlePhase2FileSubmit = async (fileToUpload = phase2File) => {
-    if (!fileToUpload) return;
-    setIsUploadingPhase2(true);
-    setPhase2Error(null);
-    setPhase2UploadMsg(null);
-    setDemoLoadedMsg(null);
-    try {
-      const res = await uploadBankStatement(fileToUpload);
-      setIngestResult(res);
-      if (onUpdateIngestResult) onUpdateIngestResult(res);
-      try {
-        localStorage.setItem("abhedya_ingest_result", JSON.stringify(res));
-      } catch (e) {}
-      setPhase2UploadMsg(`Successfully parsed ${res.records_loaded?.toLocaleString("en-IN") || 0} transactions from ${fileToUpload.name}!`);
-      const targetVictim = res.detected_victim || res.victims?.[0]?.account_id;
-      if (targetVictim) {
-        if (onSelectCase) onSelectCase(targetVictim);
-        if (onRefreshData) await onRefreshData(targetVictim);
-      }
-      setPhase2File(null);
-    } catch (err) {
-      setPhase2Error(err.message || "Failed to upload and parse statement");
-    } finally {
-      setIsUploadingPhase2(false);
-    }
-  };
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const current = Math.min(page, pages);
+  const rows = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   return (
-    <div className="space-y-6 select-none pb-12">
-      {/* Clean Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E8E2D5] pb-4">
-        <div>
-          <h1 className="text-2xl font-serif font-bold text-[#2C2623] tracking-tight">
-            Case Evidence Intake
-          </h1>
-          <p className="text-xs text-[#7C746D] mt-0.5">
-            Universal ingestion for multi-bank statements (.csv, .xlsx, .parquet) and Google Sheets.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => onRefreshData && onRefreshData()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] transition-colors shadow-2xs cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-[#7C746D]" />
-            <span>Reload Engine</span>
-          </button>
-          <button
-            onClick={handleOpenRegister}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Register New FIR</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 4 Summary Stat Cards for Active Case */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-            COMPLAINANT / VICTIM ANCHOR
-          </div>
-          <div className="text-lg font-bold text-[#2C2623] mt-1 font-serif">
-            {victimName}
-          </div>
-          <div className="text-xs text-[#746D65] font-mono mt-0.5 flex items-center justify-between">
-            <span>{victimAccount}</span>
-            <span className="text-[10px] bg-[#ECFDF5] text-[#059669] px-1.5 py-0.5 rounded font-bold">Active Anchor</span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-            TOTAL LOSS REPORTED
-          </div>
-          <div className="text-lg font-bold text-[#DC2626] mt-1 font-mono">
-            ₹{Number(totalSiphoned || 370415.81).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-xs text-[#746D65] mt-0.5 font-mono text-[11px]">
-            Multi-Hop Smurfing Trail Active
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-            POLICE STATION / FIR DIARY
-          </div>
-          <div className="text-sm font-bold text-[#2C2623] mt-1 font-serif">
-            Cyber Crime Police Station, Indore
-          </div>
-          <div className="text-xs text-[#746D65] font-mono mt-0.5">
-            {firNumber}
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 shadow-2xs">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-            DIGITAL EVIDENCE ARTIFACTS
-          </div>
-          <div className="text-lg font-bold text-[#059669] mt-1 font-mono">
-            6 / 6 Locked
-          </div>
-          <div className="text-xs text-[#059669] font-medium mt-0.5 flex items-center gap-1 font-mono text-[11px]">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>100% SHA-256 Validated</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Case Investigation Stage Track & Phase Switcher */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-2.5 shadow-2xs">
-        <div className="flex items-center justify-between px-2 pt-1 pb-2 border-b border-[#F2ECE1] mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9E968D]">
-              Investigation Track:
-            </span>
-            <span className="text-xs font-semibold text-[#2C2623] font-serif">
-              {activePhase === "phase1" ? "Phase 1: Universal Multi-Bank Dataset Integrator" : "Phase 2: Complainant FIR & Victim Dossier"}
-            </span>
-          </div>
-          <div className="text-[11px] font-mono text-[#7C746D] hidden sm:block">
-            {activePhase === "phase1" ? "Step 1 of 2: Ingest Multi-Bank Data" : "Step 2 of 2: Verify FIR & Digital Artifacts"}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {/* Phase 1 Button */}
-          <button
-            type="button"
-            onClick={() => handlePhaseChange("phase1")}
-            className={`flex items-start gap-3.5 p-3.5 rounded-xl text-left transition-all cursor-pointer ${
-              activePhase === "phase1"
-                ? "bg-[#FAF6EE] border-2 border-[#D96B27] shadow-xs"
-                : "bg-white hover:bg-[#FDFBF7] border border-[#F2ECE1] text-[#7C746D]"
-            }`}
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-              activePhase === "phase1"
-                ? "bg-[#D96B27] text-white shadow-2xs"
-                : "bg-[#FAF6EE] text-[#7C746D] border border-[#E8E2D5]"
-            }`}>
-              <Layers className="w-5 h-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-mono font-bold uppercase tracking-wider ${
-                  activePhase === "phase1" ? "text-[#D96B27]" : "text-[#9E968D]"
-                }`}>
-                  Phase 1
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white border border-[#E8E2D5] text-[#746D65]">
-                  Bulk Ingestor
-                </span>
-              </div>
-              <div className="text-sm font-bold text-[#2C2623] mt-0.5 font-serif">
-                Universal Multi-Bank Data Integrator
-              </div>
-              <p className="text-[11px] text-[#746D65] mt-0.5 line-clamp-1">
-                Google Sheets, Bank CSV & Vector Indexing
-              </p>
-            </div>
-            {activePhase === "phase1" && (
-              <span className="text-[10px] font-mono font-bold text-[#D96B27] bg-[#FFF2E8] px-2 py-0.5 rounded border border-[#FED7AA] self-start mt-0.5 shrink-0">
-                ACTIVE VIEW
-              </span>
-            )}
-          </button>
-
-          {/* Phase 2 Button */}
-          <button
-            type="button"
-            onClick={() => handlePhaseChange("phase2")}
-            className={`flex items-start gap-3.5 p-3.5 rounded-xl text-left transition-all cursor-pointer ${
-              activePhase === "phase2"
-                ? "bg-[#FAF6EE] border-2 border-[#D96B27] shadow-xs"
-                : "bg-white hover:bg-[#FDFBF7] border border-[#F2ECE1] text-[#7C746D]"
-            }`}
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-              activePhase === "phase2"
-                ? "bg-[#D96B27] text-white shadow-2xs"
-                : "bg-[#FAF6EE] text-[#7C746D] border border-[#E8E2D5]"
-            }`}>
-              <FileText className="w-5 h-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-mono font-bold uppercase tracking-wider ${
-                  activePhase === "phase2" ? "text-[#D96B27]" : "text-[#9E968D]"
-                }`}>
-                  Phase 2
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white border border-[#E8E2D5] text-[#746D65]">
-                  Citizen FIR Anchor
-                </span>
-              </div>
-              <div className="text-sm font-bold text-[#2C2623] mt-0.5 font-serif">
-                Complainant FIR & Victim Dossier
-              </div>
-              <p className="text-[11px] text-[#746D65] mt-0.5 line-clamp-1">
-                FIR Investigation Anchor, Citizen Loss & 6 Legal Artifacts
-              </p>
-            </div>
-            {activePhase === "phase2" && (
-              <span className="text-[10px] font-mono font-bold text-[#D96B27] bg-[#FFF2E8] px-2 py-0.5 rounded border border-[#FED7AA] self-start mt-0.5 shrink-0">
-                ACTIVE VIEW
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* PHASE 1 VIEW */}
-      {activePhase === "phase1" && (
-        <div className="space-y-6">
-          {/* PHASE 1: Universal Bank Statement & Cyber Crime Data Ingestor */}
-          <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2ECE1] pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center text-[#D96B27]">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base text-[#2C2623] font-serif">
-                  Phase 1: Universal Multi-Bank Dataset Ingestor
-                </h3>
-                <span className="text-[10px] font-mono font-bold bg-[#FAF6EE] text-[#D96B27] px-2 py-0.5 rounded border border-[#E8E2D5]">
-                  DuckDB Vector Engine
-                </span>
-              </div>
-              <p className="text-xs text-[#746D65]">
-                Directly stream real cyber crime datasets into DuckDB. Automatically sanitizes account strings, IFSCs, timestamps, and amounts.
-              </p>
-            </div>
-          </div>
-
-          {/* Mode Switcher */}
-          <div className="flex items-center gap-1 bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-1 text-xs">
-            <button
-              onClick={() => setIngestMode("url")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                ingestMode === "url"
-                  ? "bg-[#D96B27] text-white shadow-2xs"
-                  : "text-[#746D65] hover:text-[#2C2623]"
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Google Sheet / Web URL</span>
-            </button>
-            <button
-              onClick={() => setIngestMode("file")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                ingestMode === "file"
-                  ? "bg-[#D96B27] text-white shadow-2xs"
-                  : "text-[#746D65] hover:text-[#2C2623]"
-              }`}
-            >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>Upload File (.csv, .xlsx, .parquet)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Active Investigation Filter Banner */}
-        {forensicParams && (Number(forensicParams.minAmount) > 0 || forensicParams.bankFilter !== "ALL" || forensicParams.maxHops !== 4 || (forensicParams.narrationKeyword && forensicParams.narrationKeyword.trim())) && (
-          <div className="bg-[#FFFBF5] border border-[#FDE68A] rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#D96B27] animate-pulse"></span>
-              <span className="font-bold text-[#92400E] font-mono text-[11px]">
-                Active Filter Parameters Enforced on Ingest:
-              </span>
-              <span className="text-[#B45309] font-mono text-[11px]">
-                {Number(forensicParams.minAmount) > 0 ? `Min: ₹${Number(forensicParams.minAmount).toLocaleString('en-IN')} ` : ""}
-                {forensicParams.maxHops !== 4 ? `• Max Hops: ${forensicParams.maxHops} ` : ""}
-                {forensicParams.bankFilter !== "ALL" ? `• Bank: ${forensicParams.bankFilter} ` : ""}
-                {forensicParams.narrationKeyword ? `• Tag: "${forensicParams.narrationKeyword}"` : ""}
-              </span>
-            </div>
-            <button
-              onClick={() => onNavigateTab && onNavigateTab("parameters")}
-              className="text-[10px] text-[#D96B27] hover:underline font-mono font-bold cursor-pointer"
-            >
-              Edit in Parameters Studio →
-            </button>
-          </div>
-        )}
-
-        {/* Tab 1: Google Sheet / URL Mode */}
-        {ingestMode === "url" && (
-          <div className="space-y-4">
-            <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#2C2623] flex items-center gap-1.5 font-mono">
-                  <Link2 className="w-4 h-4 text-[#D96B27]" />
-                  Enter Google Spreadsheet or CSV Export URL:
-                </span>
-                <span className="text-[11px] text-[#059669] font-mono font-medium">
-                  Auto-converts /edit to /export
-                </span>
-              </div>
-
-              <div className="flex flex-wrap sm:flex-nowrap gap-2">
-                <input
-                  type="text"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/.../edit?usp=sharing"
-                  className="flex-1 bg-white border border-[#E8E2D5] rounded-xl px-3 py-2 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
-                />
-                <button
-                  onClick={() => handleIngestFromUrl(urlInput)}
-                  disabled={isIngesting || !urlInput.trim()}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs shadow-2xs transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
-                    isIngesting
-                      ? "bg-[#EAE4D8] text-[#746D65] cursor-not-allowed"
-                      : "bg-[#D96B27] text-white hover:bg-[#C25B1D]"
-                  }`}
-                >
-                  {isIngesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  <span>{isIngesting ? "Extracting with JEV..." : "Ingest & Extract"}</span>
-                </button>
-              </div>
-
-              {/* Quick Preset Button for the User's Real Dataset */}
-              <div className="pt-2 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-[#9E968D] text-[11px] font-mono">Cyber Crime Live Preset:</span>
-                <button
-                  onClick={() => {
-                    const preset = "https://docs.google.com/spreadsheets/d/1gu9kFr5COmANUPTA5eSkApiXCtnpgyyE/edit?usp=sharing&ouid=104868621394170594289&rtpof=true&sd=true";
-                    setUrlInput(preset);
-                    handleIngestFromUrl(preset);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-[#E8E2D5] hover:border-[#D96B27] text-[#2C2623] text-[11px] font-semibold transition-all shadow-2xs cursor-pointer"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-[#059669]" />
-                  <span>⚡ Load Cyber Crime Live Dataset (Indore Police Extract)</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: File Upload / Drag & Drop Mode */}
-        {ingestMode === "file" && (
-          <div className="bg-[#FAF6EE] border-2 border-dashed border-[#D96B27]/40 rounded-2xl p-6 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-white border border-[#E8E2D5] flex items-center justify-center mx-auto text-[#D96B27] shadow-xs">
-              <UploadCloud className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm text-[#2C2623]">
-                Upload Raw Multi-Bank Statement (.csv, .xlsx, .parquet, .tsv)
-              </h4>
-              <p className="text-xs text-[#746D65] max-w-lg mx-auto mt-1">
-                Supports all formats from SBI, HDFC, ICICI, Axis, PNB, and NPCI UPI logs. Leading zeroes and currency symbols are sanitized automatically.
-              </p>
-            </div>
-
-            <label className="px-5 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-sm transition-all cursor-pointer inline-flex items-center gap-2">
-              <UploadCloud className="w-4 h-4" />
-              <span>Browse Statement File</span>
-              <input
-                type="file"
-                accept=".csv,.parquet,.xlsx,.tsv"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-            </label>
-          </div>
-        )}
-
-        {/* Ingestion Loading Indicator */}
-        {isIngesting && (
-          <div className="bg-[#FFFBF5] border border-[#FDE68A] p-4 rounded-xl flex items-center gap-3 text-xs text-[#92400E]">
-            <Loader2 className="w-5 h-5 text-[#D96B27] animate-spin shrink-0" />
-            <div>
-              <p className="font-bold">Ingesting and Vector-Indexing Dataset into DuckDB...</p>
-              <p className="text-[11px] text-[#B45309] mt-0.5">
-                Normalizing bank account structures, running JEV narration intelligence, and mapping multi-hop smurfing chains.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Error Notification */}
-        {errorMessage && (
-          <div className="bg-[#FEF2F2] border border-[#FCA5A5] p-3 rounded-xl flex items-center gap-2 text-xs text-[#DC2626]">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
-        {/* Ingestion Success & Detected Victims Banner */}
-        {activeDisplayResult && (
-          <div className="bg-[#F0FDF4] border border-[#86EFAC] rounded-2xl p-5 shadow-xs space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DCFCE7] pb-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-[#059669]" />
-                <h4 className="font-bold text-sm text-[#166534] font-serif">
-                  Dataset Successfully Ingested & Vector-Indexed
-                </h4>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-[#15803D] bg-white px-2.5 py-0.5 rounded-lg border border-[#BBF7D0]">
-                  Indexed in {activeDisplayResult.ingestion_seconds}s
-                </span>
-                {ingestResult && (
-                  <button
-                    onClick={() => {
-                      setIngestResult(null);
-                      if (onUpdateIngestResult) onUpdateIngestResult(null);
-                      try {
-                        localStorage.removeItem("abhedya_ingest_result");
-                      } catch (e) {}
-                    }}
-                    className="text-xs font-semibold text-[#15803D] hover:text-[#DC2626] flex items-center gap-1 cursor-pointer transition-colors px-2 py-0.5 rounded-lg hover:bg-red-50"
-                    title="Clear uploaded dataset info"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    <span>Clear Upload</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="bg-white p-3 rounded-xl border border-[#DCFCE7]">
-                <span className="text-[10px] text-[#746D65] uppercase font-mono block">Records Loaded</span>
-                <span className="text-lg font-bold font-mono text-[#166534]">
-                  {activeDisplayResult.records_loaded?.toLocaleString("en-IN")}
-                </span>
-              </div>
-
-              <div className="bg-white p-3 rounded-xl border border-[#DCFCE7]">
-                <span className="text-[10px] text-[#746D65] uppercase font-mono block">Flagged Mules</span>
-                <span className="text-lg font-bold font-mono text-[#DC2626]">
-                  {activeDisplayResult.high_risk_mules} flagged
-                </span>
-              </div>
-
-              <div className="bg-white p-3 rounded-xl border border-[#DCFCE7]">
-                <span className="text-[10px] text-[#746D65] uppercase font-mono block">JEV Extractor</span>
-                <span className="text-xs font-bold text-[#059669] block mt-1">100% Normalized</span>
-              </div>
-
-              <div className="bg-white p-3 rounded-xl border border-[#DCFCE7]">
-                <span className="text-[10px] text-[#746D65] uppercase font-mono block">Source</span>
-                <span className="text-xs font-mono text-[#2C2623] truncate block mt-1" title={activeDisplayResult.file_name}>
-                  {activeDisplayResult.file_name}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Action to Trace Stolen Money */}
-            <div className="pt-3 border-t border-[#DCFCE7] flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-[#166534]">
-                <span className="font-semibold text-xs">Investigation Target Anchor:</span>
-                <span className="font-mono font-bold bg-white px-2.5 py-1 rounded-lg border border-[#BBF7D0] text-[#2C2623]">
-                  {activeDisplayResult.detected_victim || victimAccount}
-                </span>
-                <span className="text-[11px] text-[#746D65]">
-                  (Loss: ₹{Number(totalSiphoned || 370415.81).toLocaleString("en-IN")})
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSelectVictim(activeDisplayResult.detected_victim || victimAccount)}
-                  className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-[#FAF6EE] text-[#2C2623] text-xs font-semibold border border-[#BBF7D0] shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>View in Phase 2 Dossier</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#D96B27]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onSelectCase) onSelectCase(activeDisplayResult.detected_victim || victimAccount);
-                    if (onNavigateTab) onNavigateTab("trail");
-                  }}
-                  className="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>Launch Money Trail Trace</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Phase 1 to Phase 2 Transition Footer */}
-      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-[#D96B27]/10 text-[#D96B27] flex items-center justify-center font-bold font-mono">
-            2
-          </div>
-          <div>
-            <div className="font-semibold text-[#2C2623]">
-              Dataset Ingested & Verified? Proceed to Case Dossier
-            </div>
-            <div className="text-[11px] text-[#746D65]">
-              Anchor complainant victim {victimAccount} ({victimName}) and verify the 6 digital legal evidence artifacts.
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handlePhaseChange("phase2")}
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
-          >
-            <span>Go to Phase 2 FIR Dossier</span>
-            <ChevronRight className="w-3.5 h-3.5 text-[#D96B27]" />
-          </button>
-          <button
-            type="button"
-            onClick={onTraceNow}
-            className="px-4 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
-          >
-            <span>Trace Money Trail</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* PHASE 2 VIEW */}
-  {activePhase === "phase2" && (
-    <div className="space-y-6">
-      {/* PHASE 2: Complainant FIR & Victim Station Intake */}
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2ECE1] pb-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-base text-[#2C2623] font-serif">
-                Phase 2: Active Complainant FIR & Victim Station Intake
-              </h3>
-              <span className="text-[10px] font-mono font-bold bg-[#ECFDF5] text-[#059669] px-2 py-0.5 rounded border border-[#A7F3D0]">
-                Indore Cyber Cell
-              </span>
-            </div>
-            <p className="text-xs text-[#746D65]">
-              The citizen whose funds were siphoned. The system anchors Breadth-First Search (BFS) starting from this account to trace downstream money dissipations.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onOpenRegisterModal}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAF6EE] hover:bg-[#F3EDE2] border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 text-[#D96B27]" />
-              <span>Change / Register Complainant FIR</span>
-            </button>
-
-            <button
-              onClick={onTraceNow}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-            >
-              <span>Trace 4-Hop Money Trail</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Detailed Victim Case Record */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
-          <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-1">
-            <div className="text-[10px] text-[#9E968D]">COMPLAINANT IDENTITY</div>
-            <div className="font-bold text-sm text-[#2C2623]">{victimName}</div>
-            <div className="text-[#746D65]">{mobileNumber}</div>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-1">
-            <div className="text-[10px] text-[#9E968D]">BANK ACCOUNT & IFSC</div>
-            <div className="font-bold text-sm text-[#D96B27]">{victimAccount}</div>
-            <div className="text-[#746D65]">Punjab National Bank (PUNB0001001)</div>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5] space-y-1">
-            <div className="text-[10px] text-[#9E968D]">OFFICIAL POLICE FIR RECORD</div>
-            <div className="font-bold text-sm text-[#2C2623]">{firNumber}</div>
-            <div className="text-[#746D65]">Under Sec 420 IPC / Sec 66D IT Act</div>
-          </div>
-        </div>
-      </div>
-
-        {/* Feedback Alerts */}
-        {demoLoadedMsg && (
-          <div className="p-3.5 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] flex items-center justify-between gap-3 text-xs text-[#065F46]">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#059669] shrink-0" />
-              <span className="font-semibold">{demoLoadedMsg}</span>
-            </div>
-            <button
-              type="button"
-              onClick={onTraceNow}
-              className="px-3 py-1 rounded-lg bg-[#059669] hover:bg-[#047857] text-white text-xs font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <span>View 4-Hop Graph Trail</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {phase2UploadMsg && (
-          <div className="p-3.5 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] flex items-center justify-between gap-3 text-xs text-[#065F46]">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#059669] shrink-0" />
-              <span className="font-semibold">{phase2UploadMsg}</span>
-            </div>
-            <button
-              type="button"
-              onClick={onTraceNow}
-              className="px-3 py-1 rounded-lg bg-[#059669] hover:bg-[#047857] text-white text-xs font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <span>Trace 4-Hop Money Trail</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {phase2Error && (
-          <div className="p-3.5 rounded-xl bg-[#FEF2F2] border border-[#FECACA] flex items-center gap-2 text-xs text-[#991B1B]">
-            <AlertCircle className="w-4 h-4 text-[#DC2626] shrink-0" />
-            <span>{phase2Error}</span>
-          </div>
-        )}
-
-        {/* 1-CLICK VERIFIED 4-HOP BENCHMARK CASES */}
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2ECE1] pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center text-[#D96B27]">
-                  <Zap className="w-3.5 h-3.5" />
-                </div>
-                <h3 className="font-bold text-sm text-[#2C2623] font-serif">
-                  1-Click Benchmark 4-Hop Test Cases (Guaranteed L1 ➔ L2 ➔ L3 ➔ L4 Trails)
-                </h3>
-                <span className="text-[10px] font-mono font-bold bg-[#FAF6EE] text-[#D96B27] px-2 py-0.5 rounded border border-[#FED7AA]">
-                  Ready-To-Test Scenarios
-                </span>
-              </div>
-              <p className="text-xs text-[#746D65] mt-1">
-                Pre-configured synthetic and real-world multi-hop cyber fraud cases. Clicking immediately loads the verified transaction network, anchors the victim, and builds complete 4-hop graph trails with automated Section 91 freeze notices.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {demoCases.map((demo) => {
-              const isActive = victimAccount === demo.account;
-              const isLoading = loadingDemoId === demo.id;
-
-              return (
-                <div
-                  key={demo.id}
-                  className={`rounded-2xl border p-4.5 transition-all flex flex-col justify-between ${
-                    isActive
-                      ? "bg-[#FDFBF7] border-2 border-[#D96B27] shadow-xs ring-2 ring-[#D96B27]/10"
-                      : "bg-[#FAF6EE]/50 hover:bg-[#FAF6EE] border-[#E8E2D5]"
-                  }`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${demo.badgeColor}`}>
-                        {demo.modus}
-                      </span>
-                      {isActive && (
-                        <span className="text-[10px] font-mono font-bold text-[#059669] bg-[#ECFDF5] px-2 py-0.5 rounded border border-[#A7F3D0] shrink-0">
-                          ACTIVE ANCHOR
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="font-bold text-sm text-[#2C2623] font-serif">
-                        {demo.name}
-                      </div>
-                      <div className="text-[11px] text-[#746D65] font-mono mt-0.5 flex items-center justify-between">
-                        <span>{demo.bank}</span>
-                        <span className="text-[#D96B27] font-semibold">{demo.account}</span>
-                      </div>
-                      <div className="text-base font-bold text-[#DC2626] font-mono mt-1">
-                        {demo.loss}
-                      </div>
-                    </div>
-
-                    {/* Flow Breakdown */}
-                    <div className="p-2.5 rounded-xl bg-white border border-[#E8E2D5] space-y-1.5 text-[11px]">
-                      <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9E968D]">
-                        4-Hop Money Trail Flow:
-                      </div>
-                      <div className="font-mono text-[10px] text-[#2C2623] leading-relaxed">
-                        {demo.hops}
-                      </div>
-                      <div className="text-[10px] text-[#746D65] italic border-t border-[#F2ECE1] pt-1">
-                        Terminal: {demo.exitType}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-[#E8E2D5] mt-3">
-                    {isActive ? (
-                      <button
-                        type="button"
-                        onClick={onTraceNow}
-                        className="w-full py-2 px-3 rounded-xl bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Zap className="w-3.5 h-3.5 fill-current" />
-                        <span>View Active 4-Hop Graph Trail ➔</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleLoadDemo(demo.id)}
-                        disabled={isLoading}
-                        className="w-full py-2 px-3 rounded-xl bg-white hover:bg-[#FAF6EE] text-[#2C2623] text-xs font-bold border border-[#E8E2D5] hover:border-[#D96B27] transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      >
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#D96B27]" />
-                            <span>Loading 4-Hop Chain...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Zap className="w-3.5 h-3.5 text-[#D96B27]" />
-                            <span>Load & Trace 4 Hops (L1 ➔ L4)</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* MULTI-FORMAT UPLOAD STUDIO (CSV, EXCEL, PDF, PARQUET, JSON) */}
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 shadow-2xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2ECE1] pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] flex items-center justify-center text-[#D96B27]">
-                  <UploadCloud className="w-3.5 h-3.5" />
-                </div>
-                <h3 className="font-bold text-sm text-[#2C2623] font-serif">
-                  Multi-Format Bank Statement & Evidence Upload Studio
-                </h3>
-                <span className="text-[10px] font-mono font-bold bg-[#ECFDF5] text-[#059669] px-2 py-0.5 rounded border border-[#A7F3D0]">
-                  Native PDF / Excel Engine
-                </span>
-              </div>
-              <p className="text-xs text-[#746D65] mt-1">
-                Upload complainant's official bank statement or cyber cell ledger. The ingestion engine automatically normalizes IFSC codes, timestamps, rupee amounts, and establishes the victim BFS anchor.
-              </p>
-            </div>
-          </div>
-
-          {/* Supported Format Pills */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-[11px] font-mono font-bold uppercase text-[#9E968D]">Supported Formats:</span>
-            <span className="px-2.5 py-1 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-mono text-[11px] flex items-center gap-1">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#059669]" />
-              <span>.CSV (Bank Export)</span>
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-mono text-[11px] flex items-center gap-1">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#2563EB]" />
-              <span>.XLSX / .XLS (Excel Multi-sheet)</span>
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-mono text-[11px] flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5 text-[#DC2626]" />
-              <span>.PDF (Digital Bank Statement)</span>
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-mono text-[11px] flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5 text-[#7C3AED]" />
-              <span>.PARQUET (DuckDB Core)</span>
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-mono text-[11px] flex items-center gap-1">
-              <Database className="w-3.5 h-3.5 text-[#D96B27]" />
-              <span>.JSON (NPCI / API Export)</span>
-            </span>
-          </div>
-
-          {/* Dropzone & File Selector */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragActive(false);
-              const file = e.dataTransfer.files?.[0];
-              if (file) {
-                setPhase2File(file);
-                handlePhase2FileSubmit(file);
-              }
-            }}
-            className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all ${
-              dragActive
-                ? "border-[#D96B27] bg-[#FFF2E8]"
-                : phase2File
-                ? "border-[#059669] bg-[#ECFDF5]/30"
-                : "border-[#E8E2D5] hover:border-[#D96B27] bg-[#FAF6EE]/40 hover:bg-[#FAF6EE]"
-            }`}
-          >
-            <input
-              type="file"
-              id="phase2-file-upload"
-              accept=".csv,.xlsx,.xls,.pdf,.parquet,.json"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  setPhase2File(file);
-                  handlePhase2FileSubmit(file);
-                }
-              }}
-              className="hidden"
-            />
-
-            <div className="flex flex-col items-center justify-center gap-2.5">
-              <div className="w-12 h-12 rounded-2xl bg-white border border-[#E8E2D5] flex items-center justify-center text-[#D96B27] shadow-2xs">
-                {isUploadingPhase2 ? (
-                  <Loader2 className="w-6 h-6 animate-spin text-[#D96B27]" />
-                ) : (
-                  <UploadCloud className="w-6 h-6" />
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="phase2-file-upload"
-                  className="font-bold text-sm text-[#D96B27] hover:text-[#C25B1C] cursor-pointer hover:underline"
-                >
-                  Click to browse statement file
-                </label>{" "}
-                <span className="text-xs text-[#746D65]">or drag and drop here</span>
-                <p className="text-[11px] text-[#9E968D] mt-1 font-mono">
-                  Supported formats: CSV, Excel (.xlsx, .xls), Bank PDF statement, Parquet, JSON (up to 100MB)
-                </p>
-              </div>
-
-              {phase2File && (
-                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-[#E8E2D5] text-xs font-mono text-[#2C2623] shadow-2xs">
-                  <FileText className="w-4 h-4 text-[#D96B27]" />
-                  <span className="font-bold">{phase2File.name}</span>
-                  <span className="text-[#9E968D]">({(phase2File.size / 1024).toFixed(1)} KB)</span>
-                </div>
-              )}
-
-              {isUploadingPhase2 && (
-                <div className="text-xs font-semibold text-[#D96B27] flex items-center gap-1.5 mt-1 font-mono">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Parsing transactions, computing SHA-256 vault record, & building 4-hop graph...</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* DOWNLOAD BENCHMARK TEMPLATES BAR */}
-          <div className="pt-3 border-t border-[#F2ECE1] flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-[#746D65]">
-              <span className="font-semibold text-xs text-[#2C2623]">Download 4-Hop Test Templates:</span>
-              <span className="text-[11px] text-[#9E968D] hidden sm:inline">(Pre-configured with 4-hop money trails)</span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <a
-                href={getTemplateDownloadUrl("Sample_Victim_4Hop_CyberCrime_Statement.csv")}
-                download="Sample_Victim_4Hop_CyberCrime_Statement.csv"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] text-xs font-mono font-semibold transition-colors shadow-2xs hover:text-[#059669]"
-              >
-                <Download className="w-3.5 h-3.5 text-[#059669]" />
-                <span>CSV Template</span>
-              </a>
-
-              <a
-                href={getTemplateDownloadUrl("Sample_Victim_4Hop_CyberCrime_Statement.xlsx")}
-                download="Sample_Victim_4Hop_CyberCrime_Statement.xlsx"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] text-xs font-mono font-semibold transition-colors shadow-2xs hover:text-[#2563EB]"
-              >
-                <Download className="w-3.5 h-3.5 text-[#2563EB]" />
-                <span>Excel (.xlsx) Template</span>
-              </a>
-
-              <a
-                href={getTemplateDownloadUrl("Sample_Victim_4Hop_CyberCrime_Statement.pdf")}
-                download="Sample_Victim_4Hop_CyberCrime_Statement.pdf"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] text-xs font-mono font-semibold transition-colors shadow-2xs hover:text-[#DC2626]"
-              >
-                <Download className="w-3.5 h-3.5 text-[#DC2626]" />
-                <span>Bank Statement (.pdf) Template</span>
-              </a>
-            </div>
-          </div>
-        </div>
-      <div className="bg-white border border-[#E8E2D5] rounded-2xl overflow-hidden shadow-2xs">
-        <div className="p-5 border-b border-[#E8E2D5] bg-[#FAF6EE] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm text-[#2C2623] font-serif">
-                Phase 3: Digital Evidence Vault & Chain of Custody Slots (6 / 6)
-              </h3>
-              <span className="text-[10px] font-mono font-bold bg-[#FAF6EE] text-[#D96B27] px-2 py-0.5 rounded border border-[#E8E2D5]">
-                Sec 63 BSA / Sec 65B IEA
-              </span>
-            </div>
-            <p className="text-xs text-[#746D65] mt-0.5">
-              Cryptographic SHA-256 hash preservation ensures court admissibility before the Hon'ble Magistrate under Bharatiya Sakshya Adhiniyam, 2023.
-            </p>
-          </div>
-
-          <button
-            onClick={() => onNavigateTab && onNavigateTab("vault")}
-            className="px-3.5 py-1.5 rounded-lg bg-[#2C2623] text-white text-xs font-mono font-semibold hover:bg-[#3D3531] cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-[#10B981]" />
-            <span>Open Evidence Vault</span>
-          </button>
-        </div>
-
-        {/* Artifact Legal Mandate Callout */}
-        <div className="p-4 bg-[#F8F4EC] border-b border-[#E8E2D5] flex items-center gap-3 text-xs text-[#746D65]">
-          <Info className="w-4 h-4 text-[#D96B27] shrink-0" />
-          <span>
-            <strong>Why these 6 slots exist:</strong> Defense lawyers frequently challenge electronic records claiming CSV alteration. By locking each of the 6 core forensic streams (Banking Core, NPCI Switch, IPDR VPN logs, Telco CDRs, WhatsApp extortion chats, and FIR affidavits) with SHA-256 hashes, the court certifies Section 91 freeze requisitions with zero legal risk.
-          </span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs font-mono">
-            <thead>
-              <tr className="border-b border-[#E8E2D5] text-[#9E968D] text-[10px] font-bold uppercase tracking-wider bg-[#FDFBF7]">
-                <th className="py-3 px-4">Artifact Slot & Format</th>
-                <th className="py-3 px-4">Source File</th>
-                <th className="py-3 px-4">Records Indexed</th>
-                <th className="py-3 px-4">SHA-256 Hash Fingerprint</th>
-                <th className="py-3 px-4 text-right">Integrity Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EFEAE1] bg-white">
-              {artifactSlots.map((slot, i) => (
-                <tr key={i} className="hover:bg-[#FAF6EE] transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="font-semibold text-[#2C2623] font-sans text-xs">{slot.slot}</div>
-                    <div className="text-[11px] text-[#9E968D] font-sans">{slot.format}</div>
-                  </td>
-                  <td className="py-3 px-4 text-[#746D65]">
-                    {slot.file}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 rounded-md bg-[#F3EDE2] text-[#2C2623] font-medium text-[11px]">
-                      {slot.records}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-[10px] text-[#746D65] max-w-[200px] truncate" title={slot.hash}>
-                    {slot.hash.slice(0, 16)}...{slot.hash.slice(-16)}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <span className="px-2 py-0.5 rounded-md bg-[#ECFDF5] border border-[#A7F3D0] text-[#059669] font-bold text-[10px] tracking-wide inline-flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>{slot.status}</span>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Phase 2 Back to Phase 1 Switcher */}
-      <div className="bg-[#FAF6EE] border border-[#E8E2D5] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-[#7C746D]/15 text-[#2C2623] flex items-center justify-center font-bold font-mono">
-            1
-          </div>
-          <div>
-            <div className="font-semibold text-[#2C2623]">
-              Need to load another bank statement or Google Sheet?
-            </div>
-            <div className="text-[11px] text-[#746D65]">
-              Switch to Phase 1 Universal Multi-Bank Dataset Ingestor to stream new CSV, Excel, or Parquet exports.
-            </div>
-          </div>
-        </div>
-
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        eyebrow="Case operations"
+        title="Case Evidence Intake"
+        subtitle="The transaction file loaded by the engine, and the victim accounts it found. Pick a victim to trace the money."
+      >
         <button
-          type="button"
-          onClick={() => handlePhaseChange("phase1")}
-          className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#FAF6EE] border border-[#E8E2D5] text-[#2C2623] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+          onClick={onReload}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] shadow-2xs cursor-pointer"
         >
-          <span>← Switch to Phase 1 Ingestor</span>
+          <RefreshCw className={`w-3.5 h-3.5 text-[#7C746D] ${status.loading || victims.loading ? "animate-spin" : ""}`} />
+          <span>Reload</span>
         </button>
+        <button
+          onClick={onOpenRegisterModal}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-xs font-bold shadow-2xs cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Open case by account</span>
+        </button>
+      </PageHeader>
+
+      {/* Loaded dataset (GET /status) */}
+      {status.loading && !s ? (
+        <LoadingState label="Reading the loaded dataset..." />
+      ) : status.error ? (
+        <ErrorState title="The dataset status could not be loaded" message={status.error} onRetry={onReload} />
+      ) : !s ? (
+        <EmptyState title="No dataset loaded" hint="Run the engine's ingest step, then reload." />
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Stat label="Transactions loaded" value={num(s.records_loaded)} hint={`${num(s.rows_rejected)} rows rejected`} />
+            <Stat label="Accounts" value={num(s.accounts)} hint={`${num(s.unique_receivers)} receive money`} />
+            <Stat label="Flagged accounts" value={num(s.flagged)} hint={`${num(s.freeze_recommended)} freeze recommended`} tone="red" />
+            <Stat label="Victim accounts" value={num(s.victims)} hint={`${num(s.cells)} cells, ${num(s.networks)} network(s)`} tone="orange" />
+          </div>
+          <div className="bg-white border border-[#E8E2D5] rounded-md p-4 shadow-2xs text-xs grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+            <div className="flex justify-between gap-3">
+              <span className="text-[#746D65]">Source file</span>
+              <span className="font-mono font-semibold text-[#2C2623] truncate">{text(s.file_name)}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-[#746D65]">Loaded at</span>
+              <span className="font-mono text-[#2C2623]">{dateTime(s.loaded_at)}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-[#746D65]">Load time</span>
+              <span className="font-mono text-[#2C2623]">{s.ingestion_seconds == null ? text(null) : `${num(s.ingestion_seconds, 2)} s`}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-[#746D65]">Scoring profile</span>
+              <span className="font-mono text-[#2C2623]">{text(s.profile_id)}</span>
+            </div>
+            <div className="sm:col-span-2 flex justify-between gap-3">
+              <span className="text-[#746D65] shrink-0">File SHA-256</span>
+              <span className="font-mono text-[#2C2623] break-all text-right">{text(s.hash)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selected victim */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">Selected victim</span>
+          <div className="text-base font-bold font-mono text-[#2C2623]">{activeCase || "none"}</div>
+        </div>
+        <div className="font-mono text-[#746D65]">
+          {trace.loading
+            ? "Tracing..."
+            : trace.error
+            ? "Trace failed"
+            : trace.data
+            ? `Paid ${inr(trace.data.total_siphoned_inr)} • ${num(trace.data.nodes.length - 1)} accounts reached`
+            : activeCase
+            ? "No money trail found"
+            : ""}
+        </div>
+      </div>
+
+      {/* Upload (deferred) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md p-4 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-bold text-sm text-[#2C2623] font-serif">Load a new transaction file</h3>
+          <div className="flex items-center gap-2">
+            <a
+              href={getTemplateDownloadUrl(TEMPLATE_FILE)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#E8E2D5] text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] shadow-2xs"
+            >
+              <Download className="w-3.5 h-3.5 text-[#D96B27]" />
+              <span>CSV template</span>
+            </a>
+            <LaterButton icon={UploadCloud}>Upload file</LaterButton>
+          </div>
+        </div>
+        <LaterStep title="Uploading from this screen">
+          Until then a file is loaded by running the engine's ingest step on this machine. The template lists the columns it expects.
+        </LaterStep>
+      </div>
+
+      {/* Victim accounts (GET /victims) */}
+      <div className="bg-white border border-[#E8E2D5] rounded-md overflow-hidden shadow-2xs">
+        <div className="p-4 border-b border-[#E8E2D5] bg-[#FAF6EE] flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-bold text-sm text-[#2C2623] font-serif">
+            Victim accounts found by the engine{victims.items.length ? ` (${num(victims.items.length)})` : ""}
+          </h3>
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9E968D]" />
+            <input
+              type="text"
+              placeholder="Search account or bank code"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              className="w-64 bg-white border border-[#E8E2D5] rounded-sm pl-8 pr-3 py-1.5 text-xs font-mono text-[#2C2623] focus:outline-none focus:border-[#D96B27]"
+            />
+          </div>
+        </div>
+
+        {victims.loading ? (
+          <div className="p-4">
+            <LoadingState label="Loading victim accounts..." />
+          </div>
+        ) : victims.error ? (
+          <div className="p-4">
+            <ErrorState title="The victim list could not be loaded" message={victims.error} onRetry={onReload} />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="p-4">
+            <EmptyState
+              title={victims.items.length ? "No victim matches the search" : "No victim accounts found"}
+              hint={victims.items.length ? null : "The engine found no account with the VICTIM role in the loaded data."}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#FAF6EE] border-b border-[#E8E2D5] text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono">
+                    <th className="py-2.5 px-4">Account</th>
+                    <th className="py-2.5 px-4">Bank / IFSC</th>
+                    <th className="py-2.5 px-4">Amount paid</th>
+                    <th className="py-2.5 px-4">Payments</th>
+                    <th className="py-2.5 px-4">Paid at</th>
+                    <th className="py-2.5 px-4">Victim score</th>
+                    <th className="py-2.5 px-4">Cells</th>
+                    <th className="py-2.5 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EFEAE1] font-mono">
+                  {rows.map((v) => (
+                    <tr key={v.account} className={`hover:bg-[#FAF6EE] ${v.account === activeCase ? "bg-[#FFF8F2]" : ""}`}>
+                      <td className="py-2.5 px-4 font-bold text-[#2C2623]">{v.account}</td>
+                      <td className="py-2.5 px-4">
+                        {text(v.bank)} <span className="text-[#9E968D]">{text(v.ifsc)}</span>
+                      </td>
+                      <td className="py-2.5 px-4 text-[#DC2626]">{inr(v.amount)}</td>
+                      <td className="py-2.5 px-4">{num(v.payments)}</td>
+                      <td className="py-2.5 px-4">{dateTime(v.timestamp)}</td>
+                      <td className="py-2.5 px-4">{num(v.victim_score, 1)}</td>
+                      <td className="py-2.5 px-4">{Array.isArray(v.cell_ids) && v.cell_ids.length ? v.cell_ids.join(", ") : text(null)}</td>
+                      <td className="py-2.5 px-4 text-right">
+                        <button
+                          onClick={() => onSelectCase(v.account)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm bg-[#D96B27] hover:bg-[#C25B1C] text-white text-[11px] font-bold cursor-pointer"
+                        >
+                          <span>Trace</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#FAF6EE] border-t border-[#E8E2D5] text-[11px] font-mono text-[#746D65]">
+              <span>
+                {num((current - 1) * PAGE_SIZE + 1)}–{num(Math.min(current * PAGE_SIZE, filtered.length))} of {num(filtered.length)}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(Math.max(1, current - 1))}
+                  disabled={current === 1}
+                  className="px-2.5 py-1 rounded-sm border border-[#E8E2D5] bg-white font-bold text-[#2C2623] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {current} / {pages}
+                </span>
+                <button
+                  onClick={() => setPage(Math.min(pages, current + 1))}
+                  disabled={current === pages}
+                  className="px-2.5 py-1 rounded-sm border border-[#E8E2D5] bg-white font-bold text-[#2C2623] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
-  )}
-</div>
   );
 }

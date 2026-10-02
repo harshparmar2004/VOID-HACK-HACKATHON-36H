@@ -9,48 +9,42 @@ import {
   FileCheck,
   FileText,
   Award,
-  Settings,
   Zap,
   SlidersHorizontal
 } from "lucide-react";
+import { num, text } from "../format";
 
-export default function Sidebar({
-  activeTab,
-  onSelectTab,
-  counts,
-  onOpenSettings,
-  forensicParams = {}
-}) {
+const LATER_BADGE = "Later";
+
+export default function Sidebar({ activeTab, onSelectTab, status, filtersActive }) {
+  const s = status?.data;
+  const count = (value) => (value == null ? null : num(value));
+
   const navSections = [
     {
       title: "CASE OPERATIONS",
       items: [
         { id: "intake", label: "Case Intake", icon: UploadCloud, badge: null },
-        { id: "vault", label: "Evidence Vault", icon: Shield, badge: "SHA-256" }
+        { id: "vault", label: "Evidence Vault", icon: Shield, badge: LATER_BADGE }
       ]
     },
     {
       title: "FORENSIC ANALYSIS",
       items: [
-        {
-          id: "parameters",
-          label: "Forensic Parameters",
-          icon: SlidersHorizontal,
-          badge: Number(forensicParams?.minAmount) > 0 || forensicParams?.bankFilter !== "ALL" ? "Active" : "P1–P10"
-        },
-        { id: "scanner", label: "Real-Time 60s Scanner", icon: Zap, badge: "60s / 2M" },
-        { id: "entities", label: "Entity Directory", icon: Users, badge: counts?.totalAccounts || "24,368" },
-        { id: "dossier", label: "Mule Dossier", icon: UserX, badge: counts?.flaggedMules || "333" },
-        { id: "graph", label: "Mule Network Graph", icon: Share2, badge: "WebGL" },
-        { id: "trail", label: "Endpoint Trail", icon: GitCommit, badge: "4 Hops" }
+        { id: "parameters", label: "Forensic Parameters", icon: SlidersHorizontal, badge: filtersActive ? "Active" : null },
+        { id: "scanner", label: "Fraud Scanner", icon: Zap, badge: null },
+        { id: "entities", label: "Entity Directory", icon: Users, badge: count(s?.accounts) },
+        { id: "dossier", label: "Mule Dossier", icon: UserX, badge: count(s?.flagged) },
+        { id: "graph", label: "Mule Network Graph", icon: Share2, badge: null },
+        { id: "trail", label: "Endpoint Trail", icon: GitCommit, badge: null }
       ]
     },
     {
       title: "LEGAL & BENCHMARK",
       items: [
-        { id: "notices", label: "Section 91 Notices", icon: FileCheck, badge: counts?.noticesCount || "Bank Lien" },
-        { id: "brief", label: "Investigative Brief", icon: FileText, badge: "CrPC" },
-        { id: "jury", label: "Audit, Evaluation & Settings", icon: Award, badge: "AI & Bench" }
+        { id: "notices", label: "Section 91 Notices", icon: FileCheck, badge: LATER_BADGE },
+        { id: "brief", label: "Investigative Brief", icon: FileText, badge: LATER_BADGE },
+        { id: "jury", label: "Audit & Evaluation", icon: Award, badge: null }
       ]
     }
   ];
@@ -58,7 +52,6 @@ export default function Sidebar({
   return (
     <aside className="w-72 bg-[#FBF7EE] border-r border-[#E8E2D5] h-full overflow-y-auto flex flex-col justify-between p-3.5 shrink-0 select-none space-y-4">
       <div className="space-y-5">
-        {/* Navigation Sections */}
         {navSections.map((section) => (
           <div key={section.title} className="space-y-1">
             <div className="flex items-center gap-2 px-2.5 py-1 mb-2 rounded-lg bg-[#EFE8DC] border-l-[3px] border-[#D96B27] shadow-2xs">
@@ -105,19 +98,25 @@ export default function Sidebar({
         ))}
       </div>
 
-      {/* Local System Info Footer */}
+      {/* Figures from GET /status; a dash while loading or when the API is down. */}
       <div className="pt-3 border-t border-[#E8E2D5] text-[11px] text-[#9E968D] space-y-1 font-mono">
         <div className="flex items-center justify-between">
-          <span>Local Engine:</span>
-          <span className="text-[#059669] font-semibold">DuckDB v1.5</span>
+          <span>Records loaded:</span>
+          <span className="text-[#2C2623] font-bold">{num(s?.records_loaded)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span>Records Indexed:</span>
-          <span className="text-[#2C2623] font-bold">2,000,000</span>
+          <span>Accounts:</span>
+          <span className="text-[#2C2623] font-bold">{num(s?.accounts)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span>Network Compute:</span>
-          <span className="text-[#D96B27] font-semibold">100% Offline</span>
+          <span>Scoring profile:</span>
+          <span className="text-[#2C2623] font-bold">{text(s?.profile_id)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>API:</span>
+          <span className={status?.error ? "text-[#DC2626] font-semibold" : "text-[#059669] font-semibold"}>
+            {status?.error ? "not reachable" : status?.loading ? "connecting" : "connected"}
+          </span>
         </div>
       </div>
     </aside>

@@ -23,16 +23,31 @@ import {
   Copy,
   Check
 } from "lucide-react";
-import { DEFAULT_TRACE } from "../mockData";
+import { inr } from "../format";
+import { EmptyState, ErrorState, LoadingState } from "./States";
+
+const EMPTY_TRACE = { nodes: [], links: [] };
+const WIDE_LANE_FROM = 4; // a lane with more accounts than this may use two columns
+
+// Lane colours by hop (display only). Roles shown on the cards come from the engine.
+const HOP_THEMES = [
+  { color: "#10B981", soft: "#E6F7F0", border: "#A7F3D0", text: "#059669" },
+  { color: "#EA580C", soft: "#FFF7ED", border: "#FFEDD5", text: "#EA580C" },
+  { color: "#D97706", soft: "#FEF3C7", border: "#FDE68A", text: "#D97706" },
+  { color: "#7C3AED", soft: "#EDE9FE", border: "#DDD6FE", text: "#7C3AED" },
+  { color: "#DC2626", soft: "#FEF2F2", border: "#FECACA", text: "#DC2626" }
+];
 
 export default function EndpointTrailView({
   victimAccount,
   onSearchVictim,
-  traceData,
-  loading,
+  trace,
+  onRetry,
   onNavigateToNotices,
   isActive = true
 }) {
+  const traceData = trace?.data || null;
+  const loading = Boolean(trace?.loading);
   const [inputAcct, setInputAcct] = useState(victimAccount || "");
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 20, y: 20 });
@@ -70,93 +85,29 @@ export default function EndpointTrailView({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const effectiveTrace = (traceData && Array.isArray(traceData.nodes) && traceData.nodes.length > 0)
-    ? traceData
-    : DEFAULT_TRACE;
+  const hasTrace = Boolean(traceData && Array.isArray(traceData.nodes) && traceData.nodes.length > 0);
+  const effectiveTrace = hasTrace ? traceData : EMPTY_TRACE;
 
   // Group nodes by hop level (0: Victim, 1: L1 Collector, 2: L2 Distributors, 3: L3 Cashout, 4: L4 Terminal)
   const hopGroups = React.useMemo(() => {
-    const groups = { 0: [], 1: [], 2: [], 3: [], 4: [] };
-    if (effectiveTrace && effectiveTrace.nodes) {
-      effectiveTrace.nodes.forEach((n) => {
-        const h = Math.min(n.hop ?? 0, 4);
-        if (!groups[h]) groups[h] = [];
-        groups[h].push(n);
-      });
-    }
+    // One group per hop the trace actually returned: no fixed number of columns.
+    const groups = {};
+    effectiveTrace.nodes.forEach((n) => {
+      const h = n.hop ?? 0;
+      if (!groups[h]) groups[h] = [];
+      groups[h].push(n);
+    });
     return groups;
   }, [effectiveTrace]);
 
-  // Synthesize or extract multi-hop links to guarantee 100% graph connectivity
-  const effectiveLinks = React.useMemo(() => {
-    if (effectiveTrace && effectiveTrace.links && effectiveTrace.links.length > 0) {
-      return effectiveTrace.links;
-    }
-    const generated = [];
-    const h0 = hopGroups[0] || [];
-    const h1 = hopGroups[1] || [];
-    const h2 = hopGroups[2] || [];
-    const h3 = hopGroups[3] || [];
-    const h4 = hopGroups[4] || [];
-
-    if (h0[0] && h1[0]) {
-      generated.push({
-        txn_id: "TXN-HOP1-01",
-        source: h0[0].id,
-        target: h1[0].id,
-        amount: h1[0].tainted_received || effectiveTrace?.total_siphoned_inr || 1478894.0,
-        payment_mode: "RTGS",
-        narration: "DIGITAL-ARREST-TRANSFER",
-        hop: 1
-      });
-    }
-
-    if (h1[0]) {
-      h2.forEach((n2, idx) => {
-        generated.push({
-          txn_id: `TXN-HOP2-${idx + 1}`,
-          source: h1[0].id,
-          target: n2.id,
-          amount: n2.tainted_received || 99642.85,
-          payment_mode: "IMPS",
-          narration: "Bunny-Hop Smurfing",
-          hop: 2
-        });
-      });
-    }
-
-    if (h3.length > 0 && h2.length > 0) {
-      h3.forEach((n3, idx) => {
-        const srcNode = h2[idx % h2.length];
-        generated.push({
-          txn_id: `TXN-HOP3-${idx + 1}`,
-          source: srcNode.id,
-          target: n3.id,
-          amount: n3.tainted_received || 70000.0,
-          payment_mode: "UPI/P2P",
-          narration: "Crypto USDT Exit",
-          hop: 3
-        });
-      });
-    }
-
-    if (h4.length > 0 && h3.length > 0) {
-      h4.forEach((n4, idx) => {
-        const srcNode = h3[idx % h3.length];
-        generated.push({
-          txn_id: `TXN-HOP4-${idx + 1}`,
-          source: srcNode.id,
-          target: n4.id,
-          amount: n4.tainted_received || 45000.0,
-          payment_mode: "CRYPTO/OFFSHORE",
-          narration: "Terminal Crypto Off-Ramp",
-          hop: 4
-        });
-      });
-    }
-
-    return generated;
-  }, [traceData, hopGroups]);
+  // Only the transfers the trace returned are drawn.
+  const effectiveLinks = effectiveTrace.links || [];
+  const hopNumbers = Object.keys(hopGroups).map(Number).filter((h) => hopGroups[h].length > 0).sort((a, b) => a - b);
+  const lastHop = hopNumbers.length ? hopNumbers[hopNumbers.length - 1] : 0;
+  // full_hops = hops in the whole trace; fewer are shown when the display filter trims it.
+  const fullHops = traceData?.full_hops ?? null;
+  const trimmed = Boolean(traceData?.display_trimmed) && fullHops != null && fullHops > lastHop;
+  const spanSeconds = traceData?.summary?.seconds_first_to_last;
 
   // Orthogonal Horizontal Pipeline Path with rounded elbow fillets
   const makePipelinePath = (x1, y1, x2, y2) => {
@@ -332,17 +283,17 @@ export default function EndpointTrailView({
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-xs bg-[#D96B27]"></span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E968D] font-mono">
-              MULTI-HOP GRAPH FORENSICS • 2,000,000 TRANSACTIONS
+              MULTI-HOP MONEY TRAIL
             </span>
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-xs bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-mono">
-              HOP 0 → HOP 3
+              {hasTrace ? `HOP 0 → HOP ${lastHop}${trimmed ? ` OF ${fullHops}` : ""}` : "NO TRACE"}
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#2C2623] mt-0.5 tracking-tight">
             Endpoint Multi-Hop Money Trail &amp; Flow Graph
           </h2>
           <p className="text-xs text-[#746D65] mt-0.5 max-w-3xl font-sans">
-            Interactive zoomable forensic canvas showing end-to-end multi-tier fund dispersion across 2,000,000 transactions.
+            Zoomable canvas showing how the selected victim's money moved from account to account.
           </p>
         </div>
 
@@ -352,7 +303,7 @@ export default function EndpointTrailView({
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9E968D] pointer-events-none" />
             <input
               type="text"
-              placeholder="Enter Victim Account ID (e.g. KKBK10000000)..."
+              placeholder="Enter victim account number"
               value={inputAcct}
               onChange={(e) => setInputAcct(e.target.value)}
               className="w-64 sm:w-80 bg-white border border-[#D4CEBF] rounded-sm pl-8 pr-3 py-1.5 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 shadow-2xs transition-all"
@@ -369,70 +320,44 @@ export default function EndpointTrailView({
         </form>
       </div>
 
-      {/* 2. Structured Quick Forensic Inquiry Targets */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 bg-white border border-[#E8E2D5] rounded-sm shadow-2xs text-xs">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 text-[#746D65] font-mono text-[10px] uppercase font-bold pr-2.5 border-r border-[#E8E2D5] shrink-0">
-            <Eye className="w-3 h-3 text-[#D96B27]" />
-            <span>4-HOP BENCHMARK TARGETS:</span>
-          </div>
-          {[
-            { id: "KKBK10000000", name: "Sunil Verma", loss: "₹4.55L", type: "4-Hop Digital Arrest" },
-            { id: "SBIN10015314", name: "Dr. Priya Sharma", loss: "₹1.01L", type: "4-Hop Task Scam" },
-            { id: "BARB10005606", name: "Ramesh Patel", loss: "₹1.94L", type: "4-Hop IPO Syndicate" }
-          ].map((d) => {
-            const isActive = inputAcct === d.id;
-            return (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => {
-                  setInputAcct(d.id);
-                  onSearchVictim(d.id);
-                }}
-                className={`px-2.5 py-1 rounded-xs font-mono text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                  isActive
-                    ? "bg-[#D96B27] text-white border-[#C25B1D]"
-                    : "bg-[#FAF6EE] hover:bg-white text-[#2C2623] border-[#E8E2D5] hover:border-[#D96B27]"
-                }`}
-              >
-                <span className={isActive ? "text-white" : "text-[#2C2623]"}>{d.name}</span>
-                <span
-                  className={`text-[10px] px-1 py-0.2 rounded-xs font-bold ${
-                    isActive ? "bg-white/20 text-white" : "bg-[#FFEDD5] text-[#D96B27]"
-                  }`}
-                >
-                  {d.loss}
-                </span>
-                <span className={`text-[9px] ${isActive ? "text-white/80" : "text-[#9E968D]"}`}>
-                  ({d.type})
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Active Target Telemetry Indicator */}
-        <div className="flex items-center gap-2 font-mono text-[11px] text-[#746D65] shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
-          <span>Active Target:</span>
-          <strong className="text-[#2C2623] font-bold">{inputAcct || "None Selected"}</strong>
-        </div>
+      {/* 2. Selected account */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-white border border-[#E8E2D5] rounded-sm shadow-2xs font-mono text-[11px] text-[#746D65]">
+        <span className={`w-1.5 h-1.5 rounded-full ${hasTrace ? "bg-[#059669]" : "bg-[#9E968D]"}`}></span>
+        <span>Selected victim:</span>
+        <strong className="text-[#2C2623] font-bold">{victimAccount || "none"}</strong>
       </div>
 
+      {!hasTrace ? (
+        loading ? (
+          <LoadingState label={`Tracing ${trace?.victim || "victim"}...`} />
+        ) : trace?.error ? (
+          <ErrorState title="The trace could not be loaded" message={trace.error} onRetry={onRetry} />
+        ) : (
+          <EmptyState
+            title={victimAccount ? `No money trail for ${victimAccount}` : "No victim selected"}
+            hint={
+              victimAccount
+                ? "The engine found no transaction graph for this account with the current display filters."
+                : "Enter a victim account above, or pick one in the header."
+            }
+          />
+        )
+      ) : (
+        <>
       {/* 3. Framed Metric Strip with Sharp Dividers (5-Column Grid) */}
       {traceData && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#E8E2D5] bg-white border border-[#E8E2D5] rounded-sm shadow-2xs">
           {/* Metric 1: Trace Latency */}
           <div className="p-3 sm:p-3.5 flex flex-col justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#746D65] font-mono block whitespace-nowrap">
-              TRACE LATENCY
+              TRACE TIME (SERVER)
             </span>
             <div className="text-lg sm:text-xl font-bold font-mono text-[#059669] tracking-tight my-0.5 whitespace-nowrap">
-              {traceData.latency_ms || 12.35} ms
+              {trace?.serverMs == null ? "—" : `${trace.serverMs} ms`}
             </div>
             <p className="text-[11px] text-[#059669] font-medium whitespace-nowrap font-sans">
-              Vector sub-second hop scan
+              {fullHops ?? "—"} hops{trimmed ? `, ${lastHop} shown` : ""} •{" "}
+              {spanSeconds == null ? "—" : `${(spanSeconds / 60).toFixed(1)} min`} first to last transfer
             </p>
           </div>
 
@@ -468,7 +393,7 @@ export default function EndpointTrailView({
               CORRELATED NETWORK
             </span>
             <div className="text-lg sm:text-xl font-bold font-mono text-[#2C2623] tracking-tight my-0.5 whitespace-nowrap">
-              {traceData.nodes_count || 0} Nodes • {effectiveLinks.length} Links
+              {effectiveTrace.nodes.length} Nodes • {effectiveLinks.length} Links
             </div>
             <p className="text-[11px] text-[#746D65] whitespace-nowrap font-sans">
               Intake to exit endpoints
@@ -486,7 +411,7 @@ export default function EndpointTrailView({
                 className="w-full px-3 py-1.5 rounded-sm bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-mono font-bold shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>Freeze {traceData.freeze_candidates?.length || (hopGroups[1].length + hopGroups[2].length + hopGroups[3].length)} Accounts</span>
+                <span>{traceData.freeze_candidates?.length ?? 0} freeze candidates</span>
               </button>
             </div>
             <p className="text-[10px] text-[#9E968D] font-mono whitespace-nowrap">
@@ -678,7 +603,7 @@ export default function EndpointTrailView({
               const strokeColor = l.hop === 1 ? "#10B981" : l.hop === 2 ? "#EA580C" : l.hop === 3 ? "#7C3AED" : "#DC2626";
 
               return (
-                <g key={l.txn_id || i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.18}>
+                <g key={l.tx_key ?? i} className="transition-opacity duration-200" opacity={active ? 1.0 : 0.18}>
                   {/* Outer Pipe Glow Casing */}
                   <path
                     d={l.pathD}
@@ -754,395 +679,120 @@ export default function EndpointTrailView({
             })}
           </svg>
 
-          {/* 4 HIERARCHICAL HOP LANES (Nodes Layer) */}
+          {/* HOP LANES: one column per hop found in the trace. Labels are the engine's roles. */}
           <div className="flex items-start gap-20 relative z-10">
-            {/* ------------------------------------------------------------- */}
-            {/* COLUMN 0: HOP 0 • VICTIM ACCOUNT                              */}
-            {/* ------------------------------------------------------------- */}
-            <div className="w-80 flex-shrink-0 space-y-4">
-              <div className="bg-[#E6F7F0] border border-[#A7F3D0] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-[#059669] uppercase font-mono tracking-wider">
-                    HOP 0 • VICTIM ACCOUNT
-                  </span>
-                  <p className="text-[10px] text-[#047857]">Origin Fraud Source (FIR Complainant)</p>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#059669] font-bold border border-[#A7F3D0]">
-                  Origin
-                </span>
-              </div>
+            {hopNumbers.map((h) => {
+              const theme = HOP_THEMES[Math.min(h, HOP_THEMES.length - 1)];
+              const lane = hopGroups[h] || [];
+              const wide = lane.length > WIDE_LANE_FROM && hop2Layout === "grid";
+              const roles = [...new Set(lane.map((n) => n.role || "no role"))].join(" / ");
 
-              {hopGroups[0]?.map((node) => {
-                const active = isNodeActive(node.id);
-                const isSelected = selectedNode?.id === node.id;
-
-                return (
+              return (
+                <div key={h} className={`${wide ? "w-[420px]" : "w-80"} flex-shrink-0 space-y-4`}>
                   <div
-                    key={node.id}
-                    ref={(el) => {
-                      if (el) nodeRefs.current[node.id] = el;
-                    }}
-                    onMouseEnter={() => setHoveredNodeId(node.id)}
-                    onMouseLeave={() => setHoveredNodeId(null)}
-                    onClick={() => setSelectedNode(node)}
-                    className={`interactive-node-card relative bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
-                      isSelected
-                        ? "border-[#10B981] ring-3 ring-[#10B981]/30 scale-102"
-                        : active
-                        ? "border-[#10B981] hover:shadow-md"
-                        : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                    }`}
+                    style={{ backgroundColor: theme.soft, borderColor: theme.border }}
+                    className="border rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs"
                   >
-                    {/* Outgoing Right Connector Port */}
-                    <div className="absolute right-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#10B981] border-2 border-white shadow-xs" />
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                        <button
-                          onClick={(e) => handleCopy(node.id, e)}
-                          title="Copy Account ID"
-                          className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
-                        >
-                          {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#E6F7F0] text-[#059669] font-bold">
-                        Complainant
-                      </span>
-                    </div>
-
-                    <div className="text-[11px] text-[#746D65] mt-1 font-medium">
-                      {node.bank} ({node.ifsc})
-                    </div>
-
-                    <div className="mt-2.5 p-2 rounded-xl bg-[#FEF2F2] border border-[#FEE2E2]">
-                      <span className="text-[10px] uppercase font-bold text-[#DC2626]">Total Funds Siphoned</span>
-                      <div className="text-sm font-mono font-bold text-[#DC2626]">
-                        ₹{traceData?.total_siphoned_inr ? traceData.total_siphoned_inr.toLocaleString("en-IN") : "0"}
-                      </div>
-                    </div>
-
-                    <div className="mt-2 text-[10px] text-[#9E968D] font-mono flex items-center justify-between">
-                      <span>{node.device_type || "Android"}</span>
-                      <span>{node.ip_address || "103.118.121.99"}</span>
-                    </div>
+                    <span style={{ color: theme.text }} className="text-xs font-bold uppercase font-mono tracking-wider">
+                      HOP {h} • {roles}
+                    </span>
+                    <span
+                      style={{ color: theme.text, borderColor: theme.border }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-white font-bold border font-mono"
+                    >
+                      {lane.length}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
 
-            {/* ------------------------------------------------------------- */}
-            {/* COLUMN 1: HOP 1 • L1 COLLECTOR                                */}
-            {/* ------------------------------------------------------------- */}
-            <div className="w-80 flex-shrink-0 space-y-4">
-              <div className="bg-[#FFF7ED] border border-[#FFEDD5] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-[#EA580C] uppercase font-mono tracking-wider">
-                    HOP 1 • L1 COLLECTOR
-                  </span>
-                  <p className="text-[10px] text-[#C2410C]">Primary Aggregation Mule (Immediate Drain)</p>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-[#EA580C] text-white font-bold animate-pulse">
-                  Target
-                </span>
-              </div>
+                  <div className={wide ? "grid grid-cols-2 gap-3" : "space-y-3"}>
+                    {lane.map((node) => {
+                      const active = isNodeActive(node.id);
+                      const isSelected = selectedNode?.id === node.id;
+                      const isVictim = h === 0;
 
-              {hopGroups[1]?.map((node) => {
-                const active = isNodeActive(node.id);
-                const isSelected = selectedNode?.id === node.id;
-
-                return (
-                  <div
-                    key={node.id}
-                    ref={(el) => {
-                      if (el) nodeRefs.current[node.id] = el;
-                    }}
-                    onMouseEnter={() => setHoveredNodeId(node.id)}
-                    onMouseLeave={() => setHoveredNodeId(null)}
-                    onClick={() => setSelectedNode(node)}
-                    className={`interactive-node-card relative bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
-                      isSelected
-                        ? "border-[#EA580C] ring-3 ring-[#EA580C]/30 scale-102"
-                        : active
-                        ? "border-[#EA580C] hover:shadow-md"
-                        : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                    }`}
-                  >
-                    {/* Incoming Left Connector Port */}
-                    <div className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#EA580C] border-2 border-white shadow-xs" />
-                    {/* Outgoing Right Connector Port */}
-                    <div className="absolute right-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#EA580C] border-2 border-white shadow-xs" />
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                        <button
-                          onClick={(e) => handleCopy(node.id, e)}
-                          title="Copy Account ID"
-                          className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
+                      return (
+                        <div
+                          key={node.id}
+                          ref={(el) => {
+                            if (el) nodeRefs.current[node.id] = el;
+                          }}
+                          onMouseEnter={() => setHoveredNodeId(node.id)}
+                          onMouseLeave={() => setHoveredNodeId(null)}
+                          onClick={() => setSelectedNode(node)}
+                          style={{ borderColor: active || isSelected ? theme.color : "#E8E2D5" }}
+                          className={`interactive-node-card relative bg-white border-2 rounded-2xl p-3.5 shadow-sm transition-all duration-150 cursor-pointer ${
+                            isSelected ? "scale-102 shadow-md" : active ? "hover:shadow-md" : "opacity-40 hover:opacity-100"
+                          }`}
                         >
-                          {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#FEF3C7] text-[#D97706] font-bold font-mono">
-                        Score: {node.risk_score || 95}
-                      </span>
-                    </div>
+                          {!isVictim && (
+                            <div
+                              style={{ backgroundColor: theme.color }}
+                              className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-xs"
+                            />
+                          )}
+                          {h !== lastHop && (
+                            <div
+                              style={{ backgroundColor: theme.color }}
+                              className="absolute right-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-xs"
+                            />
+                          )}
 
-                    <div className="text-[11px] text-[#746D65] mt-1 font-medium">
-                      {node.bank} ({node.ifsc})
-                    </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-mono text-xs font-bold text-[#2C2623] truncate">{node.id}</span>
+                              <button
+                                onClick={(e) => handleCopy(node.id, e)}
+                                title="Copy Account ID"
+                                className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
+                              >
+                                {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            </div>
+                            <span
+                              style={{ backgroundColor: theme.soft, color: theme.text }}
+                              className="text-[10px] px-2 py-0.5 rounded font-bold font-mono whitespace-nowrap"
+                              title="Role and risk score from the engine"
+                            >
+                              {node.role || "—"} • {node.risk_score == null ? "—" : Math.round(node.risk_score)}
+                            </span>
+                          </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-2.5">
-                      <div className="p-2 rounded-xl bg-[#FFF7ED] border border-[#FFEDD5]">
-                        <span className="text-[9px] uppercase font-bold text-[#C2410C]">Received</span>
-                        <div className="text-xs font-mono font-bold text-[#EA580C]">
-                          ₹{node.tainted_received ? node.tainted_received.toLocaleString("en-IN") : "0"}
+                          <div className="text-[11px] text-[#746D65] mt-1 font-medium truncate">
+                            {node.bank || "—"} ({node.ifsc || "—"})
+                          </div>
+
+                          {isVictim ? (
+                            <div className="mt-2.5 p-2 rounded-xl bg-[#FEF2F2] border border-[#FEE2E2]">
+                              <span className="text-[10px] uppercase font-bold text-[#DC2626]">Paid by the victim</span>
+                              <div className="text-sm font-mono font-bold text-[#DC2626]">{inr(traceData?.total_siphoned_inr)}</div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 mt-2.5">
+                              <div className="p-2 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
+                                <span className="text-[9px] uppercase font-bold text-[#746D65]">Received</span>
+                                <div className="text-xs font-mono font-bold text-[#2C2623]">{inr(node.tainted_received)}</div>
+                              </div>
+                              <div className="p-2 rounded-xl bg-[#E6F7F0] border border-[#A7F3D0]">
+                                <span className="text-[9px] uppercase font-bold text-[#047857]">Holding</span>
+                                <div className="text-xs font-mono font-bold text-[#059669]">{inr(node.holding_amount)}</div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="mt-2 text-[10px] text-[#9E968D] font-mono flex items-center justify-between gap-2">
+                            <span>{node.device_type || "—"}</span>
+                            <span>{node.ip_address || "—"}</span>
+                          </div>
+                          {node.freeze_recommended && (
+                            <div className="mt-2 text-[10px] font-bold text-[#B45309] font-mono">freeze recommended</div>
+                          )}
                         </div>
-                      </div>
-                      <div className="p-2 rounded-xl bg-[#E6F7F0] border border-[#A7F3D0]">
-                        <span className="text-[9px] uppercase font-bold text-[#047857]">Trapped Balance</span>
-                        <div className="text-xs font-mono font-bold text-[#059669]">
-                          ₹{node.holding_amount ? node.holding_amount.toLocaleString("en-IN") : "0"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#FEF2F2] border border-[#FEE2E2] text-[10px] text-[#DC2626] font-bold flex items-center gap-1.5">
-                      <Zap className="w-3 h-3 text-[#DC2626] flex-shrink-0" />
-                      <span>Dispersed into {hopGroups[2]?.length || 14} mules in &lt; 7 mins</span>
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-
-            {/* ------------------------------------------------------------- */}
-            {/* COLUMN 2: HOP 2 • L2 DISTRIBUTOR MULES                        */}
-            {/* ------------------------------------------------------------- */}
-            <div className="w-[420px] flex-shrink-0 space-y-4">
-              <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-[#D97706] uppercase font-mono tracking-wider">
-                    HOP 2 • L2 DISTRIBUTORS ({hopGroups[2]?.length || 0})
-                  </span>
-                  <p className="text-[10px] text-[#B45309]">Smurfing Ring / Bunny-Hop Splitting Layer</p>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#D97706] font-bold border border-[#FDE68A]">
-                  Smurfing Ring
-                </span>
-              </div>
-
-              {/* Cards Container (Grid or Stack) */}
-              <div className={hop2Layout === "grid" ? "grid grid-cols-2 gap-3" : "space-y-3"}>
-                {hopGroups[2]?.map((node) => {
-                  const active = isNodeActive(node.id);
-                  const isSelected = selectedNode?.id === node.id;
-
-                  return (
-                    <div
-                      key={node.id}
-                      ref={(el) => {
-                        if (el) nodeRefs.current[node.id] = el;
-                      }}
-                      onMouseEnter={() => setHoveredNodeId(node.id)}
-                      onMouseLeave={() => setHoveredNodeId(null)}
-                      onClick={() => setSelectedNode(node)}
-                      className={`interactive-node-card relative bg-white border rounded-xl p-3 shadow-2xs transition-all duration-150 cursor-pointer ${
-                        isSelected
-                          ? "border-[#D97706] ring-2 ring-[#D97706]/30 scale-102"
-                          : active
-                          ? "border-[#D97706] hover:shadow-md"
-                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                      }`}
-                    >
-                      {/* Incoming Left Connector Port */}
-                      <div className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#D97706] border-2 border-white shadow-xs" />
-                      {/* Outgoing Right Connector Port */}
-                      <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#D97706] border-2 border-white shadow-xs" />
-
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#D97706] font-bold font-mono">
-                          {node.risk_score}
-                        </span>
-                      </div>
-
-                      <div className="text-[10px] text-[#746D65] mt-0.5 truncate font-medium">
-                        {node.bank} ({node.ifsc})
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] mt-2 font-mono pt-1.5 border-t border-[#F5EDE1]">
-                        <span className="text-[#746D65]">
-                          Share: ₹{node.tainted_received ? Number(node.tainted_received).toLocaleString("en-IN") : "0"}
-                        </span>
-                        <span className="text-[#059669] font-bold">
-                          Lien: ₹{node.holding_amount ? Number(node.holding_amount).toLocaleString("en-IN") : "0"}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ------------------------------------------------------------- */}
-            {/* COLUMN 3: HOP 3 • L3 CASHOUT / ESCROW                         */}
-            {/* ------------------------------------------------------------- */}
-            <div className="w-80 flex-shrink-0 space-y-4">
-              <div className="bg-[#EDE9FE] border border-[#DDD6FE] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-[#7C3AED] uppercase font-mono tracking-wider">
-                    HOP 3 • L3 CASHOUT / ESCROW ({hopGroups[3]?.length || 0})
-                  </span>
-                  <p className="text-[10px] text-[#6D28D9]">Crypto P2P / Offshore IP Transit Nodes</p>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#7C3AED] font-bold border border-[#DDD6FE]">
-                  P2P Escrow
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {hopGroups[3]?.map((node) => {
-                  const active = isNodeActive(node.id);
-                  const isSelected = selectedNode?.id === node.id;
-
-                  return (
-                    <div
-                      key={node.id}
-                      ref={(el) => {
-                        if (el) nodeRefs.current[node.id] = el;
-                      }}
-                      onMouseEnter={() => setHoveredNodeId(node.id)}
-                      onMouseLeave={() => setHoveredNodeId(null)}
-                      onClick={() => setSelectedNode(node)}
-                      className={`interactive-node-card relative bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
-                        isSelected
-                          ? "border-[#7C3AED] ring-3 ring-[#7C3AED]/30 scale-102"
-                          : active
-                          ? "border-[#7C3AED] hover:shadow-md"
-                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                      }`}
-                    >
-                      {/* Incoming Left Connector Port */}
-                      <div className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#7C3AED] border-2 border-white shadow-xs" />
-                      {/* Outgoing Right Connector Port to Hop 4 */}
-                      <div className="absolute right-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#7C3AED] border-2 border-white shadow-xs" />
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                          <button
-                            onClick={(e) => handleCopy(node.id, e)}
-                            title="Copy Account ID"
-                            className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
-                          >
-                            {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        </div>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#EDE9FE] text-[#7C3AED] font-bold">
-                          Crypto / P2P
-                        </span>
-                      </div>
-
-                      <div className="text-[11px] text-[#746D65] mt-1 font-medium">
-                        {node.bank} ({node.ifsc})
-                      </div>
-
-                      <div className="mt-2.5 p-2 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE]">
-                        <span className="text-[9px] uppercase font-bold text-[#6D28D9]">Exit Value</span>
-                        <div className="text-xs font-mono font-bold text-[#7C3AED]">
-                          ₹{node.tainted_received ? node.tainted_received.toLocaleString("en-IN") : "0"}
-                        </div>
-                      </div>
-
-                      <div className="mt-2 text-[10px] text-[#9E968D] font-mono">
-                        IP: <span className="text-[#DC2626] font-semibold">{node.ip_address || "194.26.29.11"}</span> (Foreign)
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ------------------------------------------------------------- */}
-            {/* COLUMN 4: HOP 4 • L4 TERMINAL EXIT & OFFSHORE CRYPTO          */}
-            {/* ------------------------------------------------------------- */}
-            <div className="w-80 flex-shrink-0 space-y-4">
-              <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-xl px-4 py-2 flex items-center justify-between shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-[#DC2626] uppercase font-mono tracking-wider">
-                    HOP 4 • L4 TERMINAL EXIT ({hopGroups[4]?.length || 0})
-                  </span>
-                  <p className="text-[10px] text-[#991B1B]">Binance Crypto P2P / Offshore Terminal</p>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-white text-[#DC2626] font-bold border border-[#FECACA]">
-                  L4 Terminal
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {hopGroups[4]?.map((node) => {
-                  const active = isNodeActive(node.id);
-                  const isSelected = selectedNode?.id === node.id;
-
-                  return (
-                    <div
-                      key={node.id}
-                      ref={(el) => {
-                        if (el) nodeRefs.current[node.id] = el;
-                      }}
-                      onMouseEnter={() => setHoveredNodeId(node.id)}
-                      onMouseLeave={() => setHoveredNodeId(null)}
-                      onClick={() => setSelectedNode(node)}
-                      className={`interactive-node-card relative bg-white border-2 rounded-2xl p-4 shadow-sm transition-all duration-150 cursor-pointer ${
-                        isSelected
-                          ? "border-[#DC2626] ring-3 ring-[#DC2626]/30 scale-102"
-                          : active
-                          ? "border-[#DC2626] hover:shadow-md"
-                          : "border-[#E8E2D5] opacity-40 hover:opacity-100"
-                      }`}
-                    >
-                      {/* Incoming Left Connector Port */}
-                      <div className="absolute left-[-7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#DC2626] border-2 border-white shadow-xs" />
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-[#2C2623]">{node.id}</span>
-                          <button
-                            onClick={(e) => handleCopy(node.id, e)}
-                            title="Copy Account ID"
-                            className="text-[#9E968D] hover:text-[#2C2623] p-0.5"
-                          >
-                            {copiedId === node.id ? <Check className="w-3 h-3 text-[#10B981]" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        </div>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#FEF2F2] text-[#DC2626] font-bold border border-[#FECACA]">
-                          Offshore Exit
-                        </span>
-                      </div>
-
-                      <div className="text-[11px] text-[#746D65] mt-1 font-medium">
-                        {node.bank} ({node.ifsc})
-                      </div>
-
-                      <div className="mt-2.5 p-2 rounded-xl bg-[#FFF5F5] border border-[#FECACA]">
-                        <span className="text-[9px] uppercase font-bold text-[#DC2626]">Terminal Dissipation</span>
-                        <div className="text-xs font-mono font-bold text-[#DC2626]">
-                          ₹{node.tainted_received ? Number(node.tainted_received).toLocaleString("en-IN") : "0"}
-                        </div>
-                      </div>
-
-                      <div className="mt-2 flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-[#DC2626] font-bold">● L4 Irreversible Exit</span>
-                        <span className="text-[#9E968D]">{node.ip_address || "185.220.101.4"}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1162,14 +812,14 @@ export default function EndpointTrailView({
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-bold text-[#2C2623]">{selectedNode.id}</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5]">
-                  Hop {selectedNode.hop} • {selectedNode.role || "MULE"}
+                  Hop {selectedNode.hop} • {selectedNode.role || "no role"}
                 </span>
                 <span className="text-xs font-bold text-[#059669]">
-                  Risk Score: {selectedNode.risk_score || 90}/100
+                  Risk Score: {selectedNode.risk_score == null ? "—" : selectedNode.risk_score}/100
                 </span>
               </div>
               <p className="text-xs text-[#746D65] mt-0.5">
-                Bank: <b>{selectedNode.bank}</b> | IFSC: <b>{selectedNode.ifsc}</b> | Device: {selectedNode.device_type}
+                Bank: <b>{selectedNode.bank}</b> | IFSC: <b>{selectedNode.ifsc}</b> | Device: {selectedNode.device_type || "—"}
               </p>
             </div>
 
@@ -1179,7 +829,7 @@ export default function EndpointTrailView({
                 className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer"
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>Issue Section 91 Freezing Notice for this Account</span>
+                <span>Open Section 91 notices</span>
               </button>
             </div>
           </div>
@@ -1206,17 +856,19 @@ export default function EndpointTrailView({
             <div className="p-3 rounded-xl bg-[#FAF6EE] border border-[#E8E2D5]">
               <span className="text-[#9E968D] block text-[10px] uppercase font-bold">IP & Device Signature</span>
               <span className="text-xs text-[#2C2623] truncate block">
-                {selectedNode.ip_address} ({selectedNode.device_type})
+                {selectedNode.ip_address || "—"} ({selectedNode.device_type || "—"})
               </span>
             </div>
           </div>
 
-          {selectedNode.reasons && (
+          {selectedNode.reasons?.length > 0 && (
             <div className="mt-3 p-3 rounded-xl bg-[#FEF2F2] border border-[#FEE2E2] text-xs text-[#DC2626] font-medium">
-              <b>Forensic Reason:</b> {selectedNode.reasons}
+              <b>Reasons:</b> {Array.isArray(selectedNode.reasons) ? selectedNode.reasons.join("; ") : selectedNode.reasons}
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );

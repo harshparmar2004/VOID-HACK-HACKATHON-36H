@@ -1,190 +1,111 @@
-const API_BASE = "http://127.0.0.1:8000/api";
+import { API_BASE } from "./config";
 
-export async function fetchSystemStatus() {
-  const res = await fetch(`${API_BASE}/status`);
-  if (!res.ok) throw new Error("Failed to fetch system status");
-  return res.json();
-}
+const TIMING_HEADER = "X-Process-Time-Ms";
 
-export async function fetchVictims() {
-  const res = await fetch(`${API_BASE}/victims`);
-  if (!res.ok) throw new Error("Failed to fetch victims");
-  return res.json();
-}
-
-export async function traceVictim(victimAccount, maxHops = 4, timeWindow = 180, minAmount = 0, bankFilter = null, keyword = null, customRules = null) {
-  let url = `${API_BASE}/trace/${victimAccount}?max_hops=${maxHops}&time_window=${timeWindow}`;
-  if (minAmount > 0) url += `&min_amount=${minAmount}`;
-  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
-  if (keyword && String(keyword).trim()) url += `&keyword=${encodeURIComponent(String(keyword).trim())}`;
-  if (customRules && Array.isArray(customRules) && customRules.length > 0) {
-    url += `&custom_rules=${encodeURIComponent(JSON.stringify(customRules))}`;
+// Every call goes through here. A failed call throws; no caller substitutes sample data.
+async function send(path, options) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, options);
+  } catch (err) {
+    throw new Error(`Cannot reach the API at ${API_BASE} (${err.message})`);
   }
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to trace victim money trail");
-  return res.json();
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const error = new Error(body?.detail || `Request failed (HTTP ${res.status})`);
+    error.status = res.status;
+    throw error;
+  }
+  return { body: await res.json(), serverMs: serverTime(res) };
 }
 
-export async function simulateParameters(payload) {
-  const res = await fetch(`${API_BASE}/parameters/simulate`, {
+// Time the API spent on the request, from its X-Process-Time-Ms header. Null if absent.
+function serverTime(res) {
+  const value = Number(res.headers.get(TIMING_HEADER));
+  return res.headers.has(TIMING_HEADER) && Number.isFinite(value) ? value : null;
+}
+
+async function request(path, options) {
+  return (await send(path, options)).body;
+}
+
+function query(params) {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") q.set(key, value);
+  });
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+const bank = (code) => (code && code !== "ALL" ? code : null);
+const positive = (n) => (Number(n) > 0 ? Number(n) : null);
+const keyword = (k) => (k && String(k).trim() ? String(k).trim() : null);
+
+export function fetchSystemStatus() {
+  return request("/status");
+}
+
+export function fetchVictims() {
+  return request("/victims");
+}
+
+export function fetchActiveProfile() {
+  return request("/profiles/active");
+}
+
+// Display filters only: they trim the returned graph, never the trace itself.
+// Resolves to { data, serverMs }.
+export async function traceVictim(victimAccount, { maxHops, minAmount, bankFilter, narrationKeyword } = {}) {
+  const { body, serverMs } = await send(`/trace/${encodeURIComponent(victimAccount)}${query({
+    max_hops: positive(maxHops),
+    min_amount: positive(minAmount),
+    bank_filter: bank(bankFilter),
+    keyword: keyword(narrationKeyword)
+  })}`);
+  return { data: body, serverMs };
+}
+
+export function fetchMules({ limit, role, minRisk, minAmount, bankFilter } = {}) {
+  return request(`/mules${query({
+    limit,
+    role_filter: role,
+    min_risk: positive(minRisk),
+    min_amount: positive(minAmount),
+    bank_filter: bank(bankFilter)
+  })}`);
+}
+
+export function fetchEntities({ limit, bankFilter, minAmount } = {}) {
+  return request(`/entities${query({ limit, bank_filter: bank(bankFilter), min_amount: positive(minAmount) })}`);
+}
+
+export function fetchScannerSummary() {
+  return request("/scanner/summary");
+}
+
+export function runScannerBenchmark() {
+  return request("/scanner/run-60s-benchmark", { method: "POST" });
+}
+
+export function fetchProblematicTransactions({ limit, filterType, minAmount, bankFilter, narrationKeyword } = {}) {
+  return request(`/scanner/problematic-transactions${query({
+    limit,
+    filter_type: filterType && filterType !== "ALL" ? filterType : null,
+    min_amount: positive(minAmount),
+    bank_filter: bank(bankFilter),
+    keyword: keyword(narrationKeyword)
+  })}`);
+}
+
+export function runJuryBenchmark(n) {
+  return request("/jury/blind-test", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(n ? { n } : {})
   });
-  if (!res.ok) throw new Error("Failed to simulate parameters");
-  return res.json();
-}
-
-export async function fetchMules(limit = 2000, role = null, minRisk = 0, minAmount = 0, bankFilter = null) {
-  let url = `${API_BASE}/mules?limit=${limit}`;
-  if (role) url += `&role_filter=${role}`;
-  if (minRisk > 0) url += `&min_risk=${minRisk}`;
-  if (minAmount > 0) url += `&min_amount=${minAmount}`;
-  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch mules");
-  return res.json();
-}
-
-export async function fetchBankNotices(victimAccount, firNumber = "FIR-0142/2026/CYBER-INDORE") {
-  const res = await fetch(`${API_BASE}/legal/notices/${victimAccount}?fir_number=${encodeURIComponent(firNumber)}`);
-  if (!res.ok) throw new Error("Failed to fetch legal notices");
-  return res.json();
-}
-
-export async function fetchCaseDiary(victimAccount, firNumber = "FIR-0142/2026/CYBER-INDORE") {
-  const res = await fetch(`${API_BASE}/legal/case-diary/${victimAccount}?fir_number=${encodeURIComponent(firNumber)}`);
-  if (!res.ok) throw new Error("Failed to fetch case diary");
-  return res.json();
-}
-
-export async function runJuryBenchmark() {
-  const res = await fetch(`${API_BASE}/jury/blind-test`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to run jury blind test");
-  return res.json();
-}
-
-export async function uploadBankStatement(file) {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch(`${API_BASE}/upload`, {
-    method: "POST",
-    body: formData
-  });
-  if (!res.ok) throw new Error("Failed to upload and parse bank statement");
-  return res.json();
-}
-
-export async function loadDemoVictim(demoId = "case_sunil_4hop") {
-  const res = await fetch(`${API_BASE}/victim/load-demo/${demoId}`, {
-    method: "POST"
-  });
-  if (!res.ok) throw new Error("Failed to load 4-hop demo victim scenario");
-  return res.json();
 }
 
 export function getTemplateDownloadUrl(fileName) {
   return `${API_BASE}/templates/${encodeURIComponent(fileName)}`;
-}
-
-export async function fetchScannerSummary() {
-  const res = await fetch(`${API_BASE}/scanner/summary`);
-  if (!res.ok) throw new Error("Failed to fetch scanner summary");
-  return res.json();
-}
-
-export async function run60sFraudBenchmark() {
-  const res = await fetch(`${API_BASE}/scanner/run-60s-benchmark`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to execute 60-second 2M fraud scan benchmark");
-  return res.json();
-}
-
-export async function fetchProblematicTransactions(limit = 100, filterType = null, minAmount = 0, bankFilter = null, keyword = null) {
-  let url = `${API_BASE}/scanner/problematic-transactions?limit=${limit}`;
-  if (filterType) url += `&filter_type=${encodeURIComponent(filterType)}`;
-  if (minAmount > 0) url += `&min_amount=${minAmount}`;
-  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
-  if (keyword && String(keyword).trim()) url += `&keyword=${encodeURIComponent(String(keyword).trim())}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch problematic transactions");
-  return res.json();
-}
-
-export async function executeEmergencyFreeze(accountIds, details = null) {
-  const payload = {
-    account_ids: accountIds,
-    target_accounts: accountIds
-  };
-  if (details && Array.isArray(details) && details.length > 0) {
-    payload.details = details;
-  }
-  const res = await fetch(`${API_BASE}/scanner/emergency-freeze`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error("Failed to execute emergency multi-bank freeze");
-  return res.json();
-}
-
-export async function fetchFrozenAccounts() {
-  const res = await fetch(`${API_BASE}/scanner/frozen-accounts`);
-  if (!res.ok) throw new Error("Failed to fetch frozen accounts registry");
-  return res.json();
-}
-
-export async function unfreezeAccount(accountId) {
-  const res = await fetch(`${API_BASE}/scanner/unfreeze`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ account_id: accountId })
-  });
-  if (!res.ok) throw new Error("Failed to unfreeze account");
-  return res.json();
-}
-
-export async function ingestFromUrl(url) {
-  const res = await fetch(`${API_BASE}/ingest-url`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url })
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Failed to ingest dataset from URL");
-  }
-  return res.json();
-}
-
-export async function fetchDetectedVictims() {
-  const res = await fetch(`${API_BASE}/detected-victims`);
-  if (!res.ok) throw new Error("Failed to fetch detected victims");
-  return res.json();
-}
-
-export async function fetchEntities(limit = 500, bankFilter = null, minAmount = 0) {
-  let url = `${API_BASE}/entities?limit=${limit}`;
-  if (bankFilter && bankFilter !== "ALL") url += `&bank_filter=${encodeURIComponent(bankFilter)}`;
-  if (minAmount > 0) url += `&min_amount=${minAmount}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch entity directory");
-  return res.json();
-}
-
-export async function fetchVaultArtifacts() {
-  const res = await fetch(`${API_BASE}/vault/artifacts`);
-  if (!res.ok) throw new Error("Failed to fetch evidence vault artifacts");
-  return res.json();
-}
-
-export async function verifyVaultChain() {
-  const res = await fetch(`${API_BASE}/vault/verify`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to verify evidence chain integrity");
-  return res.json();
-}
-
-export async function fetchVaultCertificate(artifactId) {
-  const res = await fetch(`${API_BASE}/vault/certificate/${encodeURIComponent(artifactId)}`);
-  if (!res.ok) throw new Error("Failed to generate Section 63 BSA certificate");
-  return res.json();
 }

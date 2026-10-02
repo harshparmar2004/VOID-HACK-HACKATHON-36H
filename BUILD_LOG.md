@@ -383,3 +383,62 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - Trace timings are the engine call only, with the graph context already loaded; they exclude the HTTP layer and the UI field mapping.
 - UI (Step 7): the jury page reads `detection_metrics.f1_score` and role keys `L1_COLLECTOR` / `L2_DISTRIBUTOR` / `L3_CASHOUT`; we return null and our role names (L1 / L2 / L3), so its hard-coded fallbacks must go.
 - POST `/parameters/simulate` is still 404. TestClient only; not run under a real uvicorn process.
+
+## 2026-10-02 — UI read-through: what renders real data, what is fake (no code changed)
+
+**Step** — static review of `ui\src` against the live API (both servers up; every path the UI calls was probed). Nothing edited. Not checked in a browser.
+
+**Results**
+- Real data: victim list, trace graph / trail (nodes, links, totals), mule dossier list, entity directory, scanner list (ALL / Foreign / Crime Links tabs), status counts.
+- Fake or stale: `mockData.js` fallbacks (trace, mules, notices, diary, scanner rows) shown whenever a call fails or returns empty; Evidence Vault, Section 91 notices text, Case Diary, Activity Timeline (fully hard-coded), assistant chat (canned replies), jury F1 "98.4%", scanner speed-up / whale tiles, dossier P1-P6 scores, header name / FIR number, sidebar "24,368".
+- Failing calls: `/parameters/simulate` 404; legal, vault, upload, freeze 501; settings, assistant, load-demo, ingest-url 410; scanner tabs `HEAVY_WHALES` / `SMURFING_HOPS` 422.
+
+**Open items** — all of this is the Step 7 list in API_CONTRACT.md; the fake fallbacks hide the failing calls, so the pages look fine while showing invented numbers.
+
+## 2026-10-02 — Step 7a1: UI without mock data, dropped features removed, deferred features disabled
+
+**Step** — `ui\src\` only. No change to `api\`, `engine\` or the database.
+
+**Files** — new `ui\src\config.js`, `format.js`, `components\States.jsx`; deleted `mockData.js`, `components\SettingsModal.jsx`, `ActivityTimelineView.jsx`, `GovernmentRequisitionDocument.jsx`; rewritten `App.jsx`, `api.js`, `Header`, `Sidebar`, `CaseIntakeView`, `EvidenceVaultView`, `CaseDiaryView`, `Section91NoticesView`, `EntityDirectoryView`, `JuryBenchmarkView`, `ForensicParametersView`, `MuleDossierView`, `RealtimeFraudScannerView`, `RegisterFIRModal`; patched `NetworkGraphView`, `EndpointTrailView`. 21 files, +2,203 / -11,531 lines.
+
+**Key names** — `API_BASE` (env `VITE_API_BASE`, default the local API), `request()` in `api.js` (throws with the server's `detail`), `LoadingState` / `EmptyState` / `ErrorState` / `LaterStep` / `LaterButton` / `PageHeader` / `Stat`, `inr` / `num` / `text` / `dateTime` / `downloadCsv`, `TraceGate`, trace state `{victim, data, loading, error, notFound}`, `FILTER_DEFAULTS`, `HOP_THEMES`.
+
+**What changed**
+- Every page has loading, empty and error states; a failed or empty call shows a message, never sample data. A missing value is a dash.
+- Header / sidebar: selected victim account, amount paid from the trace, counts from `/api/status`; no hard-coded name, FIR number or account count.
+- Removed: Settings modal and the settings panel on the Jury page, assistant chat, URL ingest, demo loader, Activity Timeline, the mock notice document.
+- Deferred (screen kept, actions disabled, "Available in a later step"): upload, notices, freeze / unfreeze, case diary, evidence vault. These pages show only real engine output (freeze candidates, trace summary and findings, file SHA-256, trace fingerprint).
+- Parameters page: display filters + the active profile read from `/api/profiles/active` (read-only); the invented P1-P6 studio is gone. Dossier shows `param_points` and reasons instead of invented P1-P6 scores. Scanner tabs are the link types from the summary + foreign IP. Jury page shows only measured numbers.
+- Graph and trail: no synthetic links; card labels are the engine's roles (hop is layout and colour only); trail lanes are generated per hop found.
+
+**Results** — `npm run build` compiles (1,906 modules); `oxlint` 0 errors. Server-side smoke render of every view with live API data: 21 / 21 rendered, no `undefined` / `NaN` in the output. Search of `ui\src\` for mockData, `DEFAULT_`, names, FIR numbers, hashes, account numbers, transaction IDs, latency, percentages, amounts, IPs, URLs: only `config.js` (the API base) remains.
+
+**Deviations / open items**
+- Not checked in a real browser (no browser tool available); the five self-loading pages (dossier, scanner, entities, jury, parameters) were smoke-rendered in their loading state only, so their data tables are untested at runtime.
+- Several pages were rebuilt smaller rather than patched, because most of their content was invented; the old layouts are in git history.
+- FIR number / complainant name are typed by the officer and kept for the session only (no case register yet).
+- `qrcode.react` and `react-force-graph-2d` are now unused in `package.json` (outside `ui\src\`, not touched).
+- Bank names are still null from `/api/entities`, so bank tiles show codes only.
+
+## 2026-10-02 — Step 7a2: real trace timing, hop columns, scanner tabs, jury roles
+
+**Step** — `ui\src\` only. Items 3 and 4 and most of item 2 were already done in 7a1 (F1, fake loss, xlsx / pdf links, speed-up / throughput / whale tiles, fallback tab counts all removed there); this step finishes the rest.
+
+**Files** — changed `ui\src\api.js`, `App.jsx`, `components\EndpointTrailView.jsx`, `NetworkGraphView.jsx`, `RealtimeFraudScannerView.jsx`, `JuryBenchmarkView.jsx`.
+
+**Key names** — `send()` / `serverTime()` / `TIMING_HEADER` in `api.js`; `traceVictim` now resolves to `{data, serverMs}`; trace state gains `serverMs`; `fullHops`, `trimmed` (trail); `LARGE`, `LINK_LABELS`, `largeAmount` (scanner); `ROLE_ORDER`, `rolesText` (jury).
+
+**What changed**
+- Trace time on the trail and graph is the API's own `X-Process-Time-Ms` for that request; a dash if the header is missing.
+- Trail columns are built from the hops the trace returned (no fixed five, no empty "Hop 4"); the header shows `HOP 0 -> HOP n OF full_hops` when the display filter trims the trace. Missing bank, IFSC, device, IP, role or score show a dash.
+- Scanner tabs: All, one per link type from the summary (L1_L2 labelled "L1 -> L2 (second-hop split)"), foreign IP, and "Large transfers", which sends `min_amount` with an amount the officer types (no preset threshold). All tab filters answer 200.
+- Jury role breakdown lists our role names in the order VICTIM, L1, L2, L3, then any other.
+
+**Results** — `npm run build` compiles; `oxlint` 0 errors. Every filter the scanner sends answered HTTP 200 against the live API. Not checked in a browser.
+
+**What the UI needs that the API lacks**
+- A count for an amount filter: `problematic-transactions` returns a bare list capped at 1000, so the "Large transfers" tab can only show the rows returned ("1000+" at the cap). The same cap means lists of more than 1000 flagged transfers cannot be paged.
+- A suggested "large transfer" amount (for example from the profile); today the officer must type one.
+- Bank names (`/entities` `bank_stats.name` is null), so banks show as codes.
+- Trace time inside the response body; it is only in a response header.
+- Still 501 / absent: upload, notices, freeze / unfreeze, case diary, vault, profile save / activate, a case register for FIR details.
