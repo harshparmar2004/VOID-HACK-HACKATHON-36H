@@ -1,0 +1,9 @@
+{
+  "_doc": "Domain reference, not auditor code: the role scoring is expected to give each funnel group (PROJECT_CONTEXT 16, stage 7). Passed to auditor\\run_audit.py with --roles; the auditor itself names no role.",
+  "roles": {
+    "send_only": "VICTIM",
+    "payees": "L1",
+    "next_hop": "L2",
+    "receive_only": "L3"
+  }
+}

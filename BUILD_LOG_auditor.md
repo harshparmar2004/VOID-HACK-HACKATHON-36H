@@ -51,3 +51,28 @@
 - Identical category columns that share labels (`bank` / `ifsc_bank`) stay CLEAN; only relabelled or true/false twins are ARTEFACT.
 - The checker carries one hand-written number (50, the activity cut-off): it cannot be read from the data.
 - `do_not_use` flags hour of day; the engine feature `odd_hour_share` uses it. Nothing was switched off here: the list is advice for the engine.
+
+## 2026-10-03 — Task D1c: raw / engine layers, label-free funnel, agreement check
+
+**Step** — `run_audit.py` split into two layers; new generic funnel (Stage A raw, Stage B agreement with scores); raw layer proven on a scratch database holding only `tx` and `accounts`.
+
+**Files** — new `auditor\funnel.py`, `audits\funnel_roles.json`, `audits\check_auditor_raw_layer.py`; changed `auditor\run_audit.py`, `auditor\tools.py` (`load_rules(..., use_profile)`), `reports\json\audit.json`.
+
+**Key names** — `--layer raw|engine|both` (default both); `--limits` defaults to `audits\payment_limits.json`, `--roles` to `audits\funnel_roles.json`; `plan_raw`, `plan_engine`; every finding has `layer`; `audit.json` -> `run.layers`, `rules.{raw,engine}`, `summary_by_layer.{layer}.{findings,funnel}`, `funnel.{semantics,groups,summary,stages[]}`; stage = id, stage (A | B), layer, question, sql, result, verdict, explanation. `funnel.GROUPS` = send_only, payees, next_hop, receive_only; `MEMBERS` (shared SQL), `stage_a`, `stage_b`, `load_role_map`.
+
+**Results** — `run_audit.py --db ...`: 4.9 s, 78 findings, 5 funnel stages, 0 failures; two runs identical.
+- raw: 50 findings — CLEAN 25 · TRAP 3 · SIGNAL 7 · NOISE 3 · ARTEFACT 9 · INCONCLUSIVE 3; funnel SIGNAL 4.
+- engine: 28 findings — CLEAN 1 · SIGNAL 11 · NOISE 11 · INCONCLUSIVE 5; funnel CLEAN 1. Totals equal D1b.
+- Funnel (observed only): 24,873 accounts -> 300 send-only -> 129 payees -> 559 next hop -> 385 receive-only.
+  - send_only -> payees: 300 transfers, 0 elsewhere; 1 receiver per sender; no arrival, no ratio (money starts here).
+  - payees -> next_hop: 1,327 transfers, 0 elsewhere; arrival to forward median 542 s (180-898); receivers per sender median 9 (3-32); out/in 0.980 (q1 = q3 = 0.980).
+  - next_hop -> receive_only: 1,327 transfers, 0 elsewhere; median 1,035 s (123-1,799); receivers per sender median 2 (1-8); out/in 0.960 (min 0.959995, max 0.960005).
+- Stage B: 24,873 of 24,873 accounts agree, 0 disagreements (300/300, 129/129, 559/559, 385/385).
+- `check_auditor_raw_layer.py --db ...`: 10.4 s, 10 of 10 PASS; scratch db in %TEMP% had only `accounts`, `tx`; raw findings and funnel equal the raw layer on the full database; scratch deleted.
+- `check_auditor_generic.py`: PASS on all three checks.
+
+**Deviations**
+- Role labels cannot sit in `auditor\`, so the group -> role map lives in `audits\funnel_roles.json` (passed by default). Without it Stage B shows the table and is INCONCLUSIVE.
+- The raw layer never reads the scoring profile's `audit_rules`, so it answers the same before and after the engine runs; `rules` in `audit.json` is now keyed by layer. `ingest_meta` is still read for the file hash when present.
+- Funnel stages are counted apart from findings (`n_findings` stays 78). The engine layer still holds only feature outliers plus Stage B; no new score checks were added.
+- Arrival = the sender's latest incoming transfer at or before the forward; out/in uses the sender's total sent / total received.

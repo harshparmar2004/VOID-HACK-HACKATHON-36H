@@ -136,15 +136,16 @@ def active_profile(con) -> tuple[str | None, dict]:
     return row[0], json.loads(row[1]) if row[1] else {}
 
 
-def load_rules(con, limits_path: str | Path | None = None) -> dict:
+def load_rules(con, limits_path: str | Path | None = None, use_profile: bool = True) -> dict:
     """audit_rules.json, then the optional domain limits file (its `ranges`),
-    then the active profile's `audit_rules`, each overriding key by key."""
+    then the active profile's `audit_rules`, each overriding key by key.
+    use_profile=False leaves the profile out (the raw layer reads no engine table)."""
     rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))
     rules.pop("_doc", None)
     if limits_path:
         limits = json.loads(Path(limits_path).read_text(encoding="utf-8"))
         rules["ranges"] = limits.get("ranges") or {}
-    profile_id, definition = active_profile(con)
+    profile_id, definition = active_profile(con) if use_profile else (None, {})
     override = definition.get("audit_rules") or {}
     rules.update(override)
     rules["_source"] = {

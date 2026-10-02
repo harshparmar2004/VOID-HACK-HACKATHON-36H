@@ -7,55 +7,109 @@
       "accounts": 24873
     },
     "duckdb_version": "1.5.6",
-    "runtime_s": 4.496,
+    "runtime_s": 4.892,
+    "layers": [
+      "raw",
+      "engine"
+    ],
     "n_findings": 78,
+    "n_funnel_stages": 5,
     "n_failures": 0
   },
   "rules": {
-    "max_shapes": 20,
-    "max_categories": 64,
-    "max_pairs": 400,
-    "label_max_len": 40,
-    "rare_share_max": 0.01,
-    "near_unique_min_ratio": 0.99,
-    "independence_max_cramers_v": 0.05,
-    "min_expected_per_cell": 5,
-    "even_min_p_value": 0.01,
-    "even_max_relative_spread": 0.1,
-    "tie_max_probability": 0.05,
-    "benford_max_mad": 0.015,
-    "systemic_violation_min_share": 0.05,
-    "outlier_iqr_k": 1.5,
-    "outlier_min_group_size": 30,
-    "outlier_signal_min_lift": 3.0,
-    "outlier_signal_min_group_share": 0.25,
-    "artefact_max_p_value": 0.001,
-    "position_bins": 20,
-    "position_min_lift": 2.0,
-    "time_sorted_min_share": 0.99,
-    "adjacency_min_ratio": 3.0,
-    "ranges": {
-      "amount_paise": {
-        "min": 1,
-        "by": "mode",
-        "limits": {
-          "UPI": {
-            "max": 10000000
-          },
-          "IMPS": {
-            "max": 50000000
-          },
-          "RTGS": {
-            "min": 20000000
+    "raw": {
+      "max_shapes": 20,
+      "max_categories": 64,
+      "max_pairs": 400,
+      "label_max_len": 40,
+      "rare_share_max": 0.01,
+      "near_unique_min_ratio": 0.99,
+      "independence_max_cramers_v": 0.05,
+      "min_expected_per_cell": 5,
+      "even_min_p_value": 0.01,
+      "even_max_relative_spread": 0.1,
+      "tie_max_probability": 0.05,
+      "benford_max_mad": 0.015,
+      "systemic_violation_min_share": 0.05,
+      "outlier_iqr_k": 1.5,
+      "outlier_min_group_size": 30,
+      "outlier_signal_min_lift": 3.0,
+      "outlier_signal_min_group_share": 0.25,
+      "artefact_max_p_value": 0.001,
+      "position_bins": 20,
+      "position_min_lift": 2.0,
+      "time_sorted_min_share": 0.99,
+      "adjacency_min_ratio": 3.0,
+      "ranges": {
+        "amount_paise": {
+          "min": 1,
+          "by": "mode",
+          "limits": {
+            "UPI": {
+              "max": 10000000
+            },
+            "IMPS": {
+              "max": 50000000
+            },
+            "RTGS": {
+              "min": 20000000
+            }
           }
         }
+      },
+      "_source": {
+        "file": "audit_rules.json",
+        "limits_file": "payment_limits.json",
+        "profile_id": null,
+        "profile_overrides": []
       }
     },
-    "_source": {
-      "file": "audit_rules.json",
-      "limits_file": "payment_limits.json",
-      "profile_id": "v1-verified",
-      "profile_overrides": []
+    "engine": {
+      "max_shapes": 20,
+      "max_categories": 64,
+      "max_pairs": 400,
+      "label_max_len": 40,
+      "rare_share_max": 0.01,
+      "near_unique_min_ratio": 0.99,
+      "independence_max_cramers_v": 0.05,
+      "min_expected_per_cell": 5,
+      "even_min_p_value": 0.01,
+      "even_max_relative_spread": 0.1,
+      "tie_max_probability": 0.05,
+      "benford_max_mad": 0.015,
+      "systemic_violation_min_share": 0.05,
+      "outlier_iqr_k": 1.5,
+      "outlier_min_group_size": 30,
+      "outlier_signal_min_lift": 3.0,
+      "outlier_signal_min_group_share": 0.25,
+      "artefact_max_p_value": 0.001,
+      "position_bins": 20,
+      "position_min_lift": 2.0,
+      "time_sorted_min_share": 0.99,
+      "adjacency_min_ratio": 3.0,
+      "ranges": {
+        "amount_paise": {
+          "min": 1,
+          "by": "mode",
+          "limits": {
+            "UPI": {
+              "max": 10000000
+            },
+            "IMPS": {
+              "max": 50000000
+            },
+            "RTGS": {
+              "min": 20000000
+            }
+          }
+        }
+      },
+      "_source": {
+        "file": "audit_rules.json",
+        "limits_file": "payment_limits.json",
+        "profile_id": "v1-verified",
+        "profile_overrides": []
+      }
     }
   },
   "summary": {
@@ -65,6 +119,44 @@
     "NOISE": 14,
     "ARTEFACT": 9,
     "INCONCLUSIVE": 8
+  },
+  "summary_by_layer": {
+    "raw": {
+      "findings": {
+        "CLEAN": 25,
+        "TRAP": 3,
+        "SIGNAL": 7,
+        "NOISE": 3,
+        "ARTEFACT": 9,
+        "INCONCLUSIVE": 3
+      },
+      "funnel": {
+        "CLEAN": 0,
+        "TRAP": 0,
+        "SIGNAL": 4,
+        "NOISE": 0,
+        "ARTEFACT": 0,
+        "INCONCLUSIVE": 0
+      }
+    },
+    "engine": {
+      "findings": {
+        "CLEAN": 1,
+        "TRAP": 0,
+        "SIGNAL": 11,
+        "NOISE": 11,
+        "ARTEFACT": 0,
+        "INCONCLUSIVE": 5
+      },
+      "funnel": {
+        "CLEAN": 1,
+        "TRAP": 0,
+        "SIGNAL": 0,
+        "NOISE": 0,
+        "ARTEFACT": 0,
+        "INCONCLUSIVE": 0
+      }
+    }
   },
   "do_not_use": {
     "semantics": "Off-only. Each entry names a field or pattern that must not be used as evidence, with the test that found it. The list can only switch a signal off: it never enables a signal and carries no weight, threshold or value for scoring.",
@@ -232,6 +324,7 @@
   "findings": [
     {
       "id": "profile_shapes:tx_id",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "tx_id"
@@ -260,6 +353,7 @@
     },
     {
       "id": "profile_shapes:utr",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "utr"
@@ -280,6 +374,7 @@
     },
     {
       "id": "profile_shapes:mode",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "mode"
@@ -308,6 +403,7 @@
     },
     {
       "id": "profile_shapes:narration",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "narration"
@@ -371,6 +467,7 @@
     },
     {
       "id": "profile_shapes:narr_rail",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "narr_rail"
@@ -399,6 +496,7 @@
     },
     {
       "id": "profile_shapes:ip",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "ip"
@@ -427,6 +525,7 @@
     },
     {
       "id": "profile_shapes:device",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "device"
@@ -462,6 +561,7 @@
     },
     {
       "id": "profile_shapes:acct_no",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "acct_no"
@@ -490,6 +590,7 @@
     },
     {
       "id": "profile_shapes:ifsc",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "ifsc"
@@ -518,6 +619,7 @@
     },
     {
       "id": "profile_shapes:bank",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "bank"
@@ -546,6 +648,7 @@
     },
     {
       "id": "profile_shapes:ifsc_bank",
+      "layer": "raw",
       "tool": "profile_shapes",
       "args": {
         "column": "ifsc_bank"
@@ -574,6 +677,7 @@
     },
     {
       "id": "check_uniqueness:tx_key",
+      "layer": "raw",
       "tool": "check_uniqueness",
       "args": {
         "column": "tx_key"
@@ -597,6 +701,7 @@
     },
     {
       "id": "check_uniqueness:tx_id",
+      "layer": "raw",
       "tool": "check_uniqueness",
       "args": {
         "column": "tx_id"
@@ -620,6 +725,7 @@
     },
     {
       "id": "check_uniqueness:utr",
+      "layer": "raw",
       "tool": "check_uniqueness",
       "args": {
         "column": "utr"
@@ -643,6 +749,7 @@
     },
     {
       "id": "check_uniqueness:acct_id",
+      "layer": "raw",
       "tool": "check_uniqueness",
       "args": {
         "column": "acct_id"
@@ -666,6 +773,7 @@
     },
     {
       "id": "check_uniqueness:acct_no",
+      "layer": "raw",
       "tool": "check_uniqueness",
       "args": {
         "column": "acct_no"
@@ -689,6 +797,7 @@
     },
     {
       "id": "check_consistency:narr_rail,mode",
+      "layer": "raw",
       "tool": "check_consistency",
       "args": {
         "col_a": "narr_rail",
@@ -792,6 +901,7 @@
     },
     {
       "id": "check_consistency:device,is_headless",
+      "layer": "raw",
       "tool": "check_consistency",
       "args": {
         "col_a": "device",
@@ -849,6 +959,7 @@
     },
     {
       "id": "check_consistency:mode,device",
+      "layer": "raw",
       "tool": "check_consistency",
       "args": {
         "col_a": "mode",
@@ -960,6 +1071,7 @@
     },
     {
       "id": "check_consistency:is_foreign_ip,is_headless",
+      "layer": "raw",
       "tool": "check_consistency",
       "args": {
         "col_a": "is_foreign_ip",
@@ -1010,6 +1122,7 @@
     },
     {
       "id": "check_consistency:bank,ifsc_bank",
+      "layer": "raw",
       "tool": "check_consistency",
       "args": {
         "col_a": "bank",
@@ -1108,6 +1221,7 @@
     },
     {
       "id": "check_ranges:amount_paise",
+      "layer": "raw",
       "tool": "check_ranges",
       "args": {
         "column": "amount_paise"
@@ -1171,6 +1285,7 @@
     },
     {
       "id": "check_ranges:ts",
+      "layer": "raw",
       "tool": "check_ranges",
       "args": {
         "column": "ts"
@@ -1193,6 +1308,7 @@
     },
     {
       "id": "check_ranges:first_seen",
+      "layer": "raw",
       "tool": "check_ranges",
       "args": {
         "column": "first_seen"
@@ -1215,6 +1331,7 @@
     },
     {
       "id": "check_ranges:last_seen",
+      "layer": "raw",
       "tool": "check_ranges",
       "args": {
         "column": "last_seen"
@@ -1237,6 +1354,7 @@
     },
     {
       "id": "check_distribution:amount_paise",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "amount_paise"
@@ -1314,6 +1432,7 @@
     },
     {
       "id": "check_distribution:mode",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "mode"
@@ -1365,6 +1484,7 @@
     },
     {
       "id": "check_distribution:narr_rail",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "narr_rail"
@@ -1411,6 +1531,7 @@
     },
     {
       "id": "check_distribution:device",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "device"
@@ -1491,6 +1612,7 @@
     },
     {
       "id": "check_distribution:is_foreign_ip",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "is_foreign_ip"
@@ -1532,6 +1654,7 @@
     },
     {
       "id": "check_distribution:is_reserved_ip",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "is_reserved_ip"
@@ -1568,6 +1691,7 @@
     },
     {
       "id": "check_distribution:is_headless",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "is_headless"
@@ -1609,6 +1733,7 @@
     },
     {
       "id": "check_distribution:is_dup_tx_id",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "is_dup_tx_id"
@@ -1650,6 +1775,7 @@
     },
     {
       "id": "check_distribution:bank",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "bank"
@@ -1745,6 +1871,7 @@
     },
     {
       "id": "check_distribution:ifsc_bank",
+      "layer": "raw",
       "tool": "check_distribution",
       "args": {
         "column": "ifsc_bank"
@@ -1840,6 +1967,7 @@
     },
     {
       "id": "check_time_pattern:ts",
+      "layer": "raw",
       "tool": "check_time_pattern",
       "args": {
         "column": "ts"
@@ -1946,6 +2074,7 @@
     },
     {
       "id": "check_row_position:mode",
+      "layer": "raw",
       "tool": "check_row_position",
       "args": {
         "column": "mode"
@@ -1994,6 +2123,7 @@
     },
     {
       "id": "check_row_position:narr_rail",
+      "layer": "raw",
       "tool": "check_row_position",
       "args": {
         "column": "narr_rail"
@@ -2042,6 +2172,7 @@
     },
     {
       "id": "check_row_position:device",
+      "layer": "raw",
       "tool": "check_row_position",
       "args": {
         "column": "device"
@@ -2107,6 +2238,7 @@
     },
     {
       "id": "check_row_position:is_foreign_ip",
+      "layer": "raw",
       "tool": "check_row_position",
       "args": {
         "column": "is_foreign_ip"
@@ -2172,6 +2304,7 @@
     },
     {
       "id": "check_row_position:is_reserved_ip",
+      "layer": "raw",
       "tool": "check_row_position",
       "args": {
         "column": "is_reserved_ip"
@@ -2220,6 +2353,7 @@
     },
     {
       "id": "check_row_position:is_headless",
+      "layer": "raw",
       "tool": "check_row_position",
       "args": {
         "column": "is_headless"
@@ -2285,6 +2419,7 @@
     },
     {
       "id": "check_row_position:is_dup_tx_id",
+      "layer": "raw",
       "tool": "check_row_position",
       "args": {
         "column": "is_dup_tx_id"
@@ -2333,6 +2468,7 @@
     },
     {
       "id": "check_adjacency:dst,src",
+      "layer": "raw",
       "tool": "check_adjacency",
       "args": {
         "col_a": "dst",
@@ -2370,6 +2506,7 @@
     },
     {
       "id": "check_adjacency:src,src",
+      "layer": "raw",
       "tool": "check_adjacency",
       "args": {
         "col_a": "src",
@@ -2392,6 +2529,7 @@
     },
     {
       "id": "check_adjacency:dst,dst",
+      "layer": "raw",
       "tool": "check_adjacency",
       "args": {
         "col_a": "dst",
@@ -2414,6 +2552,7 @@
     },
     {
       "id": "find_outliers:amount_paise,mode",
+      "layer": "raw",
       "tool": "find_outliers",
       "args": {
         "feature": "amount_paise",
@@ -2485,6 +2624,7 @@
     },
     {
       "id": "find_outliers:amount_paise,device",
+      "layer": "raw",
       "tool": "find_outliers",
       "args": {
         "feature": "amount_paise",
@@ -2567,6 +2707,7 @@
     },
     {
       "id": "find_outliers:amount_paise,is_headless",
+      "layer": "raw",
       "tool": "find_outliers",
       "args": {
         "feature": "amount_paise",
@@ -2616,6 +2757,7 @@
     },
     {
       "id": "find_outliers:amount_paise,is_foreign_ip",
+      "layer": "raw",
       "tool": "find_outliers",
       "args": {
         "feature": "amount_paise",
@@ -2665,6 +2807,7 @@
     },
     {
       "id": "find_outliers:tx_count,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "tx_count",
@@ -2725,6 +2868,7 @@
     },
     {
       "id": "find_outliers:n_in,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "n_in",
@@ -2785,6 +2929,7 @@
     },
     {
       "id": "find_outliers:n_out,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "n_out",
@@ -2845,6 +2990,7 @@
     },
     {
       "id": "find_outliers:days_active,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "days_active",
@@ -2905,6 +3051,7 @@
     },
     {
       "id": "find_outliers:pass_through_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "pass_through_share",
@@ -2965,6 +3112,7 @@
     },
     {
       "id": "find_outliers:forward_lag_median_s,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "forward_lag_median_s",
@@ -3025,6 +3173,7 @@
     },
     {
       "id": "find_outliers:split_count_median,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "split_count_median",
@@ -3085,6 +3234,7 @@
     },
     {
       "id": "find_outliers:commission_ratio_median,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "commission_ratio_median",
@@ -3145,6 +3295,7 @@
     },
     {
       "id": "find_outliers:commission_ratio_iqr,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "commission_ratio_iqr",
@@ -3205,6 +3356,7 @@
     },
     {
       "id": "find_outliers:forwarding_episodes,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "forwarding_episodes",
@@ -3265,6 +3417,7 @@
     },
     {
       "id": "find_outliers:flagged_out_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "flagged_out_share",
@@ -3325,6 +3478,7 @@
     },
     {
       "id": "find_outliers:flagged_in_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "flagged_in_share",
@@ -3385,6 +3539,7 @@
     },
     {
       "id": "find_outliers:amount_vs_population,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "amount_vs_population",
@@ -3445,6 +3600,7 @@
     },
     {
       "id": "find_outliers:amount_diversity,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "amount_diversity",
@@ -3505,6 +3661,7 @@
     },
     {
       "id": "find_outliers:reciprocity,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "reciprocity",
@@ -3565,6 +3722,7 @@
     },
     {
       "id": "find_outliers:median_hold_hours,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "median_hold_hours",
@@ -3625,6 +3783,7 @@
     },
     {
       "id": "find_outliers:recurring_sender_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "recurring_sender_share",
@@ -3685,6 +3844,7 @@
     },
     {
       "id": "find_outliers:device_consistency,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "device_consistency",
@@ -3745,6 +3905,7 @@
     },
     {
       "id": "find_outliers:victim_inflow_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "victim_inflow_share",
@@ -3805,6 +3966,7 @@
     },
     {
       "id": "find_outliers:burst_fan_in,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "burst_fan_in",
@@ -3865,6 +4027,7 @@
     },
     {
       "id": "find_outliers:shared_ip_cluster_size,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "shared_ip_cluster_size",
@@ -3925,6 +4088,7 @@
     },
     {
       "id": "find_outliers:ip_churn,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "ip_churn",
@@ -3985,6 +4149,7 @@
     },
     {
       "id": "find_outliers:structuring_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "structuring_share",
@@ -4045,6 +4210,7 @@
     },
     {
       "id": "find_outliers:timing_regularity,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "timing_regularity",
@@ -4105,6 +4271,7 @@
     },
     {
       "id": "find_outliers:odd_hour_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "odd_hour_share",
@@ -4165,6 +4332,7 @@
     },
     {
       "id": "find_outliers:upstream_l1_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "upstream_l1_share",
@@ -4225,6 +4393,7 @@
     },
     {
       "id": "find_outliers:upstream_l2_share,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "upstream_l2_share",
@@ -4285,6 +4454,7 @@
     },
     {
       "id": "find_outliers:neighbour_risk,flow_class",
+      "layer": "engine",
       "tool": "find_outliers",
       "args": {
         "feature": "neighbour_risk",
@@ -4344,5 +4514,257 @@
       "do_not_use": []
     }
   ],
+  "funnel": {
+    "semantics": "Observed statistics only. The funnel describes how money moves between groups that are defined by transfer direction; none of its numbers is a threshold, and none is passed to scoring.",
+    "groups": [
+      "send_only",
+      "payees",
+      "next_hop",
+      "receive_only"
+    ],
+    "summary": {
+      "CLEAN": 1,
+      "TRAP": 0,
+      "SIGNAL": 4,
+      "NOISE": 0,
+      "ARTEFACT": 0,
+      "INCONCLUSIVE": 0
+    },
+    "stages": [
+      {
+        "id": "A:population",
+        "stage": "A",
+        "layer": "raw",
+        "question": "How many accounts only send, only receive, or do both?",
+        "sql": "WITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n)\n    SELECT (SELECT count(*) FROM accounts)                                  AS n_accounts,\n           (SELECT count(*) FROM tx)                                        AS n_transfers,\n           (SELECT count(*) FROM send_only)                                 AS n_send_only,\n           (SELECT count(*) FROM receive_only)                              AS n_receive_only,\n           (SELECT count(*) FROM deg WHERE n_in > 0 AND n_out > 0)          AS n_two_way,\n           (SELECT count(*) FROM accounts a\n             WHERE a.acct_id NOT IN (SELECT acct_id FROM deg))              AS n_no_transfers,\n           (SELECT count(*) FROM payees)                                    AS n_payees,\n           (SELECT count(*) FROM next_hop)                                  AS n_next_hop,\n           (SELECT count(*) FROM payees\n             WHERE acct_id IN (SELECT acct_id FROM receive_only))           AS n_payees_receive_only,\n           (SELECT count(*) FROM next_hop\n             WHERE acct_id IN (SELECT acct_id FROM receive_only))           AS n_next_hop_receive_only",
+        "result": {
+          "n_accounts": 24873,
+          "n_transfers": 2000000,
+          "n_send_only": 300,
+          "n_receive_only": 385,
+          "n_two_way": 24188,
+          "n_no_transfers": 0,
+          "n_payees": 129,
+          "n_next_hop": 559,
+          "n_payees_receive_only": 0,
+          "n_next_hop_receive_only": 0
+        },
+        "verdict": "SIGNAL",
+        "explanation": "24,873 accounts: 300 only send and 385 only receive (2.75% one-way); money has a start and an end to follow."
+      },
+      {
+        "id": "A:send_only->payees",
+        "stage": "A",
+        "layer": "raw",
+        "question": "How does money move from the send_only group to the payees group?",
+        "sql": "WITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n),\n    hop AS (\n        SELECT t.src, t.dst, t.ts FROM tx t\n        WHERE t.src IN (SELECT acct_id FROM send_only) AND t.dst IN (SELECT acct_id FROM payees)\n    ),\n    waits AS (\n        SELECT date_diff('second', i.ts, h.ts) AS wait_s\n        FROM hop h ASOF LEFT JOIN (SELECT dst, ts FROM tx) i ON i.dst = h.src AND i.ts <= h.ts\n    ),\n    fan AS (SELECT src, count(DISTINCT dst) AS n_receivers FROM hop GROUP BY 1),\n    flow AS (\n        SELECT CAST(d.amt_out AS DOUBLE) / nullif(d.amt_in, 0) AS out_in\n        FROM deg d WHERE d.acct_id IN (SELECT src FROM fan)\n    )\n    SELECT (SELECT count(*) FROM send_only)                       AS n_sender_group,\n           (SELECT count(*) FROM fan)                            AS n_senders_in_hop,\n           (SELECT count(*) FROM payees)                     AS n_receiver_group,\n           (SELECT count(DISTINCT dst) FROM hop)                 AS n_receivers_in_hop,\n           (SELECT count(*) FROM hop)                            AS n_transfers,\n           (SELECT count(*) FROM tx t\n             WHERE t.src IN (SELECT acct_id FROM send_only)\n               AND t.dst NOT IN (SELECT acct_id FROM payees)) AS n_transfers_elsewhere,\n           w.*, f.*, o.*\n    FROM (SELECT count(wait_s) AS n_with_arrival, count(*) - count(wait_s) AS n_without_arrival,\n                 median(wait_s) AS wait_median_s, min(wait_s) AS wait_min_s, max(wait_s) AS wait_max_s\n          FROM waits) w,\n         (SELECT median(n_receivers) AS receivers_median, min(n_receivers) AS receivers_min,\n                 max(n_receivers) AS receivers_max\n          FROM fan) f,\n         (SELECT count(out_in) AS n_with_ratio, median(out_in) AS out_in_median,\n                 quantile_cont(out_in, 0.25) AS out_in_q1, quantile_cont(out_in, 0.75) AS out_in_q3,\n                 min(out_in) AS out_in_min, max(out_in) AS out_in_max\n          FROM flow) o",
+        "result": {
+          "from": "send_only",
+          "to": "payees",
+          "accounts": {
+            "sender_group": 300,
+            "senders_in_hop": 300,
+            "receiver_group": 129,
+            "receivers_in_hop": 129
+          },
+          "transfers": {
+            "in_hop": 300,
+            "from_sender_group_elsewhere": 0
+          },
+          "arrival_to_forward_s": {
+            "median": null,
+            "min": null,
+            "max": null,
+            "n_with_arrival": 0,
+            "n_without_arrival": 300
+          },
+          "receivers_per_sender": {
+            "median": 1.0,
+            "min": 1,
+            "max": 1
+          },
+          "out_in_ratio": {
+            "median": null,
+            "q1": null,
+            "q3": null,
+            "min": null,
+            "max": null,
+            "n_senders": 0
+          },
+          "observed_only": true
+        },
+        "verdict": "SIGNAL",
+        "explanation": "send_only -> payees: 300 of 300 senders reach 129 of 129 receivers in 300 transfers (0 go elsewhere); no earlier arrival (the money starts here); 1 receivers per sender (median, 1 to 1); no inflow, so no out/in ratio. Observed, not thresholds."
+      },
+      {
+        "id": "A:payees->next_hop",
+        "stage": "A",
+        "layer": "raw",
+        "question": "How does money move from the payees group to the next_hop group?",
+        "sql": "WITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n),\n    hop AS (\n        SELECT t.src, t.dst, t.ts FROM tx t\n        WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst IN (SELECT acct_id FROM next_hop)\n    ),\n    waits AS (\n        SELECT date_diff('second', i.ts, h.ts) AS wait_s\n        FROM hop h ASOF LEFT JOIN (SELECT dst, ts FROM tx) i ON i.dst = h.src AND i.ts <= h.ts\n    ),\n    fan AS (SELECT src, count(DISTINCT dst) AS n_receivers FROM hop GROUP BY 1),\n    flow AS (\n        SELECT CAST(d.amt_out AS DOUBLE) / nullif(d.amt_in, 0) AS out_in\n        FROM deg d WHERE d.acct_id IN (SELECT src FROM fan)\n    )\n    SELECT (SELECT count(*) FROM payees)                       AS n_sender_group,\n           (SELECT count(*) FROM fan)                            AS n_senders_in_hop,\n           (SELECT count(*) FROM next_hop)                     AS n_receiver_group,\n           (SELECT count(DISTINCT dst) FROM hop)                 AS n_receivers_in_hop,\n           (SELECT count(*) FROM hop)                            AS n_transfers,\n           (SELECT count(*) FROM tx t\n             WHERE t.src IN (SELECT acct_id FROM payees)\n               AND t.dst NOT IN (SELECT acct_id FROM next_hop)) AS n_transfers_elsewhere,\n           w.*, f.*, o.*\n    FROM (SELECT count(wait_s) AS n_with_arrival, count(*) - count(wait_s) AS n_without_arrival,\n                 median(wait_s) AS wait_median_s, min(wait_s) AS wait_min_s, max(wait_s) AS wait_max_s\n          FROM waits) w,\n         (SELECT median(n_receivers) AS receivers_median, min(n_receivers) AS receivers_min,\n                 max(n_receivers) AS receivers_max\n          FROM fan) f,\n         (SELECT count(out_in) AS n_with_ratio, median(out_in) AS out_in_median,\n                 quantile_cont(out_in, 0.25) AS out_in_q1, quantile_cont(out_in, 0.75) AS out_in_q3,\n                 min(out_in) AS out_in_min, max(out_in) AS out_in_max\n          FROM flow) o",
+        "result": {
+          "from": "payees",
+          "to": "next_hop",
+          "accounts": {
+            "sender_group": 129,
+            "senders_in_hop": 129,
+            "receiver_group": 559,
+            "receivers_in_hop": 559
+          },
+          "transfers": {
+            "in_hop": 1327,
+            "from_sender_group_elsewhere": 0
+          },
+          "arrival_to_forward_s": {
+            "median": 542.0,
+            "min": 180,
+            "max": 898,
+            "n_with_arrival": 1327,
+            "n_without_arrival": 0
+          },
+          "receivers_per_sender": {
+            "median": 9.0,
+            "min": 3,
+            "max": 32
+          },
+          "out_in_ratio": {
+            "median": 0.98,
+            "q1": 0.98,
+            "q3": 0.98,
+            "min": 0.98,
+            "max": 0.98,
+            "n_senders": 129
+          },
+          "observed_only": true
+        },
+        "verdict": "SIGNAL",
+        "explanation": "payees -> next_hop: 129 of 129 senders reach 559 of 559 receivers in 1,327 transfers (0 go elsewhere); forwarded a median 542 s after arrival (180 to 898 s); 9 receivers per sender (median, 3 to 32); out/in ratio median 0.980 (middle half 0.980 to 0.980). Observed, not thresholds."
+      },
+      {
+        "id": "A:next_hop->receive_only",
+        "stage": "A",
+        "layer": "raw",
+        "question": "How does money move from the next_hop group to the receive_only group?",
+        "sql": "WITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n),\n    hop AS (\n        SELECT t.src, t.dst, t.ts FROM tx t\n        WHERE t.src IN (SELECT acct_id FROM next_hop) AND t.dst IN (SELECT acct_id FROM receive_only)\n    ),\n    waits AS (\n        SELECT date_diff('second', i.ts, h.ts) AS wait_s\n        FROM hop h ASOF LEFT JOIN (SELECT dst, ts FROM tx) i ON i.dst = h.src AND i.ts <= h.ts\n    ),\n    fan AS (SELECT src, count(DISTINCT dst) AS n_receivers FROM hop GROUP BY 1),\n    flow AS (\n        SELECT CAST(d.amt_out AS DOUBLE) / nullif(d.amt_in, 0) AS out_in\n        FROM deg d WHERE d.acct_id IN (SELECT src FROM fan)\n    )\n    SELECT (SELECT count(*) FROM next_hop)                       AS n_sender_group,\n           (SELECT count(*) FROM fan)                            AS n_senders_in_hop,\n           (SELECT count(*) FROM receive_only)                     AS n_receiver_group,\n           (SELECT count(DISTINCT dst) FROM hop)                 AS n_receivers_in_hop,\n           (SELECT count(*) FROM hop)                            AS n_transfers,\n           (SELECT count(*) FROM tx t\n             WHERE t.src IN (SELECT acct_id FROM next_hop)\n               AND t.dst NOT IN (SELECT acct_id FROM receive_only)) AS n_transfers_elsewhere,\n           w.*, f.*, o.*\n    FROM (SELECT count(wait_s) AS n_with_arrival, count(*) - count(wait_s) AS n_without_arrival,\n                 median(wait_s) AS wait_median_s, min(wait_s) AS wait_min_s, max(wait_s) AS wait_max_s\n          FROM waits) w,\n         (SELECT median(n_receivers) AS receivers_median, min(n_receivers) AS receivers_min,\n                 max(n_receivers) AS receivers_max\n          FROM fan) f,\n         (SELECT count(out_in) AS n_with_ratio, median(out_in) AS out_in_median,\n                 quantile_cont(out_in, 0.25) AS out_in_q1, quantile_cont(out_in, 0.75) AS out_in_q3,\n                 min(out_in) AS out_in_min, max(out_in) AS out_in_max\n          FROM flow) o",
+        "result": {
+          "from": "next_hop",
+          "to": "receive_only",
+          "accounts": {
+            "sender_group": 559,
+            "senders_in_hop": 559,
+            "receiver_group": 385,
+            "receivers_in_hop": 385
+          },
+          "transfers": {
+            "in_hop": 1327,
+            "from_sender_group_elsewhere": 0
+          },
+          "arrival_to_forward_s": {
+            "median": 1035.0,
+            "min": 123,
+            "max": 1799,
+            "n_with_arrival": 1327,
+            "n_without_arrival": 0
+          },
+          "receivers_per_sender": {
+            "median": 2.0,
+            "min": 1,
+            "max": 8
+          },
+          "out_in_ratio": {
+            "median": 0.96,
+            "q1": 0.96,
+            "q3": 0.96,
+            "min": 0.959995,
+            "max": 0.960005,
+            "n_senders": 559
+          },
+          "observed_only": true
+        },
+        "verdict": "SIGNAL",
+        "explanation": "next_hop -> receive_only: 559 of 559 senders reach 385 of 385 receivers in 1,327 transfers (0 go elsewhere); forwarded a median 1,035 s after arrival (123 to 1,799 s); 2 receivers per sender (median, 1 to 8); out/in ratio median 0.960 (middle half 0.960 to 0.960). Observed, not thresholds."
+      },
+      {
+        "id": "B:agreement",
+        "stage": "B",
+        "layer": "engine",
+        "question": "Do the funnel's groups match the roles that scoring assigned?",
+        "sql": "WITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n),\n    member AS (\n        SELECT acct_id, arg_min(grp, rnk) AS grp, count(*) AS n_groups\n        FROM (SELECT acct_id, 'send_only' AS grp, 0 AS rnk FROM send_only UNION ALL SELECT acct_id, 'payees' AS grp, 1 AS rnk FROM payees UNION ALL SELECT acct_id, 'next_hop' AS grp, 2 AS rnk FROM next_hop UNION ALL SELECT acct_id, 'receive_only' AS grp, 3 AS rnk FROM receive_only)\n        GROUP BY 1\n    ),\n    expected(grp, role) AS (VALUES ('send_only', 'VICTIM'), ('payees', 'L1'), ('next_hop', 'L2'), ('receive_only', 'L3')),\n    scored AS (\n        SELECT s.acct_id, s.role FROM scores s\n        WHERE s.profile_id = (SELECT profile_id FROM scoring_profiles WHERE is_active LIMIT 1)\n    ),\n    paired AS (\n        SELECT coalesce(m.acct_id, s.acct_id) AS acct_id, m.grp, m.n_groups, e.role AS expected_role, s.role\n        FROM member m\n        FULL JOIN scored s ON s.acct_id = m.acct_id\n        LEFT JOIN expected e ON e.grp = m.grp\n    )\n    SELECT grp, expected_role, role, count(*) AS n, count(*) FILTER (n_groups > 1) AS n_in_two_groups\n    FROM paired\n    GROUP BY grp, expected_role, role\n    ORDER BY grp NULLS LAST, role NULLS LAST;\n\nWITH deg AS (\n    SELECT acct_id, sum(n_in) AS n_in, sum(n_out) AS n_out, sum(amt_in) AS amt_in, sum(amt_out) AS amt_out\n    FROM (\n        SELECT src AS acct_id, 0 AS n_in, count(*) AS n_out, 0 AS amt_in, sum(amount_paise) AS amt_out\n        FROM tx GROUP BY 1\n        UNION ALL\n        SELECT dst, count(*), 0, sum(amount_paise), 0 FROM tx GROUP BY 1\n    )\n    GROUP BY 1\n),\nsend_only AS (SELECT acct_id FROM deg WHERE n_in = 0 AND n_out > 0),\nreceive_only AS (SELECT acct_id FROM deg WHERE n_out = 0 AND n_in > 0),\npayees AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t WHERE t.src IN (SELECT acct_id FROM send_only)\n),\nnext_hop AS (\n    SELECT DISTINCT t.dst AS acct_id FROM tx t\n    WHERE t.src IN (SELECT acct_id FROM payees) AND t.dst NOT IN (SELECT acct_id FROM payees)\n),\n    member AS (\n        SELECT acct_id, arg_min(grp, rnk) AS grp, count(*) AS n_groups\n        FROM (SELECT acct_id, 'send_only' AS grp, 0 AS rnk FROM send_only UNION ALL SELECT acct_id, 'payees' AS grp, 1 AS rnk FROM payees UNION ALL SELECT acct_id, 'next_hop' AS grp, 2 AS rnk FROM next_hop UNION ALL SELECT acct_id, 'receive_only' AS grp, 3 AS rnk FROM receive_only)\n        GROUP BY 1\n    ),\n    expected(grp, role) AS (VALUES ('send_only', 'VICTIM'), ('payees', 'L1'), ('next_hop', 'L2'), ('receive_only', 'L3')),\n    scored AS (\n        SELECT s.acct_id, s.role FROM scores s\n        WHERE s.profile_id = (SELECT profile_id FROM scoring_profiles WHERE is_active LIMIT 1)\n    ),\n    paired AS (\n        SELECT coalesce(m.acct_id, s.acct_id) AS acct_id, m.grp, m.n_groups, e.role AS expected_role, s.role\n        FROM member m\n        FULL JOIN scored s ON s.acct_id = m.acct_id\n        LEFT JOIN expected e ON e.grp = m.grp\n    )\n    SELECT acct_id, grp, expected_role, role\n    FROM paired\n    WHERE expected_role IS DISTINCT FROM role\n    ORDER BY acct_id",
+        "result": {
+          "role_map": {
+            "send_only": "VICTIM",
+            "payees": "L1",
+            "next_hop": "L2",
+            "receive_only": "L3"
+          },
+          "n_accounts_compared": 24873,
+          "n_in_two_groups": 0,
+          "table": [
+            {
+              "funnel_group": "next_hop",
+              "expected_role": "L2",
+              "role": "L2",
+              "accounts": 559
+            },
+            {
+              "funnel_group": "payees",
+              "expected_role": "L1",
+              "role": "L1",
+              "accounts": 129
+            },
+            {
+              "funnel_group": "receive_only",
+              "expected_role": "L3",
+              "role": "L3",
+              "accounts": 385
+            },
+            {
+              "funnel_group": "send_only",
+              "expected_role": "VICTIM",
+              "role": "VICTIM",
+              "accounts": 300
+            },
+            {
+              "funnel_group": null,
+              "expected_role": null,
+              "role": null,
+              "accounts": 23500
+            }
+          ],
+          "groups": [
+            {
+              "funnel_group": "send_only",
+              "expected_role": "VICTIM",
+              "accounts": 300,
+              "matches": 300
+            },
+            {
+              "funnel_group": "payees",
+              "expected_role": "L1",
+              "accounts": 129,
+              "matches": 129
+            },
+            {
+              "funnel_group": "next_hop",
+              "expected_role": "L2",
+              "accounts": 559,
+              "matches": 559
+            },
+            {
+              "funnel_group": "receive_only",
+              "expected_role": "L3",
+              "accounts": 385,
+              "matches": 385
+            }
+          ],
+          "n_agree": 24873,
+          "n_disagree": 0,
+          "disagreements": []
+        },
+        "verdict": "CLEAN",
+        "explanation": "The funnel and scoring agree on all 24,873 accounts (send_only 300/300 = VICTIM; payees 129/129 = L1; next_hop 559/559 = L2; receive_only 385/385 = L3): two independent methods find the same accounts in the same roles."
+      }
+    ]
+  },
   "failures": []
 }
