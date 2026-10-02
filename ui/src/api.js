@@ -136,3 +136,23 @@ export function runJuryBenchmark(n) {
 export function getTemplateDownloadUrl(fileName) {
   return `${API_BASE}/templates/${encodeURIComponent(fileName)}`;
 }
+
+export async function uploadDataset(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/upload`, {
+      method: "POST",
+      body: formData,
+    });
+  } catch (err) {
+    throw new Error(`Cannot reach the API at ${API_BASE} (${err.message})`);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail || `Upload failed (HTTP ${res.status})`);
+  }
+  return await res.json();
+}

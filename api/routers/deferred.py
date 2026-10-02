@@ -12,7 +12,6 @@ router = APIRouter(tags=["deferred"])
 NOT_YET = "not yet available"
 
 DEFERRED = [                                   # 501
-    ("POST", "/upload"),
     ("GET", "/vault/certificate/{artifact_id}"),
 ]
 
