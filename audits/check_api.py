@@ -612,7 +612,7 @@ def check_case_store_api(client: TestClient, db: Path, e: dict, scratch: Path, l
         # A model that answers with a wrong account token: rejected, nothing stored.
         def wrong(tokens, llm):
             answer = diary_mod.template_narrative(tokens)
-            answer["entries"][0]["sentence"] += " ACC_999"
+            answer["summary"] += " ACC_999"
             return answer
         diary_mod.ask_ollama = wrong
         sm = call(client, "GET", sp, "diary_summary", params={"case_id": cid})

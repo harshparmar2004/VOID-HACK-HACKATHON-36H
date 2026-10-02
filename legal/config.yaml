@@ -19,10 +19,18 @@ legal_references:
 # nothing here may say that a notice was sent.
 draft_label: "DRAFT — for officer review and signature"
 
-# Local model for the case-diary narrative. Loopback only: the code refuses
+# Local model for the case-diary summary. Loopback only: the code refuses
 # any host other than 127.0.0.1 / localhost. On any failure the diary is built
 # from the template alone (generator TEMPLATE_FALLBACK).
 llm:
   url: "http://127.0.0.1:11434"
+  # Any model Ollama has pulled (ollama list). Change it here, never in code.
+  # Alternative: "qwen2.5:3b" -- 1.5 s per summary against 5.2 s for qwen2.5:7b
+  # (3 Oct, both validated), with plainer wording.
   model: "qwen2.5:7b"
   timeout_seconds: 60
+  # Cap on the length of the answer, in tokens (the summary is 3 to 5 sentences).
+  num_predict: 200
+  # How long Ollama keeps the model loaded after a request. The API loads the
+  # model when it starts, so the first summary has no cold start.
+  keep_alive: "30m"

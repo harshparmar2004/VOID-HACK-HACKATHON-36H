@@ -4,23 +4,32 @@ trace (PROJECT_CONTEXT.md Sections 15 and 4.5).
 
     build_diary(evidence, use_llm=True) -> {html, generator, llm, narrative, problems}
     write_diary(evidence, out_dir, use_llm=True)
+    warm_model() -> {status, seconds}    load the model ahead of the first summary
 
 The tables (total siphoned, layer-wise accounts with timestamps and amounts,
 accounts recommended for freezing) are always filled by code from the evidence
-object (legal\\evidence.py). Only the chronological narrative may come from the
-local model, and it never sees or writes a real value:
+object (legal\\evidence.py). The one-line entry of each transfer is written by
+code too. Only the summary above those entries (3 to 5 sentences) may come
+from the local model, and it never sees or writes a real value:
 
-  1. TOKENISE   every account, amount, transaction and time of the trace gets
-                a token (ACC_n, AMT_n, TXN_n, TIME_n). The prompt holds tokens
-                and role labels only. The evidence object carries no narration
-                text, so none can enter a prompt.
-  2. ASK        local Ollama (legal\\config.yaml: llm), with a JSON schema whose
-                txn / time / account / amount fields are enums of THIS case's
-                tokens. One entry per traced transfer. Loopback only.
-  3. VALIDATE   every entry must name one transfer and carry exactly that
+  1. TOKENISE   every account, amount, transaction, time and count of the
+                trace gets a token (ACC_n, AMT_n, TXN_n, TIME_n, and for a
+                count ACCOUNTS_n / TRANSFERS_n). The
+                prompt holds tokens and role labels only. The evidence object
+                carries no narration text, so none can enter a prompt.
+  2. ASK        local Ollama (legal\\config.yaml: llm) for the summary alone.
+                The prompt holds the totals, the layer counts and the timings,
+                not the transfers; the answer length is capped
+                (llm.num_predict). Loopback only.
+  3. VALIDATE   the summary: 3 to 5 sentences, only the tokens it was given,
+                a count only in a sentence that names what it counts, and no
+                digit, currency sign or other figure outside a token. A count
+                token stands for a phrase built by code ("1 account",
+                "5 accounts", "1 transfer"): the model never picks the form,
+                and may not put the noun after the token again.
+                Every entry must name one transfer and carry exactly that
                 transfer's time, accounts and amount; each transfer exactly
-                once; a sentence may use only its own entry's tokens, and no
-                digit, currency sign or other figure outside a token.
+                once; a sentence may use only its own entry's tokens.
      SUBSTITUTE code swaps the tokens for the real values.
      VALIDATE   the finished page is read back as plain text: every account
                 number, IFSC, amount, tx_id, timestamp and hash on it must be
@@ -68,10 +77,21 @@ GENERATOR_FALLBACK = "TEMPLATE_FALLBACK"
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 NO_ROLE = "no role assigned"
 
-TOKEN_RE = re.compile(r"\b(ACC|AMT|TXN|TIME)_\d+\b")
+TOKEN_RE = re.compile(r"\b(ACC|AMT|TXN|TIME|ACCOUNTS|TRANSFERS)_\d+\b")
 FIGURE_RE = re.compile(r"\d|\u20b9|\brs\b|\binr\b|\brupee", re.I)
+# A count written out in words is a figure no token stands behind.
+# The noun a count token already carries, written again after it.
+COUNT_NOUN_RE = r"\W*(accounts?|transfers?|transactions?)\b"
+NUMBER_WORD_RE = re.compile(
+    r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\w+teen|twenty|thirty|forty|"
+    r"fifty|sixty|seventy|eighty|ninety|hundred|thousand|lakhs?|crores?|dozen|couple)\b", re.I)
 MAX_SENTENCE = 400
 MAX_SUMMARY = 700
+SUMMARY_SENTENCES = (3, 5)
+SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+")
+# Used when legal\config.yaml: llm does not set them.
+DEFAULT_NUM_PREDICT = 200
+DEFAULT_KEEP_ALIVE = "30m"
 
 
 class DiaryError(Exception):
@@ -85,6 +105,7 @@ def tokenise(evidence: dict) -> dict:
     acc: dict[str, str] = {}
     amt: dict[int, str] = {}
     tim: dict[str, str] = {}
+    counts: list[dict] = []        # one token per count, so equal counts stay apart
 
     def tok(table: dict, prefix: str, value):
         return table.setdefault(value, f"{prefix}_{len(table) + 1}")
@@ -103,14 +124,30 @@ def tokenise(evidence: dict) -> dict:
         })
     if not transfers:
         raise DiaryError("the trace has no transfer")
+
+    def count(n: int, noun: str, near: list[str]) -> str:
+        """A token for a count, named after its noun (ACCOUNTS_2). It stands for the
+        number with the noun in the right form ("1 account", "5 accounts"); one of
+        the `near` words, if any, must share its sentence."""
+        counts.append({"token": f"{noun.upper()}S_{len(counts) + 1}", "near": near,
+                       "phrase": f"{n} {noun}" if n == 1 else f"{n} {noun}s"})
+        return counts[-1]["token"]
+
+    transfer_count = count(len(transfers), "transfer", [])
+    layers = [{"role": l["role"], "accounts": count(len(l["accounts"]), "account", [l["role"]])}
+              for l in _layers(evidence)]
+    freeze = {"accounts": count(len(evidence["freeze_candidates"]), "account", ["freez", "frozen"]),
+              "holding": tok(amt, "AMT", evidence["totals"]["freeze_holding_total_paise"])}
     values = {**{v: k for k, v in acc.items()},
               **{v: rupees(k) for k, v in amt.items()},
               **{v: k for k, v in tim.items()},
+              **{c["token"]: c["phrase"] for c in counts},
               **{t["txn"]: e["tx_id"] for t, e in zip(transfers, evidence["transfers"])}}
     return {
         "victim": acc[victim["acct_no"]], "total": amt[victim["paid_paise"]],
         "first_time": transfers[0]["time"], "last_time": transfers[-1]["time"],
         "transfers": transfers, "values": values,
+        "transfer_count": transfer_count, "layers": layers, "freeze": freeze, "counts": counts,
         "role_labels": sorted({r for t in transfers for r in (t["from_role"], t["to_role"])}),
     }
 
@@ -122,69 +159,87 @@ def substitute(text: str, tokens: dict) -> str:
 # --- 2. the local model -------------------------------------------------------
 
 SYSTEM_PROMPT = (
-    "You write the chronological section of a police case diary for a bank-fraud investigation. "
-    "In the facts you are given, every account number, amount, transaction ID and time has been "
-    "replaced by a token such as ACC_3, AMT_2, TXN_5 or TIME_4. Rules:\n"
-    "- Write exactly one entry for each TXN line, in the order given.\n"
-    "- Copy that line's tokens into the entry's txn, time, from_account, to_account and amount fields.\n"
-    "- sentence: one plain, factual English sentence in the past tense saying that the amount moved "
-    "from the sending account to the receiving account by that transaction. It must contain the "
-    "entry's from_account, to_account, amount and txn tokens, and no token from any other line.\n"
-    "- summary: at most two sentences saying that the complainant's account paid the total amount "
-    "between the first and the last time. Use only the tokens given on the COMPLAINANT line.\n"
-    "- Use tokens for every account, amount, transaction and time. Never write a digit, a number, "
-    "a currency sign, a date, a person's or bank's name, or a section of law.\n"
+    "You write the opening summary of a police case diary for a bank-fraud investigation. "
+    "In the facts you are given, every account number, amount, time and count has been "
+    "replaced by a token such as ACC_1, AMT_2, TIME_4, ACCOUNTS_3 or TRANSFERS_1. Copy tokens "
+    "exactly as given.\n"
+    "An ACCOUNTS or TRANSFERS token already is the number and its noun (it will read 'N accounts' "
+    "or 'N transfers'): use it as the noun itself and never write the word account(s) or "
+    "transfer(s) after it.\n"
+    "Write 3 to 5 short, plain, factual English sentences in the past tense, one per item of "
+    "`sentences`, in this order:\n"
+    "1. The complainant's account paid the total amount between the time of the first transfer "
+    "and the time of the last transfer.\n"
+    "2. The money was traced onward, for example: 'The money was traced onward through TRANSFERS_x.'\n"
+    "3. Every layer listed in the facts, none left out, each beside its own token, for example: "
+    "'The money reached ACCOUNTS_x in layer NAME, ACCOUNTS_y in layer NAME and ACCOUNTS_z in "
+    "layer NAME.'\n"
+    "4. Freezing, for example: 'Freezing is recommended for ACCOUNTS_x, which hold AMT_y.'\n"
+    "Rules:\n"
+    "- Every count and amount must be written as its token, in a sentence that names what it counts.\n"
+    "- Never write a digit, a number in words (such as 'three'), a currency sign, a date, a "
+    "person's or bank's name, or a section of law.\n"
     "- Add no fact, opinion or conclusion that is not in the facts.")
 
 
 def build_prompt(tokens: dict) -> str:
-    lines = [f"COMPLAINANT account {tokens['victim']} paid {tokens['total']} in total; "
-             f"first transfer at {tokens['first_time']}, last transfer at {tokens['last_time']}.", ""]
-    lines += [f"{t['txn']} | time {t['time']} | from {t['from_account']} ({t['from_role']}) | "
-              f"to {t['to_account']} ({t['to_role']}) | amount {t['amount']}" for t in tokens["transfers"]]
+    """The facts the summary needs: totals, layer counts, timings. No transfer line."""
+    lines = [f"Complainant's account: {tokens['victim']}",
+             f"Total amount paid: {tokens['total']}",
+             f"Time of first transfer: {tokens['first_time']}",
+             f"Time of last transfer: {tokens['last_time']}",
+             f"Transfers traced: {tokens['transfer_count']}"]
+    lines += [f"Accounts in layer {l['role']}: {l['accounts']}" for l in tokens["layers"]]
+    lines += [f"Accounts recommended for freezing: {tokens['freeze']['accounts']}",
+              f"Amount held in those accounts: {tokens['freeze']['holding']}"]
     return "\n".join(lines)
 
 
 def build_schema(tokens: dict) -> dict:
-    ts = tokens["transfers"]
-
-    def enum(key: str) -> dict:
-        return {"type": "string", "enum": sorted({t[key] for t in ts})}
-
-    accounts = {"type": "string", "enum": sorted({t[k] for t in ts for k in ("from_account", "to_account")})}
-    return {
-        "type": "object", "additionalProperties": False, "required": ["summary", "entries"],
-        "properties": {
-            "summary": {"type": "string"},
-            "entries": {
-                "type": "array", "minItems": len(ts), "maxItems": len(ts),
-                "items": {
-                    "type": "object", "additionalProperties": False,
-                    "required": ["txn", "time", "from_account", "to_account", "amount", "sentence"],
-                    "properties": {"txn": enum("txn"), "time": enum("time"), "from_account": accounts,
-                                   "to_account": accounts, "amount": enum("amount"),
-                                   "sentence": {"type": "string"}},
-                },
-            },
-        },
-    }
+    low, high = SUMMARY_SENTENCES
+    return {"type": "object", "additionalProperties": False, "required": ["sentences"],
+            "properties": {"sentences": {"type": "array", "minItems": low, "maxItems": high,
+                                         "items": {"type": "string"}}}}
 
 
-def ask_ollama(tokens: dict, llm: dict) -> dict:
-    """One request to the local model. Raises on anything but a JSON answer."""
+def _post(llm: dict, route: str, body: dict) -> dict:
     host = urlparse(llm["url"]).hostname
     if host not in LOOPBACK:
         raise DiaryError(f"llm.url must be a loopback address, not {host!r}")
-    body = json.dumps({
-        "model": llm["model"], "stream": False, "format": build_schema(tokens),
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                     {"role": "user", "content": build_prompt(tokens)}],
-        "options": {"temperature": 0, "seed": 0},
-    }).encode("utf-8")
-    req = urllib.request.Request(llm["url"].rstrip("/") + "/api/chat", data=body,
+    req = urllib.request.Request(llm["url"].rstrip("/") + route, data=json.dumps(body).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=float(llm["timeout_seconds"])) as resp:
-        return json.loads(json.loads(resp.read().decode("utf-8"))["message"]["content"])
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def ask_ollama(tokens: dict, llm: dict) -> dict:
+    """One request to the local model -> {"summary": text}. Raises on anything
+    but the JSON asked for."""
+    answer = _post(llm, "/api/chat", {
+        "model": llm["model"], "stream": False, "format": build_schema(tokens),
+        "keep_alive": llm.get("keep_alive", DEFAULT_KEEP_ALIVE),
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                     {"role": "user", "content": build_prompt(tokens)}],
+        "options": {"temperature": 0, "seed": 0,
+                    "num_predict": int(llm.get("num_predict", DEFAULT_NUM_PREDICT))},
+    })
+    sentences = json.loads(answer["message"]["content"])["sentences"]
+    return {"summary": " ".join(x.strip() for x in sentences)}
+
+
+def warm_model(llm: dict | None = None) -> dict:
+    """Load the model and keep it loaded (llm.keep_alive), so the first summary
+    has no cold start. Never raises: a model that cannot be warmed is asked later
+    as usual, and the diary falls back to the template if it still fails."""
+    t0 = time.perf_counter()
+    try:
+        llm = llm or load_legal_config()["llm"]
+        _post(llm, "/api/generate", {"model": llm["model"],
+                                     "keep_alive": llm.get("keep_alive", DEFAULT_KEEP_ALIVE)})
+        status = f"loaded {llm['model']}"
+    except (DiaryError, EvidenceError, OSError, ValueError, KeyError, TypeError) as e:
+        status = f"not loaded ({getattr(e, 'reason', e)})"
+    return {"status": status, "seconds": time.perf_counter() - t0}
 
 
 # --- 3. narrative: template, validation ---------------------------------------
@@ -193,8 +248,9 @@ def template_narrative(tokens: dict) -> dict:
     """The fallback narrative, in the same token form the model must return."""
     return {
         "summary": (f"The complainant's account {tokens['victim']} paid {tokens['total']} between "
-                    f"{tokens['first_time']} and {tokens['last_time']}. The transfers that carried this "
-                    f"money onward are set out below in the order in which they took place."),
+                    f"{tokens['first_time']} and {tokens['last_time']}. The money was traced onward "
+                    f"through {tokens['transfer_count']}. These transfers are set out "
+                    f"below in the order in which they took place."),
         "entries": [{**{k: t[k] for k in ("txn", "time", "from_account", "to_account", "amount")},
                      "sentence": (f"{t['amount']} was transferred from account {t['from_account']} "
                                   f"({t['from_role']}) to account {t['to_account']} ({t['to_role']}) "
@@ -225,16 +281,44 @@ def _text_problems(text, allowed: set, required: set, roles: set, all_roles: lis
     return out
 
 
-def validate_narrative(narrative, tokens: dict) -> list[str]:
-    """Problems in a tokenised narrative; empty when it may be substituted."""
+def _summary_problems(text, tokens: dict, all_roles: list, complete: bool) -> list[str]:
+    """The summary may use the tokens of the prompt only, in 3 to 5 sentences; a
+    count may stand only in a sentence that names what it counts. `complete`:
+    every count must be told (a layer left out would understate the trace)."""
+    allowed = {tokens["victim"], tokens["total"], tokens["first_time"], tokens["last_time"],
+               tokens["freeze"]["holding"], *(c["token"] for c in tokens["counts"])}
+    required = {tokens["victim"], tokens["total"], *(c["token"] for c in tokens["counts"] if complete)}
+    out = _text_problems(text, allowed, required,
+                         set(all_roles) | {NO_ROLE}, all_roles, MAX_SUMMARY)
+    if not isinstance(text, str) or not text.strip():
+        return out
+    if NUMBER_WORD_RE.search(text):
+        out.append(f"contains a number in words ({NUMBER_WORD_RE.search(text).group(0)})")
+    sentences = [x for x in SENTENCE_END_RE.split(text.strip()) if x]
+    low, high = SUMMARY_SENTENCES
+    if not low <= len(sentences) <= high:
+        out.append(f"{len(sentences)} sentences, not {low} to {high}")
+    for c in tokens["counts"]:
+        if re.search(rf"\b{c['token']}\b{COUNT_NOUN_RE}", text, re.I):
+            out.append(f"{c['token']} is followed by the noun it already carries")
+        if not c["near"]:
+            continue
+        here = [x for x in sentences if re.search(rf"\b{c['token']}\b", x)]
+        near = re.compile("|".join(rf"(?<![A-Za-z0-9_]){re.escape(w)}" for w in c["near"]), re.I)
+        if any(not near.search(TOKEN_RE.sub(" ", x)) for x in here):
+            out.append(f"{c['token']} is not said of {' / '.join(c['near'])}")
+    return out
+
+
+def validate_narrative(narrative, tokens: dict, complete: bool = False) -> list[str]:
+    """Problems in a tokenised narrative; empty when it may be substituted.
+    `complete` is asked of the model's summary: it must tell every count."""
     if not isinstance(narrative, dict) or not isinstance(narrative.get("entries"), list):
         return ["not an object with a list of entries"]
     by_txn = {t["txn"]: t for t in tokens["transfers"]}
     all_roles = [r for r in tokens["role_labels"] if r != NO_ROLE] + ["VICTIM"]
-    problems = [f"summary: {p}" for p in _text_problems(
-        narrative.get("summary"),
-        {tokens["victim"], tokens["total"], tokens["first_time"], tokens["last_time"]},
-        {tokens["victim"], tokens["total"]}, {"VICTIM"}, all_roles, MAX_SUMMARY)]
+    problems = [f"summary: {p}" for p in _summary_problems(
+        narrative.get("summary"), tokens, all_roles, complete)]
     seen: list[str] = []
     for i, e in enumerate(narrative["entries"], start=1):
         t = by_txn.get(e.get("txn")) if isinstance(e, dict) else None
@@ -356,7 +440,7 @@ def render(evidence: dict, narrative: dict) -> str:
 # --- 4. build, with the fallback ----------------------------------------------
 
 def _attempt(evidence: dict, tokens: dict, narrative, generator: str) -> tuple[str | None, list[str]]:
-    problems = validate_narrative(narrative, tokens)
+    problems = validate_narrative(narrative, tokens, complete=generator == GENERATOR_LLM)
     if problems:
         return None, problems
     ev = {**evidence, "generator": generator}
@@ -365,14 +449,16 @@ def _attempt(evidence: dict, tokens: dict, narrative, generator: str) -> tuple[s
     return (None if problems else page), problems
 
 
-def build_diary(evidence: dict, use_llm: bool = True) -> dict:
+def build_diary(evidence: dict, use_llm: bool = True, llm_cfg: dict | None = None) -> dict:
+    """llm_cfg replaces legal\\config.yaml: llm (used to time another model)."""
     tokens = tokenise(evidence)
     llm = {"status": "not asked", "seconds": 0.0, "problems": []}
     if use_llm:
-        cfg = load_legal_config()["llm"]
+        cfg = llm_cfg or load_legal_config()["llm"]
         t0 = time.perf_counter()
         try:
-            answer = ask_ollama(tokens, cfg)
+            # The model writes the summary; the entries stay the code's.
+            answer = {**template_narrative(tokens), "summary": ask_ollama(tokens, cfg)["summary"]}
         except (TimeoutError, urllib.error.URLError, OSError) as e:
             reason = getattr(e, "reason", e)
             timed_out = isinstance(e, TimeoutError) or isinstance(reason, TimeoutError)

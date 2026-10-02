@@ -14,14 +14,20 @@ Then the validator itself is tested -- it must REJECT:
     pages       a wrong amount, an unknown account, an unknown tx_id, a wrong
                 timestamp, a wrong hash, a token left on the page, the DRAFT
                 label removed (each on a copy of A and of B)
-    narratives  (the token form the model returns) a wrong amount token, an
-                unknown account token, a figure written outside a token, a
-                token of another line, a role neither account has, a transfer
-                left out, a transfer told twice
+    narratives  (the token form) a wrong amount token, an unknown account
+                token, a figure written outside a token, a token of another
+                line, a role neither account has, a transfer left out, a
+                transfer told twice; a summary of 2 or of 6 sentences, with a
+                number in words, with a transaction token, with the noun
+                written again after a count token, or with a layer's count
+                said of another layer
+    counts      every count token stands for a phrase with the right noun
+                form ("1 account", "5 accounts", "1 transfer")
 
 Also checked:
     prompt      the text and schema sent to the model hold no real account
-                number, IFSC, tx_id, timestamp or amount of the case
+                number, IFSC, tx_id, timestamp or amount of the case, and no
+                transfer (TXN token); the answer length is capped
     all victims the template diary of EVERY send-only account validates
 
 Usage:  .venv\\Scripts\\python.exe audits\\check_diary.py [--victim SBIN10000294] [--db PATH]
@@ -44,7 +50,7 @@ sys.path.insert(0, str(ROOT / "legal"))
 
 import victim_trace  # noqa: E402
 import diary  # noqa: E402
-from evidence import build_evidence  # noqa: E402
+from evidence import build_evidence, load_legal_config  # noqa: E402
 from notices import rupees  # noqa: E402
 
 CASE_ID = "AUDIT-CASE-8C"
@@ -113,7 +119,19 @@ def narrative_tampers(tokens: dict) -> dict[str, dict]:
         "transfer left out": edit(lambda n: n["entries"].pop()),
         "transfer told twice": edit(lambda n: n["entries"].append(copy.deepcopy(n["entries"][0]))),
         "figure in the summary": edit(lambda n: n.update(summary=n["summary"] + " In all 11 accounts took part.")),
+        "a summary of 2 sentences": edit(lambda n: n.update(summary=" ".join(n["summary"].split(". ")[:2]))),
+        "a summary of 6 sentences": edit(lambda n: n.update(summary=n["summary"] + " It was so." * 3)),
+        "a number in words in the summary": edit(lambda n: n.update(
+            summary=n["summary"].replace(tokens["transfer_count"], "fourteen"))),
+        "a transaction token in the summary": edit(lambda n: n.update(
+            summary=n["summary"].replace("These transfers", f"These transfers, such as {last['txn']},"))),
     }
+    if len(tokens["layers"]) > 1:
+        a, b = tokens["layers"][0], tokens["layers"][1]
+        out["a layer's count said of another layer"] = edit(lambda n: n.update(
+            summary=n["summary"] + f" Layer {a['role']} had {b['accounts']}."))
+    out["the noun written again after a count token"] = edit(lambda n: n.update(
+        summary=n["summary"].replace(tokens["transfer_count"], tokens["transfer_count"] + " transfers")))
     if other_role:
         out["role neither account has"] = edit(lambda n: n["entries"][-1].update(
             sentence=n["entries"][-1]["sentence"] + f" The receiver is {other_role}."))
@@ -148,6 +166,8 @@ def main() -> None:
     check("template narrative is accepted", not diary.validate_narrative(diary.template_narrative(tokens), tokens))
     for what, narrative in narrative_tampers(tokens).items():
         check(f"narrative with {what} is rejected", bool(diary.validate_narrative(narrative, tokens)))
+    check("a model summary that leaves a layer out is rejected",
+          bool(diary.validate_narrative(diary.template_narrative(tokens), tokens, complete=True)))
 
     # Nothing real in what the model is sent.
     sent = diary.SYSTEM_PROMPT + diary.build_prompt(tokens) + json.dumps(diary.build_schema(tokens))
@@ -158,7 +178,17 @@ def main() -> None:
                  rupees(t["amount_paise"]), rupees(t["amount_paise"])[1:]}
     leaked = sorted(v for v in real if v in sent)
     check("prompt and schema hold no real value", not leaked, str(leaked[:3]))
-    check("prompt holds one line per transfer", sent.count("| time TIME_") == len(ev["transfers"]))
+    check("prompt holds no transfer", "TXN_" not in sent)
+    phrases = {c["token"]: tokens["values"][c["token"]] for c in tokens["counts"]}
+    wanted = {tokens["transfer_count"]: (len(ev["transfers"]), "transfer"),
+              tokens["freeze"]["accounts"]: (len(ev["freeze_candidates"]), "account"),
+              **{l["accounts"]: (len(x["accounts"]), "account")
+                 for l, x in zip(tokens["layers"], diary._layers(ev))}}
+    check("count tokens stand for number + noun in the right form",
+          phrases == {t: f"{n} {noun}{'' if n == 1 else 's'}" for t, (n, noun) in wanted.items()},
+          str(phrases))
+    check("answer length is capped (llm.num_predict)",
+          0 < int(load_legal_config()["llm"].get("num_predict", 0)) <= 400)
 
     # Every victim's template diary validates.
     con = duckdb.connect(str(args.db), read_only=True)
@@ -180,6 +210,7 @@ def main() -> None:
     failed = [r for r in RESULTS if not r[1]]
     print(f"runtime {time.perf_counter() - t0:.2f} s   victim {args.victim}   "
           f"{len(ev['transfers'])} transfers, {len(ev['accounts'])} accounts")
+    print(f"model {load_legal_config()['llm']['model']}")
     print(f"{'RUN':<20} {'GENERATOR':<18} {'LLM':<28} {'LLM TIME':>9}  PAGE")
     for name, r in runs.items():
         ok = not diary.validate_html(r["html"], {**ev, "generator": r["generator"]})

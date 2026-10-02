@@ -728,3 +728,47 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - The outputs list returns rows, not page bodies; the page route returns raw HTML, not JSON.
 - A page added with `add_output` (no stored body) is listed with `stored: false` and its page route answers 404.
 - A closed case cannot be reopened (no such event). The UI is not wired to these routes.
+
+## 2026-10-03 — Step 8c follow-up: diary summary speed (summary-only prompt, warm model, model setting)
+
+**Step** — the model now writes only the diary summary (3–5 sentences); every transfer entry is the template's.
+**Files** — changed `legal\diary.py`, `legal\config.yaml`, `api\main.py`, `api\services\legal.py`, `audits\check_diary.py`, `audits\check_api.py`, `API_CONTRACT.md`. No new file.
+**Key names** — diary: `CNT_n` tokens, `warm_model`, `_post`, `_summary_problems`, `SUMMARY_SENTENCES`, `NUMBER_WORD_RE`, `build_diary(llm_cfg=)`; config `llm.model`, `llm.num_predict` (200), `llm.keep_alive` ("30m"); api: `_lifespan`, `_warm_model`.
+**What was built**
+- Prompt: totals, transfer count, per-layer account counts, first/last time, freeze count and amount — 8 to 10 short lines, no TXN line. Schema: `sentences` array, 3 to 5 items. `num_predict` and `keep_alive` sent on every request.
+- Summary validator: 3–5 sentences; only the prompt's tokens; a count only in a sentence naming what it counts (layer label / transfer / freezing); no digit and no number in words outside a token. Entries validated as before.
+- Warm-up: the API start (lifespan, background thread) loads `llm.model`; a failure is logged and ignored.
+**Results** (3 largest traces: PYTM10000195 14 transfers; SBIN10000231, SBIN10000183 13 each — five victims tie at 13)
+| model | median | min–max | validator |
+|---|---|---|---|
+| qwen2.5:7b, old per-transfer prompt | 39.5 s | 39.3–40.9 | 3/3 |
+| qwen2.5:7b, new prompt | 5.2 s | 5.2–5.2 | 3/3 |
+| qwen2.5:3b, new prompt | 1.5 s | 1.5–1.5 | 3/3 |
+- Wider sample: 3b 100/100 validated (every 3rd victim), 7b 50/50 (every 6th). First summary after an unload: 11.5 s cold, 5.6 s after the API warm-up (7b).
+- `check_diary.py` 38 checks, 0 failed (A `LLM+VALIDATED`, 3b). `check_api.py --llm` 1454 checks, 0 failed, 28.4 s (live summary 1.7 s). `check_case_store.py` 66, 0 failed.
+**Deviations**
+- Default model changed to `qwen2.5:3b` (passed 3/3 and 3.5x faster). 3b wording is plainer ("1 accounts"); 7b is one config line away.
+- The template summary gained a sentence (transfer count), so every template diary's text changed. Per-layer times are not in the prompt: 3b misread a layer's first-receipt time as the time all its accounts were paid.
+- `DiarySummary.entries` are now template sentences, not model text. `ollama pull qwen2.5:3b` was a network call (asked for).
+
+## 2026-10-03 — Step 8c follow-up 2: 7b default, code-built count phrases
+
+**Step** — `llm.model` back to `qwen2.5:7b`; a count on the diary is a phrase built by code, never a form the model picks.
+**Files** — changed `legal\diary.py`, `legal\config.yaml`, `audits\check_diary.py`. No new file.
+**Key names** — tokens `ACCOUNTS_n` / `TRANSFERS_n` (replace `CNT_n`), `count(n, noun, near)`, `COUNT_NOUN_RE`, `validate_narrative(complete=)`, `_summary_problems(complete)`.
+**What was built**
+- A count token is named after its noun and stands for number + noun: "1 account", "6 accounts", "14 transfers", "1 transfer". The prompt tells the model to use the token as the noun itself.
+- Validator: a count token followed by account(s) / transfer(s) / transaction(s) is rejected (it would read "1 account accounts").
+- Validator, model summary only (`complete=True`): every count token must appear, so a layer or the freeze count cannot be left out. The template summary is not held to this (it tells the transfer count only).
+- Template summary: "traced onward through 14 transfers" (was "14 transfer(s)").
+- `legal\config.yaml`: `model: "qwen2.5:7b"`; `qwen2.5:3b` documented in the comment as the alternative.
+**Results** (new prompt, 3 largest traces: PYTM10000195, SBIN10000231, SBIN10000183)
+| model | median | min–max | validator |
+|---|---|---|---|
+| qwen2.5:7b (default) | 4.5 s | 4.5–4.5 | 3/3 |
+| qwen2.5:3b | 1.4 s | 1.4–1.4 | 3/3 |
+- Wider sample: 7b 50/50 validated (every 6th victim, median 4.6 s, max 4.7 s); 3b 100/100 (every 3rd, median 1.5 s).
+- `check_diary.py` 41 checks, 0 failed, 16.7 s (A `LLM+VALIDATED` 4.8 s, 7b; narratives rejected 14/14). `check_api.py --llm` 1454 checks, 0 failed, 28.9 s (live summary 4.7 s).
+**Deviations**
+- Two first attempts failed and were replaced: with a `CNT_n` token standing for the phrase, both models wrote the noun again (0/3 validated); renaming the token after its noun fixed it.
+- The completeness rule was not asked for: 3b had copied a two-layer example and dropped layer L3 while still validating.

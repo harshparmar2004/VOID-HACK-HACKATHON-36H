@@ -104,8 +104,9 @@ def case_diary(case_id: str, victim: str) -> LegalDocument:
 
 
 def diary_summary(case_id: str, victim: str) -> DiarySummary:
-    """Ask the local model for the narrative (slow). Only a validated answer is
-    returned as AI text and stored, as the next version of the diary."""
+    """Ask the local model for the summary (3 to 5 sentences; the entries are the
+    template's). Only a validated answer is returned as AI text and stored, as
+    the next version of the diary."""
     case, ev = _evidence(case_id, victim)
     r = _diary(ev, use_llm=True)
     llm = LlmStatus(status=r["llm"]["status"], seconds=round(r["llm"]["seconds"], 1),
