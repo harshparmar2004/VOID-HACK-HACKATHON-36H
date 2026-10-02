@@ -27,3 +27,15 @@ Thumbs.db
 backend/data/uploads/
 backend/data/settings.json
 
+# Large Dataset Files (>100MB)
+*.csv
+!backend/data/cyber_crime_sample.csv
+!backend/data/transactions_sample.csv
+*.duckdb
+backend/audit.py
+backend/check_dups_nulls.py
+backend/clean_and_study_dataset.py
+backend/inspect_*.py
+backend/data/eda_study_summary.json
+
+

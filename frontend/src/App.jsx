@@ -9,7 +9,6 @@ import EntityDirectoryView from "./components/EntityDirectoryView";
 import MuleDossierView from "./components/MuleDossierView";
 import NetworkGraphView from "./components/NetworkGraphView";
 import EndpointTrailView from "./components/EndpointTrailView";
-import PatternsStoryView from "./components/PatternsStoryView";
 import Section91NoticesView from "./components/Section91NoticesView";
 import CaseDiaryView from "./components/CaseDiaryView";
 import JuryBenchmarkView from "./components/JuryBenchmarkView";
@@ -42,7 +41,8 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem("abhedya_active_tab");
-    return saved === "timeline" ? "trail" : (saved || "intake");
+    if (saved === "timeline" || saved === "patterns") return "intake";
+    return saved || "intake";
   });
   const [activeCase, setActiveCase] = useState(() => {
     return localStorage.getItem("abhedya_active_case") || DEFAULT_VICTIM;
@@ -458,14 +458,7 @@ export default function App() {
             </ErrorBoundary>
           </div>
 
-          {/* TAB 7: Patterns & Story (42 Syndicate Rings & Modus Operandi) */}
-          <div className={activeTab === "patterns" ? "block" : "hidden"}>
-            <ErrorBoundary name="Patterns & Story">
-              <PatternsStoryView />
-            </ErrorBoundary>
-          </div>
-
-          {/* TAB 8: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
+          {/* TAB 7: Section 91 Notices (Bank-Wise Freezing Orders & Requisitions) */}
           <div className={activeTab === "notices" ? "block" : "hidden"}>
             <ErrorBoundary name="Section 91 Notices">
               <Section91NoticesView
