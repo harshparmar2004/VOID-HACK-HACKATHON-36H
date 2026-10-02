@@ -1,12 +1,38 @@
-import React, { useMemo } from "react";
-import { FileText, Lock, Unlock } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { FileText, Loader2, Lock, Unlock } from "lucide-react";
+import { generateNotices } from "../api";
 import { inr, num, text } from "../format";
+import { canWrite, isClosed } from "./CaseBar";
+import DocumentView from "./DocumentView";
 import { EmptyState, ErrorState, LaterButton, LaterStep, LoadingState, PageHeader, Stat } from "./States";
 
-// Notice documents and the freeze register are not built yet. The table lists the
+const NO_NOTICES = { list: null, message: null, busy: false, error: null };
+
+// Draft freeze notices, one per bank, written to the open case and read back from
+// the case store. The freeze register is not wired here yet. The table lists the
 // engine's freeze candidates for the selected victim; nothing here is sent to a bank.
-export default function Section91NoticesView({ trace, onRetry }) {
+export default function Section91NoticesView({ trace, onRetry, caseRec, caseBar, onCaseChanged }) {
   const candidates = trace.data?.freeze_candidates || [];
+  const caseId = caseRec?.data?.case_id;
+  const [notices, setNotices] = useState(NO_NOTICES);
+  const [openDoc, setOpenDoc] = useState(null);
+
+  useEffect(() => {
+    setNotices(NO_NOTICES);
+    setOpenDoc(null);
+  }, [trace.victim, caseId]);
+
+  const generate = async () => {
+    setNotices({ ...NO_NOTICES, busy: true });
+    setOpenDoc(null);
+    try {
+      const res = await generateNotices(trace.victim, caseId);
+      setNotices({ ...NO_NOTICES, list: res.notices || [], message: res.message });
+      onCaseChanged(caseId);
+    } catch (err) {
+      setNotices({ ...NO_NOTICES, error: err.message });
+    }
+  };
 
   const byBank = useMemo(() => {
     const map = {};
@@ -28,12 +54,53 @@ export default function Section91NoticesView({ trace, onRetry }) {
         title="Section 91 Notices"
         subtitle="Accounts the engine recommends freezing for the selected victim, grouped by bank."
       >
-        <LaterButton icon={FileText}>Generate notices</LaterButton>
+        <button
+          type="button"
+          onClick={generate}
+          disabled={!canWrite(caseRec) || !trace.victim || notices.busy}
+          title={isClosed(caseRec) ? "This case is closed" : !caseId ? "Open a case first" : undefined}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#D96B27] text-white text-xs font-semibold hover:bg-[#C25A1C] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {notices.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+          <span>Generate notices</span>
+        </button>
         <LaterButton icon={Lock}>Freeze all</LaterButton>
       </PageHeader>
 
-      <LaterStep title="Notice documents, freeze and unfreeze">
-        The list below is a recommendation from the trace. No notice has been drafted and no bank has been contacted.
+      {caseBar}
+
+      {notices.error && <ErrorState title="The notices could not be generated" message={notices.error} onRetry={generate} />}
+      {notices.list && notices.list.length === 0 && (
+        <EmptyState title="No notice was written" hint={notices.message || undefined} />
+      )}
+      {notices.list && notices.list.length > 0 && (
+        <div className="bg-white border border-[#E8E2D5] rounded-md shadow-2xs overflow-hidden">
+          <div className="p-3.5 border-b border-[#E8E2D5] bg-[#FAF6EE]">
+            <h3 className="font-bold text-sm text-[#2C2623] font-serif">Draft notices ({notices.list.length}), one per bank</h3>
+          </div>
+          <ul className="divide-y divide-[#EFEAE1] text-xs font-mono">
+            {notices.list.map((n) => (
+              <li key={n.output_id} className="p-3.5 flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  <b className="text-[#D96B27]">{text(n.bank)}</b> • {text(n.bank_name)} • version {n.version} • {text(n.generator)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpenDoc(n)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white border border-[#D4CEBF] text-[#2C2623] text-xs font-semibold hover:bg-[#FAF6EE] cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>{openDoc?.output_id === n.output_id ? "Showing" : "Open"}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {openDoc && <DocumentView key={openDoc.output_id} doc={openDoc} />}
+
+      <LaterStep title="Freeze and unfreeze">
+        The list below is a recommendation from the trace. A notice is a draft until an officer signs it; no bank has been contacted.
       </LaterStep>
 
       {trace.loading ? (

@@ -772,3 +772,19 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 **Deviations**
 - Two first attempts failed and were replaced: with a `CNT_n` token standing for the phrase, both models wrote the noun again (0/3 validated); renaming the token after its noun fixed it.
 - The completeness rule was not asked for: 3b had copied a two-layer example and dropped layer L3 while still validating.
+
+## 2026-10-03 — Step 8e1: UI for cases, notices and the case diary
+
+**Step** — the UI opens and closes cases, generates notices and the diary, and shows stored pages. Only `ui\src\` edited.
+**Files** — new `ui\src\components\DocumentView.jsx`, `CaseBar.jsx`; changed `ui\src\api.js`, `App.jsx`, `components\Section91NoticesView.jsx`, `components\CaseDiaryView.jsx`.
+**Key names** — api.js: `fetchCases`, `fetchCase`, `openCase`, `closeCase`, `fetchStoredPage`, `generateNotices`, `generateDiary`, `fetchDiarySummary`; App: `caseRec`, `loadCaseFor`, `refreshCase`; CaseBar: `canWrite`, `isClosed`.
+**What was built**
+- `DocumentView`: GET `/cases/{id}/outputs/{output_id}` shown in an iframe; "Print / Save as PDF" prints the iframe's own window (the document only); case id, generator, version, SHA-256; a warning if the page read back does not match the row's sha256.
+- `CaseBar` (trail, notices and diary tabs): open-case form (officer, FIR number, complainant) -> POST `/cases`; status, events list; "Close case". The selected victim's case is the newest in GET `/cases` that names it.
+- Notices tab: "Generate notices" -> one row per bank -> "Open" in `DocumentView`. Diary tab: "Generate case diary" shows the template page, then fetches the summary ("Generating summary..."); a validated summary replaces the page with the stored AI version.
+- Write buttons are disabled with no case or a CLOSED case. "Available in a later step" removed for notices and diary; it stays on freeze / unfreeze.
+**Results** — `npm run build` passed (1911 modules, 0 errors). Not tested in a browser (as instructed).
+**Deviations**
+- The diary is generated on a button, not on opening the tab: each load stores a new version and an event.
+- In `npm run dev` (cross-origin) the browser cannot read `X-Content-SHA256` (not in the CORS `expose_headers`), so the SHA-256 shown is computed in the browser from the bytes received; in the served build the header is used.
+- "Close case" sends the case's own officer and no note. The three case bars keep separate form text.
