@@ -381,70 +381,90 @@ export default function MuleDossierView({
         </div>
       </div>
 
-      {/* 3. Filter and Search Bar (Sharp Box with Sharp Controls) */}
-      <div className="bg-white border border-[#E8E2D5] rounded-sm p-3 shadow-2xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative flex-1 min-w-[240px]">
-            <input
-              type="text"
-              placeholder="Search Account ID, IFSC, Bank Name, or Modus Operandi..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-[#E8E2D5] rounded-sm pl-8 pr-12 py-1.5 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] shadow-2xs transition-all"
-            />
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#9E968D]" />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="absolute right-2.5 top-2 text-[10px] font-mono uppercase text-[#9E968D] hover:text-[#2C2623] cursor-pointer"
-              >
-                Clear
-              </button>
-            )}
+      {/* 3. Forensic Account Intelligence Console (Two-Tier Unified Control) */}
+      <div className="bg-white/70 backdrop-blur-[18px] border border-[#E8E2D5] rounded-2xl p-3.5 shadow-2xs space-y-2.5">
+        {/* Tier 1: Search + Role Segmentation */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Large Search Field (55-60% width on desktop) */}
+          <div className="relative flex-1 lg:max-w-[58%] min-w-0">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 absolute left-3.5 text-[#9E968D] pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search Account ID, IFSC, Bank Name, or Modus Operandi..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-white/90 backdrop-blur-sm border border-[#E8E2D5] rounded-xl pl-10 pr-14 py-2 text-xs font-mono text-[#2C2623] placeholder-[#9E968D] focus:outline-none focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/30 shadow-2xs transition-all"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-3 px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold text-[#9E968D] hover:text-[#2C2623] hover:bg-black/5 rounded cursor-pointer transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Role Filter Pills (Sharp Rectangular Tabs) */}
-          <div className="flex items-center gap-1 bg-[#FAF6EE] border border-[#E8E2D5] rounded-sm p-0.5 text-xs">
-            {[
-              { id: "ALL", label: "ALL MULES", count: stats.total },
-              { id: "L1_COLLECTOR", label: "L1 COLLECTOR", count: stats.l1 },
-              { id: "L2_DISTRIBUTOR", label: "L2 DISTRIBUTOR", count: stats.l2 },
-              { id: "L3_CASHOUT", label: "L3 CASHOUT", count: stats.l3 }
-            ].map((tab) => {
-              const isSelected = (!activeFilter && tab.id === "ALL") || activeFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onFilterRole(tab.id === "ALL" ? null : tab.id)}
-                  className={`px-2.5 py-1 rounded-xs font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    isSelected ? "bg-[#D96B27] text-white shadow-2xs" : "text-[#746D65] hover:text-[#2C2623] hover:bg-white"
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`text-[10px] px-1 py-0.2 rounded-xs font-mono ${
-                      isSelected ? "bg-white/20 text-white" : "bg-[#EAE4D8] text-[#746D65]"
+          {/* Role Segmentation Controls (Segmented Control) */}
+          <div className="flex items-center overflow-x-auto no-scrollbar shrink-0">
+            <div className="inline-flex items-center p-1 rounded-xl bg-white/60 backdrop-blur-md border border-[#E8E2D5] shadow-2xs gap-1 w-full sm:w-auto">
+              {[
+                { id: "ALL", label: "ALL MULES", count: stats.total },
+                { id: "L1_COLLECTOR", label: "L1 COLLECTOR", count: stats.l1 },
+                { id: "L2_DISTRIBUTOR", label: "L2 DISTRIBUTOR", count: stats.l2 },
+                { id: "L3_CASHOUT", label: "L3 CASHOUT", count: stats.l3 }
+              ].map((tab) => {
+                const isSelected = (!activeFilter && tab.id === "ALL") || activeFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => onFilterRole(tab.id === "ALL" ? null : tab.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all duration-200 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                      isSelected
+                        ? "bg-[#D96B27] text-white shadow-xs border border-[#C25B1D]"
+                        : "text-[#746D65] hover:text-[#2C2623] hover:bg-white/80 border border-transparent"
                     }`}
                   >
-                    {tab.count}
-                  </span>
-                </button>
-              );
-            })}
+                    <span>{tab.label}</span>
+                    <span
+                      className={`text-[10px] font-mono px-1.5 py-0.2 rounded-md font-bold transition-colors ${
+                        isSelected
+                          ? "bg-white/20 text-white"
+                          : "bg-[#EAE4D8] text-[#5C554E]"
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Secondary Filters: Bank, Min Risk & Sorting */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-[#E8E2D5] text-xs">
+        {/* Tier 2: Forensic Filter Console & System Telemetry */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-[#E8E2D5]/70 text-xs">
+          {/* Secondary Filters (Bank & Min Risk) */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Section Micro-Label */}
+            <div className="flex items-center gap-1.5 pr-2 border-r border-[#E8E2D5]/70 shrink-0">
+              <Filter className="w-3 h-3 text-[#D96B27]" />
+              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#9E968D] whitespace-nowrap">
+                Forensic Filters
+              </span>
+            </div>
+
             {/* Bank Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65]">Bank:</span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
+                Bank:
+              </span>
               <select
                 value={selectedBank}
                 onChange={(e) => setSelectedBank(e.target.value)}
-                className="bg-white border border-[#E8E2D5] rounded-sm px-2.5 py-1 text-xs font-mono font-medium text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs"
+                className="bg-white/90 border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
               >
                 <option value="ALL">All Banks ({stats.total})</option>
                 <option value="SBIN">State Bank of India (SBIN)</option>
@@ -460,11 +480,13 @@ export default function MuleDossierView({
 
             {/* Min Risk Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65]">Min Risk:</span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
+                Min Risk:
+              </span>
               <select
                 value={minRisk}
                 onChange={(e) => setMinRisk(Number(e.target.value))}
-                className="bg-white border border-[#E8E2D5] rounded-sm px-2.5 py-1 text-xs font-mono font-medium text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs"
+                className="bg-white/90 border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
               >
                 <option value={0}>Any Risk (0+)</option>
                 <option value={80}>High Confidence (80+)</option>
@@ -474,14 +496,17 @@ export default function MuleDossierView({
             </div>
           </div>
 
+          {/* Sort Control & Matching Telemetry Indicator */}
           <div className="flex flex-wrap items-center gap-3">
             {/* Sort Options */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65]">Sort By:</span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#746D65] whitespace-nowrap">
+                Sort By:
+              </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-white border border-[#E8E2D5] rounded-sm px-2.5 py-1 text-xs font-mono font-medium text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs"
+                className="bg-white/90 border border-[#E8E2D5] rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-[#2C2623] focus:outline-none focus:border-[#D96B27] shadow-2xs hover:border-[#D96B27]/50 transition-colors cursor-pointer"
               >
                 <option value="risk_desc">Risk Index (High to Low)</option>
                 <option value="holding_desc">Holding Balance (High to Low)</option>
@@ -490,8 +515,13 @@ export default function MuleDossierView({
               </select>
             </div>
 
-            <div className="text-[11px] text-[#746D65] font-mono bg-[#FAF6EE] px-2 py-0.5 rounded-xs border border-[#E8E2D5]">
-              Showing <span className="font-bold text-[#2C2623]">{filteredMules.length}</span> matching accounts
+            {/* Telemetry Indicator */}
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/90 border border-[#E8E2D5] shadow-2xs font-mono shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
+              <span className="text-xs font-bold text-[#2C2623]">{filteredMules.length}</span>
+              <span className="text-[10px] font-bold text-[#746D65] uppercase tracking-wider">
+                Matching Accounts
+              </span>
             </div>
           </div>
         </div>
