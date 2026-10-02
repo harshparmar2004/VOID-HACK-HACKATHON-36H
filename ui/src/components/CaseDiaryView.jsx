@@ -19,7 +19,7 @@ const SUMMARY_PARTS = [
 // The case diary of the open case: the template page at once, then the local
 // model's summary, fetched separately and used only if it passed validation.
 // Below it, the engine's own trace summary and findings, as they are returned.
-export default function CaseDiaryView({ trace, onRetry, caseRec, caseBar, onCaseChanged }) {
+export default function CaseDiaryView({ trace, onRetry, caseRec, caseBar, onCaseChanged, firDoc }) {
   const summary = trace.data?.summary;
   const findings = trace.data?.findings || [];
   const caseId = caseRec?.data?.case_id;
@@ -108,6 +108,13 @@ export default function CaseDiaryView({ trace, onRetry, caseRec, caseBar, onCase
       )}
 
       {diary.doc && <DocumentView key={diary.doc.output_id} doc={diary.doc} />}
+
+      {firDoc && (
+        <>
+          <h3 className="font-bold text-sm text-[#2C2623] font-serif">FIR draft</h3>
+          <DocumentView key={firDoc.output_id} doc={firDoc} />
+        </>
+      )}
 
       {trace.loading ? (
         <LoadingState label="Tracing..." />

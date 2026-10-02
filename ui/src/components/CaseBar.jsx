@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FolderOpen, FolderPlus, Lock } from "lucide-react";
+import { FolderOpen, FolderPlus, Lock, X } from "lucide-react";
 import { text } from "../format";
 import { ErrorState, LoadingState } from "./States";
 
@@ -17,6 +17,8 @@ export default function CaseBar({ victim, caseRec, caseInfo, onOpen, onClose, on
   const [form, setForm] = useState({ officer: "", firNumber: "", complainant: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // The closing dialog: null when shut, else the officer and note being typed.
+  const [closing, setClosing] = useState(null);
   const data = caseRec.data;
   const closed = isClosed(caseRec);
 
@@ -74,7 +76,7 @@ export default function CaseBar({ victim, caseRec, caseInfo, onOpen, onClose, on
             type="button"
             disabled={busy || closed}
             title={closed ? "This case is closed" : undefined}
-            onClick={() => run(() => onClose(data))}
+            onClick={() => setClosing({ officer: data.officer || "", note: "" })}
             className={`${BUTTON} bg-white border border-[#FECACA] text-[#991B1B] hover:bg-[#FEE2E2]`}
           >
             <Lock className="w-3.5 h-3.5" />
@@ -107,6 +109,62 @@ export default function CaseBar({ victim, caseRec, caseInfo, onOpen, onClose, on
       )}
 
       {error && <p className="px-3.5 py-2 text-xs font-mono text-[#B91C1C] bg-[#FEF2F2] border-b border-[#FECACA] break-words">{error}</p>}
+
+      {closing && data && (
+        <div className="fixed inset-0 bg-[#2C2623]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <form
+            className="bg-white border border-[#E8E2D5] rounded-xl max-w-md w-full shadow-2xl overflow-hidden"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const body = { officer: closing.officer.trim(), note: closing.note.trim() };
+              setClosing(null);
+              run(() => onClose(data, body));
+            }}
+          >
+            <div className="bg-[#FAF6EE] border-b border-[#E8E2D5] px-5 py-3 flex items-center justify-between">
+              <h2 className="text-base font-serif font-bold text-[#2C2623]">Close case {data.case_id}</h2>
+              <button type="button" onClick={() => setClosing(null)} title="Cancel" className="text-[#746D65] hover:text-[#2C2623] cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-[#746D65]">
+                A closed case cannot be reopened. No notice, diary, FIR or freeze entry can be written to it afterwards.
+              </p>
+              <input
+                className={`${INPUT} w-full`}
+                placeholder="Officer (required)"
+                value={closing.officer}
+                onChange={(e) => setClosing((c) => ({ ...c, officer: e.target.value }))}
+                required
+                maxLength={300}
+              />
+              <textarea
+                className={`${INPUT} w-full h-24`}
+                placeholder="Closing note (required)"
+                value={closing.note}
+                onChange={(e) => setClosing((c) => ({ ...c, note: e.target.value }))}
+                required
+                maxLength={300}
+                autoFocus
+              />
+            </div>
+            <div className="px-5 py-3 border-t border-[#E8E2D5] flex justify-end gap-2">
+              <button type="button" onClick={() => setClosing(null)} className={`${BUTTON} bg-white border border-[#D4CEBF] text-[#2C2623] hover:bg-[#FAF6EE]`}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!closing.officer.trim() || !closing.note.trim()}
+                className={`${BUTTON} bg-[#DC2626] text-white hover:bg-[#B91C1C]`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Close case</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {data && (
         <details className="text-xs">

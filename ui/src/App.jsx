@@ -98,6 +98,8 @@ export default function App() {
   const [dossierFocus, setDossierFocus] = useState(null);
   const traceRequest = useRef(0);
   const [caseRec, setCaseRec] = useState(EMPTY_CASE);
+  // The FIR draft last written in this session, shown on the Investigative Brief tab.
+  const [firDoc, setFirDoc] = useState(null);
   const caseRequest = useRef(0);
 
   // The newest case that names this victim, if any, with its events and outputs.
@@ -121,6 +123,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    setFirDoc(null);
     loadCaseFor(activeCase);
   }, [activeCase, loadCaseFor]);
 
@@ -135,13 +138,20 @@ export default function App() {
     }
   }, []);
 
+  const handleFirDrafted = (doc) => {
+    setFirDoc(doc);
+    refreshCase(doc.case_id);
+    handleTabChange("brief");
+  };
+
   const handleOpenCase = async (form) => {
+    setFirDoc(null);
     const created = await openCase({ victims: [activeCase], ...form });
     await refreshCase(created.case_id);
   };
 
-  const handleCloseCase = async (data) => {
-    await closeCase(data.case_id, { officer: data.officer });
+  const handleCloseCase = async (data, { officer, note }) => {
+    await closeCase(data.case_id, { officer, note });
     await refreshCase(data.case_id);
   };
 
@@ -300,7 +310,7 @@ export default function App() {
 
           <div className={show("vault")}>
             <ErrorBoundary name="Evidence Vault">
-              <EvidenceVaultView status={status} trace={trace} onRetry={loadStatus} />
+              <EvidenceVaultView status={status} trace={trace} onRetry={loadStatus} isActive={activeTab === "vault"} />
             </ErrorBoundary>
           </div>
 
@@ -369,7 +379,7 @@ export default function App() {
 
           <div className={show("brief")}>
             <ErrorBoundary name="Investigative Brief">
-              <CaseDiaryView trace={trace} onRetry={retryTrace} caseRec={caseRec} caseBar={caseBar} onCaseChanged={refreshCase} />
+              <CaseDiaryView trace={trace} onRetry={retryTrace} caseRec={caseRec} caseBar={caseBar} onCaseChanged={refreshCase} firDoc={firDoc} />
             </ErrorBoundary>
           </div>
 
@@ -385,6 +395,9 @@ export default function App() {
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
         onRegisterCase={handleRegisterCase}
+        onFirDrafted={handleFirDrafted}
+        victim={activeCase}
+        caseRec={caseRec}
         victimAccounts={victims.accounts}
       />
 

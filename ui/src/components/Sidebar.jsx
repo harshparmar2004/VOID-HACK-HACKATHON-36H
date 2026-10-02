@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { num, text } from "../format";
 
-const LATER_BADGE = "Later";
 
 export default function Sidebar({ activeTab, onSelectTab, status, filtersActive }) {
   const s = status?.data;
@@ -25,7 +24,7 @@ export default function Sidebar({ activeTab, onSelectTab, status, filtersActive 
       title: "CASE OPERATIONS",
       items: [
         { id: "intake", label: "Case Intake", icon: UploadCloud, badge: null },
-        { id: "vault", label: "Evidence Vault", icon: Shield, badge: LATER_BADGE }
+        { id: "vault", label: "Evidence Vault", icon: Shield, badge: null }
       ]
     },
     {
@@ -42,8 +41,8 @@ export default function Sidebar({ activeTab, onSelectTab, status, filtersActive 
     {
       title: "LEGAL & BENCHMARK",
       items: [
-        { id: "notices", label: "Section 91 Notices", icon: FileCheck, badge: LATER_BADGE },
-        { id: "brief", label: "Investigative Brief", icon: FileText, badge: LATER_BADGE },
+        { id: "notices", label: "Section 91 Notices", icon: FileCheck, badge: null },
+        { id: "brief", label: "Investigative Brief", icon: FileText, badge: null },
         { id: "jury", label: "Audit & Evaluation", icon: Award, badge: null }
       ]
     }

@@ -206,3 +206,45 @@ export function generateDiary(victim, caseId) {
 export function fetchDiarySummary(victim, caseId) {
   return request(`/legal/case-diary/${encodeURIComponent(victim)}/summary${query({ case_id: caseId })}`);
 }
+
+// The FIR draft: the officer's text as typed, the annexures filled by code.
+export function draftFir({ caseId, victim, complainant, offenceSummary, sectionsOfLaw, policeStation }) {
+  return request("/legal/fir", {
+    ...JSON_POST,
+    body: JSON.stringify({
+      case_id: caseId,
+      victim,
+      complainant: {
+        name: complainant.name,
+        address: keyword(complainant.address),
+        phone: keyword(complainant.phone),
+        email: keyword(complainant.email)
+      },
+      offence_summary: offenceSummary,
+      sections_of_law: keyword(sectionsOfLaw),
+      police_station: keyword(policeStation)
+    })
+  });
+}
+
+// The freeze register records requests only; no call here reaches a bank.
+export function requestFreeze(caseId, accounts) {
+  return request("/scanner/emergency-freeze", { ...JSON_POST, body: JSON.stringify({ case_id: caseId, accounts }) });
+}
+
+export function withdrawFreeze(caseId, accounts) {
+  return request("/scanner/unfreeze", { ...JSON_POST, body: JSON.stringify({ case_id: caseId, accounts }) });
+}
+
+export function fetchFrozenAccounts(caseId) {
+  return request(`/scanner/frozen-accounts${query({ case_id: caseId })}`);
+}
+
+export function fetchVaultArtifacts() {
+  return request("/vault/artifacts");
+}
+
+// Read-only: the API recomputes the hash chains and re-hashes every stored document.
+export function verifyVault() {
+  return request("/vault/verify", { method: "POST" });
+}

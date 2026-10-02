@@ -788,3 +788,20 @@ Removed the `valid` window filter in `features.sql` — that filter (split lag m
 - The diary is generated on a button, not on opening the tab: each load stores a new version and an event.
 - In `npm run dev` (cross-origin) the browser cannot read `X-Content-SHA256` (not in the CORS `expose_headers`), so the SHA-256 shown is computed in the browser from the bytes received; in the served build the header is used.
 - "Close case" sends the case's own officer and no note. The three case bars keep separate form text.
+
+## 2026-10-03 — Step 8e2: UI for the FIR draft, freeze register, vault and case closing
+
+**Step** — the remaining Step 8 routes are wired into the UI; one API line changed.
+**Files** — changed `ui\src\api.js`, `App.jsx`, `components\RegisterFIRModal.jsx`, `CaseBar.jsx`, `CaseDiaryView.jsx`, `Section91NoticesView.jsx`, `EvidenceVaultView.jsx`, `RealtimeFraudScannerView.jsx`, `Sidebar.jsx`; `api\middleware.py`. No new file.
+**Key names** — api.js: `draftFir`, `requestFreeze`, `withdrawFreeze`, `fetchFrozenAccounts`, `fetchVaultArtifacts`, `verifyVault`; App: `firDoc`, `handleFirDrafted`; notices view: `record`, `loadRegister`, `NOT_NOTIFIED`.
+**What was built**
+- FIR: with a case open, the Register FIR dialog is the FIR form (complainant, offence summary, sections, station) -> POST `/legal/fir`; the draft opens in `DocumentView` on the Investigative Brief tab. With no open case the dialog keeps its old form (pick an account to trace).
+- Freeze register (notices tab): "Request freeze" / "Withdraw" per account and "Request freeze for all"; the list is GET `/scanner/frozen-accounts?case_id`; "Recorded request - bank not notified by this system" is always shown; accounts the API skipped are listed with its reason.
+- Vault: GET `/vault/artifacts` table (time, case, type, bank, version, generator, sha256), re-read each time the tab is shown; "Verify" -> POST `/vault/verify` -> PASS / FAIL with counts and problems.
+- Close case: a dialog with the officer (prefilled) and a required note. Every write button is disabled on a CLOSED case.
+- `api\middleware.py`: `X-Content-SHA256` added to the CORS exposed headers.
+**Results** — `npm run build` passed (1911 modules, 0 errors, output in `ui\dist`). `check_api.py` checks 1448   passed 1448   failed 0. Not tested in a browser (as instructed).
+**Deviations**
+- "Available in a later step" removed from FIR, freeze, vault ledger / verify, the scanner page and the sidebar badges. It is kept on three things the API does not serve: file upload, profile save / activate, and the Section 63 certificate (HTTP 501).
+- The scanner's "Freeze receivers" button was removed, not wired: those accounts need not be in a case's trace.
+- The FIR draft shown is the one written in this session; earlier drafts are in the vault list only.
