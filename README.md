@@ -1,5 +1,5 @@
 # Operation Abhedya-Chakra (अभैद्य चक्र)
-### Autonomous Multi-Hop Mule Account Detection, Graph Traversal & Judicial Freeze Platform
+### Autonomous Multi-Hop Money Mule Detection, Graph Provenance Traversal & Judicial Freeze Platform
 
 [![Theme: Digital Forensics](https://img.shields.io/badge/Theme-Cyber_Security_%26_Forensics-orange.svg)](https://github.com/Void-Hacks-8-0-2/Overhyped-Geeks)
 [![VoidHacks 8.0](https://img.shields.io/badge/Hackathon-VoidHacks_8.0_(36_Hours)-blue.svg)](https://github.com/harshparmar2004/VOID-HACK-HACKATHON-36H)
@@ -8,47 +8,55 @@
 [![DuckDB](https://img.shields.io/badge/Database-DuckDB_OLAP-yellow.svg)](https://duckdb.org/)
 [![React 18](https://img.shields.io/badge/Frontend-React_18_%2B_Vite-61dafb.svg)](https://reactjs.org/)
 [![Admissibility](https://img.shields.io/badge/Compliance-Sec_91_CrPC_%2F_94_BNSS-red.svg)](#8-statutory-compliance--court-admissibility)
+[![Evidence](https://img.shields.io/badge/Evidence-Sec_65B_IEA_%2F_63_BSA-purple.svg)](#8-statutory-compliance--court-admissibility)
 
 ---
 
-## 1. Executive Summary & Mission
+## 1. Executive Summary & The "Golden Hour" Challenge
 
-**Abhedya-Chakra (अभैद्य चक्र)** is an enterprise-grade, high-throughput financial cybercrime intelligence platform designed to dismantle organized multi-tiered money mule networks, trace illicit capital across **4 forensic hops** in milliseconds, and autonomously generate court-admissible debit freeze requisitions under **Section 91 Cr.P.C. / Section 94 BNSS** and case diaries under **Section 172 Cr.P.C. / Section 192 BNSS**.
+**Abhedya-Chakra (अभैद्य चक्र)** is an enterprise-grade, high-throughput digital forensics and cyber intelligence platform engineered to dismantle sophisticated, multi-tiered money mule syndicates. Built specifically for State Cyber Crime Police Stations, Commissionerates, and Financial Intelligence Units (FIUs), the platform autonomously traces siphoned capital across **4 forensic hops in sub-15 milliseconds**, identifies money laundering cells, and compiles **court-ready statutory freeze requisitions under Section 91 Cr.P.C. / Section 94 BNSS** and **Case Diaries under Section 172 Cr.P.C. / Section 192 BNSS**.
 
-Engineered for state cyber cells and investigating police officers, Abhedya-Chakra eliminates the **60-Minute "Golden Hour" Trap** where stolen funds typically slip away into offshore crypto exchanges or cash sweeps before traditional manual bank freezes take effect.
+### The 60-Minute "Golden Hour" Trap
+In modern cyber financial fraud (digital arrest extortion, task-based investment scams, and fake stock trading schemes), stolen funds do not sit idle. Syndicates leverage automated bot networks to split and move capital through 3 to 4 layers of mule accounts within **15 to 45 minutes**, ultimately exiting via:
+1. **P2P Cryptocurrency Off-Ramps** (e.g., Binance USDT transfers to overseas wallets)
+2. **Hawala Escrow Networks** (Dubai/Southeast Asia settlement rings)
+3. **Multi-ATM Cashout Rings** (rapid withdrawal across non-home ATMs)
+
+Traditional manual policing—requesting bank statements via official correspondence, analyzing spreadsheets row-by-row, and manually typing freeze letters—takes **3 to 14 days**, long after the capital has left Indian jurisdiction. **Abhedya-Chakra compresses this multi-day investigative lifecycle into under 1 second.**
 
 ```
 +---------------------------------------------------------------------------------------------------+
 |                                  THE 4-HOP MONEY TRAIL TOPOLOGY                                   |
 |                                                                                                   |
-|  [ VICTIM ]                                                                                       |
-|     |  Digital Arrest / Cyber Fraud                                                               |
-|     v  (Window: 3-15 min | Pass-Through: 97-99% | Split: 3 to 6 receivers)                        |
-|  [ LAYER 1 (L1) • MULE COLLECTOR (Placement) ]                                                    |
-|     |                                                                                             |
-|     v  (Window: 0-60 min | Pass-Through: 94-97% | Rapid 1-to-1 smurfing)                          |
-|  [ LAYER 2 (L2) • MULE DISTRIBUTOR (Layering) ]                                                   |
-|     |                                                                                             |
-|     v  (Multi-stream aggregation into pooling accounts)                                           |
-|  [ LAYER 3 (L3) • ESCROW / ACCUMULATION MULE ]                                                    |
-|     |                                                                                             |
-|     v  (Final liquidation off-ramp)                                                               |
+|  [ VICTIM ACCOUNT ]                                                                               |
+|     │  High-Yield Investment / Digital Arrest Extortion Inflow                                    |
+|     ▼  (Window: 3-15 min | Pass-Through: 97-99% | Rapid Fan-Out: 3 to 6 accounts)                 |
+|  [ LAYER 1 (L1) • MULE COLLECTOR (Placement Layer) ]                                              |
+|     │                                                                                             |
+|     ▼  (Window: 0-60 min | Pass-Through: 94-97% | 1-to-1 Smurfing Transit)                        |
+|  [ LAYER 2 (L2) • MULE DISTRIBUTOR (Layering Layer) ]                                             |
+|     │                                                                                             |
+|     ▼  (Multi-stream aggregation into high-capacity pooling accounts)                             |
+|  [ LAYER 3 (L3) • ESCROW / ACCUMULATION MULE (Pooling Layer) ]                                    |
+|     │                                                                                             |
+|     ▼  (Final liquidation & jurisdictional boundary crossing)                                     |
 |  [ LAYER 4 (L4) • TERMINAL EXIT (Binance P2P USDT / Dubai Hawala / Multi-ATM Cashout) ]           |
 +---------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Key Engineering Innovations & Benchmarks
+## 2. Key Engineering Innovations & Measured Benchmarks
 
-| Capability | Engineering Design | Measured Benchmark | Forensic Impact |
+| Capability | Engineering Architecture | Measured Benchmark | Practical Operational Impact |
 |:---|:---|:---:|:---|
-| **2M+ Row Ingestion** | In-Process DuckDB Columnar + Arrow | **10.34 seconds** (~193k rows/sec) | Instant intake of massive core-banking ledger dumps |
-| **Graph Path Walk** | Compressed Sparse Row (CSR) Binary Arrays | **< 15 milliseconds** | Replaces recursive SQL joins with instant pointer arithmetic |
-| **Layer Detection Precision** | Two-Pass Deterministic Behavioral Engine | **100% Precision (1,073 Mules)** | Zero false positives on 23,800 clean commercial accounts |
+| **2M+ Row Statement Ingestion** | In-process DuckDB Columnar OLAP with streaming chunks | **10.34 seconds** (~193k rows/sec) | Instant intake of complete core-banking transaction dumps |
+| **Multi-Hop Graph Traversal** | Compressed Sparse Row (CSR) Binary Memory Arrays | **< 15 milliseconds** | Replaces recursive SQL joins with instant pointer arithmetic |
+| **Syndicate Detection Precision** | Two-Pass Deterministic Behavioral Engine (MP1-8 & T1-7) | **100% Precision (1,073 Mules)** | Zero false positives on 23,800 clean commercial accounts |
 | **Currency Math Precision** | 64-bit Integer Paise (`1 INR = 100 Paise`) | **0 IEEE-754 Float Drift** | Exact, court-defensible rupee balance calculations |
-| **Multi-Format Parsing** | PyPDF + OpenPyXL + DuckDB CSV Parser | **Sub-second parsing** | Ingests CSVs, digital PDF bank statements, Excel & JSON |
-| **Statutory Notice Engine** | Automated Bank Directory & IFSC Resolution | **Instant 1-Click Generation** | Direct Section 91 / 94 freeze orders to Bank Nodal Officers |
+| **Multi-Format Parsing** | PyPDF + OpenPyXL + DuckDB CSV Engine | **Sub-second parsing** | Ingests CSV, XLSX, XLS, PDF bank statements, Parquet & JSON |
+| **Section 91 Notice Engine** | Automated Bank Nodal Resolution & 2-Page A4 Pagination | **Instant 1-Click Generation** | Court-ready statutory freeze order formatted for immediate filing |
+| **Digital Evidence Certification** | SHA-256 Evidentiary Sealing & Chain of Custody | **Tamper-Evident** | Strict compliance with Section 65B Indian Evidence Act |
 
 ---
 
@@ -58,22 +66,25 @@ Engineered for state cyber cells and investigating police officers, Abhedya-Chak
 graph TB
     subgraph ClientLayer ["1. CLIENT & INVESTIGATOR INTERFACE (React 18 + Vite)"]
         UI_Intake["Evidence Intake Studio<br/>(CSV / XLSX / PDF / JSON)"]
+        UI_Audit["Forensic Timing & Parameter Audit Card"]
         UI_Trail["Money Trail Canvas<br/>(4-Hop Layered SVG Flow)"]
         UI_Graph["Network Visualizer<br/>(D3 Canvas / Force-Directed)"]
         UI_Dossier["Mule Dossier & Ring View<br/>(L1, L2, L3, L4 Roles)"]
-        UI_Legal["Judicial Case Diary &<br/>Section 91 / 94 Freeze Notices"]
+        UI_Notice["Court-Ready Section 91 / 94 Freeze Notices<br/>(Exact 2-Page A4 Portrait)"]
+        UI_Diary["Judicial Case Diary<br/>(Section 172 Cr.P.C. / 192 BNSS)"]
     end
 
     subgraph APILayer ["2. FASTAPI ASYNC GATEWAY (Port 8000)"]
-        Router_Upload["/api/upload (Streaming Parser)"]
-        Router_Victims["/api/victims (Victim Discovery)"]
-        Router_Trace["/api/trace/{acct} (BFS Flow Engine)"]
+        Router_Upload["/api/upload (Streaming Multi-Format Parser)"]
+        Router_Victims["/api/victims (Victim Discovery & Case Loading)"]
+        Router_Trace["/api/trace/{acct} (BFS Provenance Engine)"]
         Router_Mules["/api/mules (Risk & Ring Queries)"]
-        Router_Legal["/api/cases & notices (Legal Synthesis)"]
+        Router_Legal["/api/cases & notices (Statutory Requisitions)"]
+        Router_Templates["/api/templates (Verified Statements)"]
     end
 
     subgraph EngineLayer ["3. FORENSIC DETECTION & SCORING PIPELINE"]
-        E_Ingest["engine/ingest.py<br/>• Strict Schema Validation<br/>• Quarantines Bad Rows in rejects"]
+        E_Ingest["engine/ingest.py<br/>• Strict Schema Validation<br/>• Bad Rows Quarantined in rejects"]
         E_Banks["engine/seed_banks.py<br/>• IFSC Directory & Nodal Officers"]
         E_Features["engine/features.py<br/>• Set-Based SQL Episodes<br/>• Raw Mathematical Metrics"]
         E_Score1["engine/scoring.py (Pass 1)<br/>• Mule (MP1-8) & Trust (T1-7)<br/>• Gate Checks & Thresholds"]
@@ -90,10 +101,12 @@ graph TB
 
     %% Connections
     UI_Intake --> Router_Upload
+    UI_Audit --> Router_Upload
     UI_Trail --> Router_Trace
     UI_Graph --> Router_Trace
     UI_Dossier --> Router_Mules
-    UI_Legal --> Router_Legal
+    UI_Notice --> Router_Trace
+    UI_Diary --> Router_Legal
 
     Router_Upload --> E_Ingest
     E_Ingest --> DuckDB
@@ -125,58 +138,182 @@ sequenceDiagram
     participant Ingest as DuckDB Ingestion Engine
     participant Pipeline as 7-Stage Forensic Pipeline
     participant Tracer as CSR Graph Traversal Engine
-    participant Legal as Judicial Synthesis Engine
+    participant Legal as Section 91 Requisition Engine
 
-    Officer->>UI: Uploads Bank Statement / Case Ledger (CSV / PDF / Excel)
+    Officer->>UI: Uploads Bank Statement / Case Ledger (CSV / PDF / XLSX)
     UI->>API: POST /api/upload (Multipart Stream)
     API->>API: Compute SHA-256 Cryptographic Hash
-    API->>Ingest: Stream to stage table (DuckDB)
+    API->>Ingest: Stream to stage table in DuckDB
     
     rect rgb(240, 245, 255)
-    Note over Ingest: Schema Validation & Quarantining
-    Ingest->>Ingest: Separate valid records into 'tx' table
-    Ingest->>Ingest: Quarantine invalid/tampered rows into 'rejects'
+    Note over Ingest: Schema Validation & Row Quarantining
+    Ingest->>Ingest: Validate dates, account strings, and integer paise
+    Ingest->>Ingest: Ingest valid records into 'tx' table
+    Ingest->>Ingest: Quarantine corrupted/tampered rows into 'rejects' table
     end
 
     rect rgb(255, 248, 240)
     Note over Pipeline: Automated Forensic Execution
-    Pipeline->>Pipeline: Step 1: Seed IFSC & Nodal Directory
+    Pipeline->>Pipeline: Step 1: Seed IFSC & Nodal Officer Directory
     Pipeline->>Pipeline: Step 2: Compute Raw Statistical Features
     Pipeline->>Pipeline: Step 3: Pass 1 Scoring (MP1-MP8 & T1-T7)
-    Pipeline->>Pipeline: Step 4: Link Layer Transactions (Time-Window Match)
+    Pipeline->>Pipeline: Step 4: Link Layer Transactions (Temporal Window Match)
     Pipeline->>Pipeline: Step 5: Pass 2 Scoring (Role Assignment L1-L4)
     Pipeline->>Pipeline: Step 6: Cluster Cells & Syndicate Rings
     Pipeline->>Pipeline: Step 7: Build CSR Binary Arrays (.npy)
     end
 
-    Pipeline-->>API: Compilation complete (timings, mules, rings, parameters)
+    Pipeline-->>API: Compilation complete (latencies, counts, detection gates)
     API-->>UI: Return Ingestion & Forensic Audit Payload (HTTP 200)
-    UI-->>Officer: Render Timing Audit Card & Refresh Victim Directory
+    UI-->>Officer: Display Timing Audit Card & Refresh Victim Directory
 
-    Officer->>UI: Selects Victim Account to Track Money Trail
-    UI->>API: GET /api/trace/{account_no}
-    API->>Tracer: Execute Forward Breadth-First Search (CSR Graph)
-    Tracer->>Tracer: Hop 1 (L1 Placement) -> Hop 2 (L2 Layering) -> Hop 3 (L3 Escrow) -> Hop 4 (L4 Terminal Exit)
+    Officer->>UI: Selects Victim Account (e.g. Sunil Kumar Verma)
+    UI->>API: GET /api/trace/{victim_account}
+    API->>Tracer: Execute Forward Breadth-First Search (CSR Graph Arrays)
+    Tracer->>Tracer: Hop 1 (L1 Placement) -> Hop 2 (L2 Smurfing) -> Hop 3 (L3 Escrow) -> Hop 4 (L4 Terminal)
     Tracer-->>API: Return Directed Flow Graph with Amounts & Velocity
-    API-->>UI: Render 4-Hop Money Trail & D3 Network Tree
+    API-->>UI: Render Interactive 4-Hop Money Trail Canvas
 
-    Officer->>UI: Clicks "Generate Freeze Notices & Case Diary"
-    UI->>API: POST /api/cases/generate-diary
-    API->>Legal: Compile Evidentiary Chain & Applicable Sections
-    Legal-->>UI: Render Section 91 Cr.P.C. / 94 BNSS Freeze Orders + Judicial Diary
+    Officer->>UI: Clicks red "[ 🔒 13 freeze candidates ]" Button
+    UI->>Legal: Auto-freeze all candidate accounts & render Section 91 Notice
+    Legal-->>UI: Display Court-Ready 2-Page Statutory Notice (A4 Portrait)
+    Officer->>UI: Clicks "Print / Court PDF" or "Download HTML (2-Page)"
+    UI-->>Officer: Instant generation of certified court document with SHA-256 seal
 ```
 
 ---
 
-## 5. Algorithmic Scoring Engine & Closed Detection Gates
+## 5. Comprehensive Feature Breakdown
+
+### 1. Multi-Format Evidence Intake Studio
+* **Multi-Format Dropzone:** Accepts `.csv`, `.xlsx`, `.xls`, `.pdf` (digital text bank statements parsed via `pypdf`), `.parquet`, and `.json`.
+* **Zero-Tampering Quarantining:** Automatically routes corrupt, negative-amount, or malformed rows into a separate `rejects` table with exact semicolon-separated error diagnostics.
+* **Forensic Timing & Parameter Audit Card:** Immediately displays upon ingestion:
+  - Total elapsed processing time (e.g., `0.35s` for 10,000 rows).
+  - Throughput velocity (e.g., `193,000 rows/second`).
+  - Cryptographic SHA-256 evidence digest.
+  - Distribution breakdown: Identified Victims, L1 Collectors, L2 Distributors, L3 Escrows, and Clean Accounts.
+  - Expandable active forensic parameters (burst window, pass-through threshold, commission bands, gate statuses).
+* **1-Click 4-Hop Benchmark Scenarios:** Instant pre-loaded real-world fraud cases:
+  - *Scenario A: Sunil Kumar Verma* — Digital Arrest Extortion (₹2,45,000 across 4 hops).
+  - *Scenario B: Dr. Priya Sharma* — Customs Clearance Sextortion Syndicate.
+  - *Scenario C: Ramesh Patel* — Fake Institutional IPO Investment Task Scam.
+* **Downloadable Statement Templates:** Certified, pre-validated bank statements in CSV, Excel, and PDF formats for testing and demonstration.
+
+---
+
+### 2. Interactive Money Trail Canvas (Endpoint Trail)
+* **4-Column Layered Vector Flow:** Visualizes funds traversing left-to-right through:
+  - `HOP 0 • VICTIM ACCOUNT`
+  - `HOP 1 • L1 COLLECTOR (Placement)`
+  - `HOP 2 • L2 DISTRIBUTOR (Layering)`
+  - `HOP 3 • L3 ESCROW (Accumulation)`
+  - `HOP 4 • L4 TERMINAL EXIT (USDT Crypto / Hawala / ATM)`
+* **Dynamic Cubic Bezier Connectors:** High-visibility SVG curves with animated directional flow indicators and gradient markers (`grad-hop1` through `grad-hop4`).
+* **Interactive Zoom & Pan:** Smooth mouse-wheel zooming (`0.25x` to `2.0x`) and canvas drag navigation with reset and fit-to-view controls.
+* **Realtime KPI Summary Grid:**
+  - Originating Victim Capital Siphoned.
+  - Outflow Drain Percentage.
+  - Longest Chain Hop Distance.
+  - Flagged Mule Accounts Count.
+  - **Statutory Remedy Button:** Prominent red button (`[ 🔒 13 freeze candidates ]`) with 1-click navigation to the Section 91 Notice engine.
+
+---
+
+### 3. 2D/3D Force-Directed Network Graph Visualizer
+* **Dual Layout Engine:** Switch seamlessly between **Hierarchical Tree View** (horizontal or vertical multi-hop stratification) and **Force-Directed Physics Simulation** (D3 Canvas).
+* **Color-Coded Forensic Roles:**
+  - 🟢 **Victim:** `#10B981` (Emerald Green)
+  - 🟠 **L1 Placement Mule:** `#EA580C` (Vibrant Orange)
+  - 🟡 **L2 Layering Smurf:** `#D97706` (Amber Gold)
+  - 🟣 **L3 Escrow Accumulator:** `#7C3AED` (Royal Purple)
+  - 🔴 **L4 Terminal Exit:** `#E11D48` (Crimson Rose)
+* **Temporal Replay Engine:** Chronological playback controls allowing investigators to scrub through the fraud timeline minute-by-minute without losing graph connectivity.
+
+---
+
+### 4. Mule Account Dossier & Syndicate Ring Analysis
+* **Risk Score Breakdown:** Comprehensive audit of every account displaying Mule Index (0-100), Trust Index (0-100), and Final Composite Risk Score.
+* **Tier 2 Syndicate Layer Filters:** Instant filtering by syndicate tier: `ALL`, `L1 Placement`, `L2 Layering`, `L3 Escrow`, and `L4 Terminal Exit`.
+* **Proving Transaction Chips:** Clickable transaction IDs linking directly to source banking receipts with timestamps, transfer channels (UPI, IMPS, NEFT, RTGS), and foreign IP footprints.
+* **Syndicate Ring Fingerprinting:** Connected component clustering that groups individual mules into coordinated syndicates, tagging each ring with an immutable SHA-256 topology fingerprint.
+
+---
+
+### 5. Section 91 Cr.P.C. / Section 94 BNSS Statutory Notice Engine
+* **Automated Bank Nodal Directory:** Automatically maps IFSC prefixes (SBIN, HDFC, ICIC, KKBK, PUNB, AXIS, etc.) to official Corporate Headquarters and Nodal Officer Liaison Desks across India.
+* **Auto-Freeze Execution:** Opening the requisition automatically marks all implicated accounts as `DEBIT FROZEN (LIEN APPLIED)`.
+* **Clean 2-Page Court-Ready Layout (A4 Portrait):**
+  - **Sheet 1 (Page 1 of 2):**
+    - Formal National Police Commissionerate Letterhead & Emblem.
+    - Reference Grid (Notice Ref No, Crime Register / FIR No, Originating Complainant, Date of Issuance, Emergency Status).
+    - Statutory Title Banner (Section 91 Cr.P.C. read with Section 94 BNSS).
+    - Addressed to Bank Nodal Officers with official head office addresses.
+    - Subject Line: Immediate Total Debit Freeze, Statutory Lien Marking, and Digital Footprint Furnishing.
+    - Requisition Premises (Victim account, total siphoned loss).
+    - Money Trail Forensic Findings (Layer 1-4 provenance chain).
+    - **4 Mandatory Statutory Directives:**
+      1. Immediate Total Debit Freeze (Block all withdrawals, UPI, ATM).
+      2. Statutory Police Lien Marking (Preserve exact trapped balances for judicial restitution under Sec 457 Cr.P.C. / Sec 503 BNSS).
+      3. 24-Hour Production of Certified Documents (AOF, Aadhaar/PAN KYC, linked mobile SIM circle, email IPDR logs, 6-month statement).
+      4. Anti-Tipping Off Mandate.
+    - Summary Lien Card & Page 1 Footer.
+  - **Sheet 2 (Page 2 of 2):**
+    - Running Header with FIR and Reference numbers.
+    - **Schedule-A Table:** Complete real data register for all freeze candidates (S.No, Implicated Account Number, Bank Name, Layer, Hop, Tainted Inflow, Actionable Lien Holding to Freeze, and `DEBIT FROZEN` status badge).
+    - Total Statutory Lien row summing the exact actionable capital.
+    - **Penal Consequence Warning:** Statutory warning citing criminal prosecution under **Section 175 and 187 IPC / BNS** for non-compliance and Section 111 / 120-B IPC for abetment.
+    - **Official Execution Grid:** Police Station Stamp Box, SHA-256 Evidentiary Hash, Investigating Officer Signature Line, and electronic certification under Section 65B Indian Evidence Act / Section 63 BSA.
+    - Page 2 Footer with certification notice and End of Requisition stamp.
+* **Multi-Format Export Actions:**
+  - `Print / Court PDF`: Opens native browser print dialog formatted via `@page { size: A4 portrait; margin: 10mm 12mm; }` producing an exact **2-page** PDF.
+  - `Download HTML (2-Page)`: Downloads a standalone, self-contained `.html` file with embedded CSS and print script.
+  - `Word (.doc)`: Generates an MS Word compatible document with embedded MSO section breaks (`mso-break-type: section-break`).
+  - `Copy`: Copies plain text notice for police wireless dispatch.
+
+---
+
+### 6. Judicial Case Diary (Section 172 Cr.P.C. / Section 192 BNSS)
+* **Chronological Investigation Diary:** Structured specifically for submission to the Judicial Magistrate.
+* **4-Hop Topology Metrics:** Clear visual progression showing how capital moved from the initial victim debit to the terminal cashout sinks.
+* **Section 65B IEA Certification:** Complete digital evidence hash chain ensuring strict courtroom admissibility.
+
+---
+
+### 7. FIR Registration & Intake Modal
+* **Instant Case Registration:** Dialog enabling investigators to enter FIR Number, Police Station, Complainant Name, Victim Account, Bank Name, Defrauded Capital, and Fraud Category (Digital Arrest, Sextortion, Investment Scam, Fake Part-Time Job).
+* **Direct Pipeline Linking:** Immediately registers the case, computes initial provenance, and launches the Money Trail canvas.
+
+---
+
+### 8. Forensic Parameters Control Panel
+* **Dynamic Realtime Sliders:**
+  - Minimum Transaction Amount Filter (Paise precision).
+  - Minimum Risk Score Cutoff (0 to 100).
+  - Maximum Hop Horizon (1 to 4 hops).
+  - Bank Prefix Filter (All Banks or specific institution).
+  - Narration Keyword Regex Search.
+* **Instant In-Memory Re-Filtering:** Updates graph visualizations in real-time without re-querying the disk.
+
+---
+
+### 9. Jury Benchmark & Audit Evaluation View
+* **Automated Performance Benchmarking:** Tests the platform against synthetic and real-world ground-truth datasets.
+* **Evaluation Metrics:** Displays Accuracy, Precision, Recall, F1 Score, and Processing Latencies.
+
+---
+
+## 6. Algorithmic Scoring Engine & Mathematical Formulation
 
 Abhedya-Chakra uses a **two-pass deterministic behavioral scoring engine** operating on active configuration profiles (`v1-verified`).
 
 ### 1. Mule Parameters (Risk Factors)
-* **MP1: Rapid Forwarding Ratio (Weight: 20%)** — Measures median forward lag within the active burst window.
-* **MP2: High Volume Pass-Through (Weight: 15%)** — Outgoing fund ratio forwarded within the episode window ($>90\%$).
+* **MP1: Rapid Forwarding Ratio (Weight: 20%)** — Measures median forward lag within the active burst window:
+  $$\text{Forward Lag} = \text{ts}_{\text{out}} - \text{ts}_{\text{in}} < 3600\text{ seconds}$$
+* **MP2: High Volume Pass-Through (Weight: 15%)** — Proportion of incoming illicit funds forwarded downstream:
+  $$\text{Pass-Through} = \frac{\sum \text{Amount}_{\text{out}}}{\sum \text{Amount}_{\text{in}}} \ge 90\%$$
 * **MP3: Low Inflow-to-Outflow Hold Time (Weight: 15%)** — Median hours held before account liquidation ($<1\text{ hour}$).
-* **MP4: High Fan-Out Degree (Weight: 15%)** — Splitting of bulk deposits across 3 to 6 downstream accounts.
+* **MP4: High Fan-Out Degree (Weight: 15%)** — Splitting bulk deposits across 3 to 6 downstream smurfing accounts.
 * **MP5: Multi-Beneficiary Velocity Spike (Weight: 10%)** — Sudden transaction surge versus baseline account history.
 * **MP6: Low Reciprocity Flow (Weight: 10%)** — Strict unidirectional transit without counterparty return transfers.
 * **MP7: Upstream Mule Risk Concentration (Weight: 10%)** — Inflow contamination from confirmed upstream mules.
@@ -198,7 +335,7 @@ $$\text{Final Index} = \text{Mule Index} - \text{Trust Index} + \text{Neighbour 
 
 ---
 
-## 6. Sub-Millisecond CSR Graph Traversal Engine
+## 7. Sub-Millisecond CSR Graph Traversal Engine
 
 To navigate 2,000,000+ transaction edges without relational recursive SQL latency, Abhedya-Chakra builds **Compressed Sparse Row (CSR)** binary arrays loaded directly into RAM:
 
@@ -222,7 +359,7 @@ out_tx:            [ k1,  k2,  k3    |    k4,  k5    |    k6,  k7,  k8       ...
 
 ---
 
-## 7. Database Architecture & Schema
+## 8. Database Architecture & Schema
 
 The underlying database `data/case.duckdb` enforces strict data integrity rules:
 1. **Never alter raw evidence:** Account numbers remain strings, timestamps are parsed explicitly, and bad rows are quarantined in `rejects`.
@@ -273,42 +410,26 @@ The underlying database `data/case.duckdb` enforces strict data integrity rules:
 
 ---
 
-## 8. Statutory Compliance & Court Admissibility
-
-Abhedya-Chakra bridges the gap between digital graph algorithms and Indian criminal jurisprudence:
-
-### 1. Section 91 Cr.P.C. / Section 94 BNSS Legal Requisitions
-* Autonomous generation of formal **Debit-Freeze Notices** addressed to Bank Nodal Officers.
-* Cites exact originating victim FIR details, account numbers, IFSC codes, `tx_key` references, and recommended freeze amounts.
-* Ready for instant dispatch to freeze accounts while funds reside in L2/L3 escrow.
-
-### 2. Section 172 Cr.P.C. / Section 192 BNSS Case Diary
-* Automated chronological investigation diary formatted for Judicial Magistrate review.
-* Complete evidentiary chain mapping victim outflows to L4 terminal exit sinks.
-* Sealed with an immutable **SHA-256 cryptographic hash** ensuring chain-of-custody verification.
-* Fully compliant with **Section 65B of the Indian Evidence Act** for digital evidence certification.
-
----
-
 ## 9. Technology Stack
 
-### Frontend Layer:
-* **React 18 / 19** with **Vite** — High-performance modular component rendering.
-* **Tailwind CSS** — Custom warm forensic palette (`#FAF6EE` Parchment, `#2C2623` Charcoal, `#D96B27` Terracotta).
-* **D3.js & Canvas Force-Graph** — Interactive 2D/3D hardware-accelerated force-directed network topology visualizer.
-* **Custom SVG Vector Canvas** — 4-Hop layered bezier curve money trail renderer with interactive pan/zoom.
+### Frontend Architecture:
+* **React 18 / 19** with **Vite** — High-speed Hot Module Replacement (HMR) and production bundling.
+* **Tailwind CSS** — Custom warm forensic theme (`#FAF6EE` Parchment, `#2C2623` Charcoal, `#D96B27` Terracotta).
+* **D3.js & HTML5 Canvas** — Hardware-accelerated force-directed network graph simulation.
+* **SVG Vector Engine** — Layered bezier curve money trail renderer with interactive pan/zoom.
+* **Lucide Icons** — Clean, consistent iconography across all investigative tools.
 
-### Backend & API Layer:
-* **Python 3.11+ / 3.13** — Modern type-annotated backend execution.
-* **FastAPI** — Asynchronous ASGI framework with Swagger/OpenAPI documentation.
-* **Uvicorn** — ASGI production server.
-* **PyPDF & OpenPyXL** — Direct parsing of digital PDF bank statements and Excel ledgers.
-* **Pydantic v2** — Strict data models enforcing zero hallucination.
+### Backend & API Framework:
+* **Python 3.11+ / 3.13** — Modern async backend execution with type hinting.
+* **FastAPI** — Asynchronous ASGI gateway with OpenAPI/Swagger documentation.
+* **Uvicorn** — Ultra-fast production ASGI server.
+* **PyPDF & OpenPyXL** — Native parsing of digital PDF bank statements and Excel files.
+* **Pydantic v2** — High-performance runtime request validation.
 
-### Storage & Graph Analytics:
-* **DuckDB** — In-process analytical column-store executing vectorized SQL queries over millions of rows.
-* **NumPy** — Vectorized CSR graph array operations.
-* **SciPy** — Sparse graph algorithms and cycle detection.
+### Data & Graph Analytics:
+* **DuckDB** — In-process columnar OLAP database executing vectorized analytical queries over 2M+ records.
+* **NumPy** — Vectorized binary array operations for the CSR graph traversal engine.
+* **SciPy** — Sparse graph algorithms, pathfinding, and cycle detection.
 
 ---
 
@@ -316,20 +437,21 @@ Abhedya-Chakra bridges the gap between digital graph algorithms and Indian crimi
 
 ```
 abhedya-chakra/
-├── api/                             # FastAPI Backend Layer
-│   ├── main.py                      # App initialization & lifespan
-│   ├── deps.py                      # Database & config dependencies
-│   ├── ui.py                        # Production UI static server
-│   ├── routers/                     # Endpoint controllers
-│   │   ├── upload.py                # Live CSV/PDF upload & parameter audit
-│   │   ├── trace.py                 # BFS graph traversal endpoints
-│   │   ├── victims.py               # Victim account discovery
-│   │   ├── mules.py                 # Mule risk & ring queries
-│   │   ├── cases.py                 # Case creation & diary generation
-│   │   └── templates.py             # Verified downloadable sample statements
-│   └── services/                    # Business & forensic logic
+├── api/                             # FastAPI Backend Gateway Layer
+│   ├── main.py                      # App initialization, lifespan, & routing
+│   ├── deps.py                      # Database connections & config injection
+│   ├── ui.py                        # Static file server for production UI
+│   ├── routers/                     # REST Endpoint Controllers
+│   │   ├── upload.py                # Multi-format statement ingestion & timing audit
+│   │   ├── trace.py                 # Forward BFS graph traversal endpoints
+│   │   ├── victims.py               # Victim discovery & case selection
+│   │   ├── mules.py                 # Mule dossier, risk scoring, & ring queries
+│   │   ├── cases.py                 # Case creation & case diary generation
+│   │   ├── legal.py                 # Section 91 notices & case diary synthesis
+│   │   └── templates.py             # Downloadable verified sample statements
+│   └── services/                    # Forensic Business Logic
 │       ├── upload.py                # Streaming ingestion & timing benchmark
-│       ├── trace.py                 # Forward BFS graph search
+│       ├── trace.py                 # Forward BFS graph traversal engine
 │       └── legal.py                 # Statutory notice & case diary synthesis
 ├── engine/                          # Core Data & Forensic Engine
 │   ├── ingest.py                    # Step 1: DuckDB schema validation & quarantine
@@ -341,92 +463,108 @@ abhedya-chakra/
 │   ├── graph.py                     # Step 8: Compressed Sparse Row (CSR) arrays
 │   ├── victim_trace.py              # In-memory graph walk engine
 │   └── sql/                         # Pure SQL analytical queries
-├── data/                            # Persistent Data Storage
+├── data/                            # Persistent Storage & Datasets
 │   ├── case.duckdb                  # Master analytical database
 │   ├── graph/                       # CSR binary arrays (.npy) & manifest.json
 │   └── VoidHacks8_MuleAccount_2M... # Master 2,000,000 transaction dataset
 ├── ui/                              # Frontend React Application
 │   ├── src/
-│   │   ├── App.jsx                  # Main dashboard controller
+│   │   ├── App.jsx                  # Main dashboard state & tab manager
 │   │   ├── api.js                   # API client bindings
+│   │   ├── index.css                # Tailwind base & 2-page court print styles
 │   │   └── components/
-│   │       ├── CaseIntakeView.jsx   # Drag-and-drop intake & timing audit card
+│   │       ├── CaseIntakeView.jsx   # Multi-format dropzone & timing audit card
 │   │       ├── EndpointTrailView.jsx# 4-Hop layered SVG money trail canvas
-│   │       ├── NetworkGraphView.jsx # D3 force-directed syndicate visualizer
+│   │       ├── NetworkGraphView.jsx # 2D/3D D3 force-directed visualizer
 │   │       ├── MuleDossierView.jsx  # Mule risk table & L1-L4 filter tabs
-│   │       ├── Section91NoticesView # Bank-specific freeze requisition orders
-│   │       └── CaseDiaryView.jsx    # Magistrate Section 172 case diary
+│   │       ├── Section91NoticesView # Court-ready 2-page statutory freeze orders
+│   │       ├── CaseDiaryView.jsx    # Magistrate Section 172 case diary
+│   │       ├── RegisterFIRModal.jsx # Rapid FIR intake modal
+│   │       └── Sidebar.jsx          # Investigative navigation menu
 │   ├── package.json                 # Node dependencies
 │   └── vite.config.js               # Vite bundler configuration
-├── Abhedya_Chakra_Architecture_and_Workflow.pptx  # 12-Slide Widescreen Presentation
+├── Abhedya_Chakra_Architecture_and_Workflow.pptx  # 12-Slide Widescreen Presentation Deck
 └── README.md                        # Master Documentation
 ```
 
 ---
 
-## 11. Quick Start & Local Deployment
+## 11. Quick Start & Local Deployment Guide
 
 ### Prerequisites
-* **Python 3.11+**
+* **Python 3.11+** installed on system PATH
 * **Node.js 18+** & **npm**
 
-### 1. Clone the Repository
+### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/Void-Hacks-8-0-2/Overhyped-Geeks.git
 cd abhedya-chakra
 ```
 
-### 2. Python Environment Setup
+### Step 2: Set Up Python Virtual Environment
 ```bash
 python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
-# On Linux/macOS:
+
+# On Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# On Windows (Command Prompt):
+.venv\Scripts\activate.bat
+# On Linux / macOS:
 source .venv/bin/activate
 
 pip install -r requirements.txt
 ```
 
-### 3. Launch Backend Server
+### Step 3: Start FastAPI Backend Server
 ```bash
 python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 ```
-* Backend API: `http://127.0.0.1:8000`
-* Interactive API Documentation: `http://127.0.0.1:8000/api/docs`
+* **Backend API Base:** `http://127.0.0.1:8000`
+* **Swagger API Documentation:** `http://127.0.0.1:8000/api/docs`
+* **System Status Health Check:** `http://127.0.0.1:8000/api/status`
 
-### 4. Launch Frontend UI
-In a separate terminal:
+### Step 4: Start Frontend Development Server
+In a new terminal window:
 ```bash
 cd ui
 npm install
 npm run dev
 ```
-* Frontend Dashboard: `http://localhost:5173`
+* **Frontend Dashboard:** `http://localhost:5173`
 
 ---
 
-## 12. Verification & Testing
+## 12. Interactive Verification & Demonstration Walkthrough
 
-### Test 1: Upload a 4-Hop Cybercrime Statement
-1. Open `http://localhost:5173` in your browser.
-2. Navigate to **Evidence Intake & Ingestion**.
-3. Drag-and-drop or upload `backend/data/sample_templates/Sample_Victim_4Hop_CyberCrime_Statement.csv`.
-4. Observe the **Forensic Timing & Parameter Audit Card** rendering exact ingestion latency, throughput (rows/sec), and active detection gates.
+### Scenario 1: Multi-Format Statement Ingestion & Audit
+1. Open `http://localhost:5173` and click on **Case Intake** in the sidebar.
+2. Under "Upload Bank Statement", select or drop any CSV, Excel, or PDF bank statement.
+3. Observe the **Forensic Timing & Parameter Audit Card**:
+   - Ingestion and scoring completes in sub-second time.
+   - Exact processing speed (rows/sec), SHA-256 evidence digest, and layer role counts are displayed.
 
-### Test 2: Trace the Money Trail
-1. Switch to the **Money Trail Canvas**.
-2. Select any victim account (e.g., `KKBK10000000`).
-3. Inspect the complete 4-hop flow: `Victim` $\to$ `Hop 1 L1` $\to$ `Hop 2 L2` $\to$ `Hop 3 L3` $\to$ `Hop 4 L4 Terminal Exit`.
+### Scenario 2: Tracing the 4-Hop Money Trail
+1. Click on **Endpoint Trail** in the sidebar.
+2. Select an active victim account (e.g., `AIRP10000011` or one of the 1-click benchmark cases).
+3. Follow the funds through:
+   - `Victim` $ightarrow$ `Hop 1 L1 Placement` $ightarrow$ `Hop 2 L2 Smurfing` $ightarrow$ `Hop 3 L3 Escrow` $ightarrow$ `Hop 4 L4 Terminal Exit`.
+4. Hover over any account node or link to view exact transaction timestamps, amounts, and holding balances.
 
-### Test 3: Generate Statutory Freeze Orders & Case Diary
-1. Navigate to **Section 91 Notices** to inspect auto-generated debit freeze orders for SBI, HDFC, ICICI, Kotak, Axis, etc.
-2. Navigate to **Case Diary** to review the court-admissible Section 172 Cr.P.C. investigation diary sealed with SHA-256 hash.
+### Scenario 3: Generating and Exporting the 2-Page Section 91 Court Notice
+1. In the Endpoint Trail view, click the red **`[ 🔒 13 freeze candidates ]`** button.
+2. The system routes directly to **Section 91 Notices**, with all 13 accounts set to `DEBIT FROZEN (LIEN APPLIED)`.
+3. Inspect **Sheet 1 (Page 1)**: Police Commissionerate letterhead, FIR details, Nodal bank addresses, legal requisitions, and directives (a-d).
+4. Inspect **Sheet 2 (Page 2)**: Schedule-A table with all 13 accounts, Total Statutory Lien row, Penal Warning (Sec 175 & 187 IPC/BNS), Police Stamp box, and IO Signature block.
+5. Export options:
+   - Click **`Print / Court PDF`** $ightarrow$ browser print preview displays an **exact 2-page A4 portrait** document.
+   - Click **`Download HTML (2-Page)`** $ightarrow$ downloads a standalone `.html` court document.
+   - Click **`Word (.doc)`** $ightarrow$ downloads an MS Word document with preserved tables and section breaks.
 
 ---
 
-## 13. Presentation Deck
+## 13. Presentation Deck & Media Assets
 
-A 12-slide 16:9 widescreen presentation deck is available in the repository root:
+A complete 12-slide 16:9 widescreen presentation deck is included in the root directory:
 * **Presentation File:** [`Abhedya_Chakra_Architecture_and_Workflow.pptx`](Abhedya_Chakra_Architecture_and_Workflow.pptx)
 * **Slide Notes & Diagrams:** [`presentation_deck.md`](presentation_deck.md)
 
@@ -439,4 +577,4 @@ A 12-slide 16:9 widescreen presentation deck is available in the repository root
 * **Theme:** Cyber Security, Digital Forensics & Money Mule Network Detection
 * **Associated Problem Statement:** In Association with Police Commissionerate & Cybercrime Units
 
-*Built with precision, mathematical rigor, and commitment to justice.*
+*Engineered with mathematical rigor, forensic accuracy, and commitment to justice.*
