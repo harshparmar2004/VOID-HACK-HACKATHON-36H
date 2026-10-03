@@ -57,5 +57,5 @@ def install(app: FastAPI) -> None:
         allow_origins=ALLOWED_ORIGINS,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=[TIMING_HEADER, "X-Content-SHA256"],
+        expose_headers=[TIMING_HEADER],
     )

@@ -17,9 +17,7 @@ import RegisterFIRModal from "./components/RegisterFIRModal";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { EmptyState, ErrorState, LoadingState } from "./components/States";
 
-import CaseBar from "./components/CaseBar";
-
-import { closeCase, fetchCase, fetchCases, fetchSystemStatus, fetchVictims, openCase, traceVictim } from "./api";
+import { fetchSystemStatus, fetchVictims, traceVictim } from "./api";
 
 const TABS = ["intake", "vault", "parameters", "scanner", "entities", "dossier", "graph", "trail", "notices", "brief", "jury"];
 
@@ -27,9 +25,6 @@ const TABS = ["intake", "vault", "parameters", "scanner", "entities", "dossier",
 const FILTER_DEFAULTS = { minAmount: 0, maxHops: null, minRisk: 0, bankFilter: "ALL", narrationKeyword: "" };
 
 const EMPTY_TRACE = { victim: null, data: null, loading: false, error: null, notFound: false, serverMs: null };
-
-// The case-store record of the selected victim's case (GET /cases/{id}); data is null when none is open.
-const EMPTY_CASE = { data: null, loading: false, error: null };
 
 function readStored(key) {
   try {
@@ -97,63 +92,6 @@ export default function App() {
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [dossierFocus, setDossierFocus] = useState(null);
   const traceRequest = useRef(0);
-  const [caseRec, setCaseRec] = useState(EMPTY_CASE);
-  // The FIR draft last written in this session, shown on the Investigative Brief tab.
-  const [firDoc, setFirDoc] = useState(null);
-  const caseRequest = useRef(0);
-
-  // The newest case that names this victim, if any, with its events and outputs.
-  const loadCaseFor = useCallback(async (victimId) => {
-    const requestNo = ++caseRequest.current;
-    if (!victimId) {
-      setCaseRec(EMPTY_CASE);
-      return;
-    }
-    setCaseRec({ ...EMPTY_CASE, loading: true });
-    try {
-      const res = await fetchCases();
-      const mine = (res?.cases || [])
-        .filter((c) => (c.victims || []).includes(victimId))
-        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
-      const data = mine ? await fetchCase(mine.case_id) : null;
-      if (requestNo === caseRequest.current) setCaseRec({ ...EMPTY_CASE, data });
-    } catch (err) {
-      if (requestNo === caseRequest.current) setCaseRec({ ...EMPTY_CASE, error: err.message });
-    }
-  }, []);
-
-  useEffect(() => {
-    setFirDoc(null);
-    loadCaseFor(activeCase);
-  }, [activeCase, loadCaseFor]);
-
-  // Re-read the open case after a write (new events, new documents).
-  const refreshCase = useCallback(async (caseId) => {
-    const requestNo = ++caseRequest.current;
-    try {
-      const data = await fetchCase(caseId);
-      if (requestNo === caseRequest.current) setCaseRec({ ...EMPTY_CASE, data });
-    } catch (err) {
-      if (requestNo === caseRequest.current) setCaseRec({ ...EMPTY_CASE, error: err.message });
-    }
-  }, []);
-
-  const handleFirDrafted = (doc) => {
-    setFirDoc(doc);
-    refreshCase(doc.case_id);
-    handleTabChange("brief");
-  };
-
-  const handleOpenCase = async (form) => {
-    setFirDoc(null);
-    const created = await openCase({ victims: [activeCase], ...form });
-    await refreshCase(created.case_id);
-  };
-
-  const handleCloseCase = async (data, { officer, note }) => {
-    await closeCase(data.case_id, { officer, note });
-    await refreshCase(data.case_id);
-  };
 
   const loadTrace = useCallback(async (victimId, params) => {
     const id = String(victimId || "").trim().toUpperCase();
@@ -261,17 +199,6 @@ export default function App() {
 
   const show = (tab) => (activeTab === tab ? "block" : "hidden");
 
-  const caseBar = (
-    <CaseBar
-      victim={activeCase}
-      caseRec={caseRec}
-      caseInfo={caseInfo}
-      onOpen={handleOpenCase}
-      onClose={handleCloseCase}
-      onRetry={() => loadCaseFor(activeCase)}
-    />
-  );
-
   return (
     <div className="h-screen max-h-screen overflow-hidden bg-[#FBF7EE] text-[#2C2623] flex flex-col font-sans">
       <Header
@@ -310,7 +237,7 @@ export default function App() {
 
           <div className={show("vault")}>
             <ErrorBoundary name="Evidence Vault">
-              <EvidenceVaultView status={status} trace={trace} onRetry={loadStatus} isActive={activeTab === "vault"} />
+              <EvidenceVaultView status={status} trace={trace} onRetry={loadStatus} />
             </ErrorBoundary>
           </div>
 
@@ -359,7 +286,6 @@ export default function App() {
 
           <div className={show("trail")}>
             <ErrorBoundary name="Endpoint Trail">
-              <div className="mb-5">{caseBar}</div>
               <EndpointTrailView
                 victimAccount={activeCase}
                 onSearchVictim={(id) => selectCase(id)}
@@ -373,13 +299,13 @@ export default function App() {
 
           <div className={show("notices")}>
             <ErrorBoundary name="Section 91 Notices">
-              <Section91NoticesView trace={trace} onRetry={retryTrace} caseRec={caseRec} caseBar={caseBar} onCaseChanged={refreshCase} />
+              <Section91NoticesView trace={trace} onRetry={retryTrace} />
             </ErrorBoundary>
           </div>
 
           <div className={show("brief")}>
             <ErrorBoundary name="Investigative Brief">
-              <CaseDiaryView trace={trace} onRetry={retryTrace} caseRec={caseRec} caseBar={caseBar} onCaseChanged={refreshCase} firDoc={firDoc} />
+              <CaseDiaryView trace={trace} caseInfo={caseInfo} onRetry={retryTrace} />
             </ErrorBoundary>
           </div>
 
@@ -395,9 +321,6 @@ export default function App() {
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
         onRegisterCase={handleRegisterCase}
-        onFirDrafted={handleFirDrafted}
-        victim={activeCase}
-        caseRec={caseRec}
         victimAccounts={victims.accounts}
       />
 

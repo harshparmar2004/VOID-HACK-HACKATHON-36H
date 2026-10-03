@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, GitCommit, Play, RefreshCw, Search } from "lucide-react";
+import { Download, GitCommit, Lock, Play, RefreshCw, Search } from "lucide-react";
 import { fetchProblematicTransactions, fetchScannerSummary, runScannerBenchmark } from "../api";
 import { dateTime, downloadCsv, inr, num, text } from "../format";
-import { EmptyState, ErrorState, LoadingState, PageHeader, Stat } from "./States";
+import { EmptyState, ErrorState, LaterButton, LaterStep, LoadingState, PageHeader, Stat } from "./States";
 
 const ROW_LIMIT = 1000; // the API's maximum per call
 const PAGE_SIZE = 50;
@@ -273,6 +273,7 @@ export default function RealtimeFraudScannerView({ forensicParams, onTraceVictim
               <Download className="w-3.5 h-3.5 text-[#D96B27]" />
               <span>Export CSV</span>
             </button>
+            <LaterButton icon={Lock}>Freeze receivers</LaterButton>
             <span className="ml-auto text-[11px] font-mono text-[#746D65]">
               {num(filtered.length)} shown
               {txns.rows.length >= ROW_LIMIT ? ` (first ${num(ROW_LIMIT)} newest; the API returns no more per call)` : ""}
@@ -388,6 +389,9 @@ export default function RealtimeFraudScannerView({ forensicParams, onTraceVictim
         )}
       </div>
 
+      <LaterStep title="Freezing accounts from this page">
+        The freeze register is not built yet, so no account can be frozen or marked as frozen here.
+      </LaterStep>
     </div>
   );
 }
