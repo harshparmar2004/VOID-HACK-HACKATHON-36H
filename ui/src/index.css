@@ -56,20 +56,25 @@
   background: #C4BCAD;
 }
 
-/* Print Styles: Isolates the Official Government Requisition Document */
+/* Print Styles: Formatted for 2-Page Court-Ready Section 91 Requisition Document */
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 6mm;
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
   }
 
-  body, html {
+  body, html, #root, .h-screen, [class*="h-screen"], [class*="max-h-screen"], [class*="overflow-hidden"], main, [class*="flex-1"] {
     background: #FFFFFF !important;
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
     overflow: visible !important;
+    position: static !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -80,6 +85,7 @@
   nav,
   button,
   .no-print,
+  .print-hide,
   [role="navigation"],
   .assistant-bubble,
   .sidebar,
@@ -88,31 +94,63 @@
     display: none !important;
   }
 
-  /* Reset layout containers */
-  #root,
-  main,
-  div[class*="min-h-screen"],
-  div[class*="flex-1"] {
+  /* Explicit Page Break Controls */
+  .court-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
     display: block !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
   }
 
-  /* Government Requisition Certificate Print Style */
-  .government-requisition-doc {
-    display: block !important;
-    position: static !important;
+  .avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Clean print page container */
+  .court-print-container {
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 auto !important;
-    padding: 16px 20px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
     box-shadow: none !important;
     background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+
+  .court-page-1 {
+    page-break-after: always !important;
+    break-after: page !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    margin: 0 0 10mm 0 !important;
+    padding: 0 !important;
+  }
+
+  .court-page-2 {
+    page-break-before: always !important;
+    break-before: page !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
     page-break-inside: avoid !important;
-    page-break-after: avoid !important;
+    break-inside: avoid !important;
   }
 }

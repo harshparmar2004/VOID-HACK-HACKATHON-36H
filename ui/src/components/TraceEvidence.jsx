@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, Copy, Layers, Maximize2, Minus, Plus, X } from "lucide-react";
+import { Check, Copy, Layers, Maximize2, Minus, Plus, X, Lock } from "lucide-react";
 import { DASH, dateTime, inr, num, text } from "../format";
 
 // Shared pieces for the two trace views (network graph and endpoint trail):
@@ -406,7 +406,7 @@ const SUMMARY_PARTS = [
 ];
 
 // Summary, per-hop table, findings, freeze list, reconciliation and fingerprint.
-export function EvidencePanels({ traceData }) {
+export function EvidencePanels({ traceData, onNavigateToNotices }) {
   const [copied, copy] = useCopy();
   const summary = traceData.summary || {};
   const perHop = Array.isArray(traceData.per_hop) ? traceData.per_hop : [];
@@ -529,6 +529,17 @@ export function EvidencePanels({ traceData }) {
                 <TxnChips ids={(c.receipts || []).map((r) => r.tx_id).filter(Boolean)} />
               </div>
             ))}
+            {onNavigateToNotices && (
+              <div className="pt-2 border-t border-[#F0EAE1]">
+                <button
+                  onClick={onNavigateToNotices}
+                  className="w-full py-1.5 px-3 rounded-sm bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Issue Section 91 Court Notice ({freeze.length})</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <span className="font-mono text-xs">{DASH}</span>

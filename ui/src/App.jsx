@@ -299,7 +299,7 @@ export default function App() {
 
           <div className={show("notices")}>
             <ErrorBoundary name="Section 91 Notices">
-              <Section91NoticesView trace={trace} onRetry={retryTrace} />
+              <Section91NoticesView trace={trace} onRetry={retryTrace} caseInfo={caseInfo} />
             </ErrorBoundary>
           </div>
 

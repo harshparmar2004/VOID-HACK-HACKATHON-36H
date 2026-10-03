@@ -42,7 +42,7 @@ export default function Sidebar({ activeTab, onSelectTab, status, filtersActive 
     {
       title: "LEGAL & BENCHMARK",
       items: [
-        { id: "notices", label: "Section 91 Notices", icon: FileCheck, badge: LATER_BADGE },
+        { id: "notices", label: "Section 91 Notices", icon: FileCheck, badge: "Court-Ready" },
         { id: "brief", label: "Investigative Brief", icon: FileText, badge: LATER_BADGE },
         { id: "jury", label: "Audit & Evaluation", icon: Award, badge: null }
       ]
@@ -82,6 +82,8 @@ export default function Sidebar({ activeTab, onSelectTab, status, filtersActive 
                         className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${
                           isActive
                             ? "bg-[#D96B27] text-white"
+                            : item.badge === "Court-Ready"
+                            ? "bg-[#E6F7F0] text-[#059669] border border-[#A7F3D0] font-bold"
                             : item.badge === "Active"
                             ? "bg-[#FAF6EE] text-[#D96B27] border border-[#E8E2D5] font-semibold"
                             : "bg-[#EAE4D8] text-[#746D65]"

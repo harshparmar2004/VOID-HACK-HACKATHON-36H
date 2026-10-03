@@ -800,7 +800,7 @@ export default function EndpointTrailView({
             centreOn(node.id);
           }}
         />
-        <EvidencePanels traceData={traceData} />
+        <EvidencePanels traceData={traceData} onNavigateToNotices={onNavigateToNotices} />
       </div>
       </div>
         </>
